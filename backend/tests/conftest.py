@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+
+from app import accounts, audit, devices
+from app.config import Settings, get_settings
+from app.main import app
+from app.routers import auth as auth_router
+
+
+@pytest.fixture
+def settings(tmp_path) -> Settings:
+    """Test Settings with a throwaway SQLite file; bypass .env loading."""
+    return Settings(
+        _env_file=None,
+        app_env="test",
+        auth_enabled=True,
+        session_cookie_secure=False,
+        storage_db_path=str(tmp_path / "test.db"),
+        bootstrap_admin_password="",
+    )
+
+
+@pytest_asyncio.fixture
+async def client(settings: Settings):
+    """HTTP client against the real app with schemas pointed at the tmp DB.
+
+    ASGITransport does not run the lifespan, so the schema setup that the
+    lifespan would do happens explicitly here — which is exactly what lets
+    each test get its own database file.
+    """
+    await accounts.ensure_schema(settings)
+    await devices.ensure_schema(settings)
+    audit.clear()
+    auth_router.reset_rate_limiter_for_tests()
+    app.dependency_overrides[get_settings] = lambda: settings
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def admin_client(client: AsyncClient):
+    """Client with a fresh admin account already logged in."""
+    await accounts.create_user("boss", "super-secret-pw", role="admin")
+    r = await client.post(
+        "/api/auth/login", json={"username": "boss", "password": "super-secret-pw"}
+    )
+    assert r.status_code == 200, r.text
+    return client

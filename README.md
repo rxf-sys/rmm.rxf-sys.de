@@ -1,0 +1,76 @@
+# rmm.rxf-sys.de
+
+Schlankes, selbst gehostetes RMM-Tool (Remote Monitoring & Management) für
+eigene Server, den eigenen PC und die Geräte der Familie. Vorbild
+Atera/NinjaOne — reduziert auf das, was ~5–15 Geräte wirklich brauchen.
+
+Der vollständige Plan (Architektur, Phasen, Sicherheitsmodell) liegt unter
+[`docs/RMM-PLAN.md`](docs/RMM-PLAN.md).
+
+## Komponenten
+
+```
+├── backend/          # FastAPI (Python 3.11+) — REST-API + Agent-WSS + SQLite
+├── frontend/         # Vite + React + TypeScript — Dashboard
+├── agent/            # Go — eine statische Binary für Windows/Linux/macOS
+└── infrastructure/   # docker-compose, LXC-Bootstrap, Deploy-Script
+```
+
+Alle Agents verbinden sich **ausgehend** per WebSocket mit dem Server —
+verwaltete Geräte brauchen keine offenen Ports.
+
+## Lokale Entwicklung
+
+```bash
+# Backend (http://127.0.0.1:8080)
+cd backend && pip install -e ".[dev]"
+AUTH_ENABLED=false STORAGE_DB_PATH=./dev.db uvicorn app.main:app --reload --port 8080
+
+# Frontend (http://127.0.0.1:5173, proxied /api → :8080)
+cd frontend && npm ci && npm run dev
+
+# Agent
+cd agent && make build && ./rmm-agent version
+```
+
+Tests: `cd backend && pytest -v --cov=app --cov-fail-under=70` ·
+`cd agent && make vet test` · Frontend: `npm run build`.
+
+## Agent-Rollout (ab Phase 1)
+
+```bash
+# Im Dashboard: Gerät hinzufügen → Einmal-Token erzeugen, dann auf dem Gerät:
+rmm-agent enroll -server https://rmm.rxf-sys.de -token <TOKEN> -label "Mama"
+sudo rmm-agent install && sudo rmm-agent start
+```
+
+Konfiguration liegt unter `/etc/rxf-rmm/agent.json` (Unix) bzw.
+`%ProgramData%\rxf-rmm\agent.json` (Windows), Rechte 0600.
+
+## Deployment (Proxmox LXC CT 111, 192.168.2.211)
+
+```bash
+# Einmalig: LXC aufsetzen (vom Proxmox Host)
+bash infrastructure/setup-lxc.sh
+
+# Manueller Deploy (im LXC)
+bash /opt/rxf-rmm/infrastructure/deploy.sh
+```
+
+Cloudflare Tunnel (cloudflared auf CT 104): `rmm.rxf-sys.de → http://192.168.2.211:80`.
+WebSockets laufen durch den Tunnel; nur RustDesk (Phase 5) braucht eigene
+Portfreigaben, siehe `infrastructure/docker-compose.yml`.
+
+## Phasenstand
+
+- [x] **Phase 0** — Fundament: Auth (Argon2id + Session-Cookies, Bootstrap-Admin),
+      Geräte-Schema, Dashboard-Skeleton mit Login + Tabs, Agent-Skeleton
+      (Dienst-Installation, WSS-Reconnect, Heartbeat-Metriken, Enroll-Client), CI
+- [ ] **Phase 1** — Enrollment-Endpoint, Agent-WSS-Endpoint + ConnectionManager,
+      Inventar, Geräteliste live
+- [ ] **Phase 2** — Metrik-Historie + Alerts (ntfy)
+- [ ] **Phase 3** — Remote-Shell + Skript-Bibliothek + Audit-Log
+- [ ] **Phase 4** — Patch-Management (Windows Update / apt / softwareupdate)
+- [ ] **Phase 5** — Remote Desktop (RustDesk self-hosted)
+- [ ] **Phase 6** — Installer + signiertes Agent-Auto-Update
+- [ ] **Phase 7** — Deployment CT 111 + Familien-Rollout

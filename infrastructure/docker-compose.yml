@@ -1,0 +1,70 @@
+services:
+  backend:
+    build:
+      context: ../backend
+    image: rxf-sys/rmm-backend:latest
+    container_name: rxf-rmm-backend
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    expose:
+      - "8080"
+    volumes:
+      # Persists the RMM SQLite file (accounts, devices, later metrics/jobs)
+      # across container restarts.
+      - rxf-rmm-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - rmm
+
+  web:
+    build:
+      context: ../frontend
+    image: rxf-sys/rmm-web:latest
+    container_name: rxf-rmm-web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        # Don't serve the SPA until the API answers — avoids a window of
+        # 502s on /api/* right after `docker compose up`.
+        condition: service_healthy
+    ports:
+      # cloudflared on CT 104 forwards rmm.rxf-sys.de -> http://192.168.2.211:80
+      - "80:80"
+    networks:
+      - rmm
+
+  # --- Phase 5: RustDesk (uncomment when remote desktop lands) -------------
+  # Needs router port-forwards: TCP 21115-21117 (+21118/21119 for web
+  # clients), UDP 21116 — raw TCP/UDP cannot ride the Cloudflare tunnel.
+  #
+  # rustdesk-hbbs:
+  #   image: rustdesk/rustdesk-server:latest
+  #   container_name: rxf-rmm-hbbs
+  #   command: hbbs -r rd.rxf-sys.de:21117
+  #   restart: unless-stopped
+  #   volumes:
+  #     - rxf-rmm-rustdesk:/root
+  #   network_mode: host
+  #
+  # rustdesk-hbbr:
+  #   image: rustdesk/rustdesk-server:latest
+  #   container_name: rxf-rmm-hbbr
+  #   command: hbbr
+  #   restart: unless-stopped
+  #   volumes:
+  #     - rxf-rmm-rustdesk:/root
+  #   network_mode: host
+
+volumes:
+  rxf-rmm-data:
+  # rxf-rmm-rustdesk:
+
+networks:
+  rmm:
+    driver: bridge
