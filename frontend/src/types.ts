@@ -10,6 +10,14 @@ export interface Account {
   last_login_at: number | null;
 }
 
+export interface Heartbeat {
+  ts?: number;
+  agent_version?: string;
+  cpu_pct?: number;
+  mem_pct?: number;
+  disks?: { mount: string; used_pct: number; total_b: number }[];
+}
+
 export interface Device {
   id: number;
   hostname: string;
@@ -19,7 +27,35 @@ export interface Device {
   arch: string;
   agent_version: string;
   tags: string[];
+  heartbeat: Heartbeat;
   created_at: number;
   last_seen_at: number | null;
   online: boolean;
+  /** Live WebSocket open right now (raw signal behind `online`). */
+  connected: boolean;
+}
+
+export interface InventorySection {
+  data: unknown;
+  updated_at: number;
+}
+
+export interface DeviceDetail {
+  device: Device;
+  inventory: {
+    hardware?: InventorySection;
+    software?: InventorySection;
+  };
+}
+
+export interface EnrollToken {
+  id: number;
+  label: string;
+  created_at: number;
+  expires_at: number;
+}
+
+export interface CreatedEnrollToken extends EnrollToken {
+  /** The raw token — shown exactly once, never retrievable again. */
+  token: string;
 }

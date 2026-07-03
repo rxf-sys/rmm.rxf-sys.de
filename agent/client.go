@@ -16,6 +16,7 @@ import (
 
 const (
 	heartbeatInterval = 60 * time.Second
+	inventoryInterval = 12 * time.Hour
 	backoffMin        = 2 * time.Second
 	backoffMax        = 5 * time.Minute
 	writeTimeout      = 10 * time.Second
@@ -116,13 +117,19 @@ func connectAndServe(ctx context.Context, cfg Config) error {
 	}
 
 	// First heartbeat immediately — it flips the device to 'online' in the
-	// dashboard without waiting a full interval.
+	// dashboard without waiting a full interval — followed by a full
+	// inventory so the device page is populated right after enrollment.
 	if err := send("heartbeat", collectHeartbeat()); err != nil {
+		return err
+	}
+	if err := send("inventory", collectInventory()); err != nil {
 		return err
 	}
 
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
+	inventoryTicker := time.NewTicker(inventoryInterval)
+	defer inventoryTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -136,6 +143,10 @@ func connectAndServe(ctx context.Context, cfg Config) error {
 			return err
 		case <-ticker.C:
 			if err := send("heartbeat", collectHeartbeat()); err != nil {
+				return err
+			}
+		case <-inventoryTicker.C:
+			if err := send("inventory", collectInventory()); err != nil {
 				return err
 			}
 		case msg, ok := <-incoming:

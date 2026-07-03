@@ -1,85 +1,120 @@
 import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
+import { formatRelative, osLabel } from '../format';
 import type { Device } from '../types';
+import { DeviceDetail } from './DeviceDetail';
+import { EnrollModal } from './EnrollModal';
+
+interface Props {
+  isAdmin: boolean;
+}
 
 const REFRESH_MS = 30_000;
 
-function formatLastSeen(ts: number | null): string {
-  if (!ts) return 'nie';
-  const delta = Math.max(0, Math.floor(Date.now() / 1000 - ts));
-  if (delta < 90) return 'gerade eben';
-  if (delta < 3600) return `vor ${Math.floor(delta / 60)} min`;
-  if (delta < 86400) return `vor ${Math.floor(delta / 3600)} h`;
-  return new Date(ts * 1000).toLocaleString('de-DE');
-}
-
-export function DevicesPage() {
+export function DevicesPage({ isAdmin }: Props) {
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [enrolling, setEnrolling] = useState(false);
+
+  const load = (signal?: AbortSignal) =>
+    api
+      .devices(signal)
+      .then((r) => {
+        setDevices(r.devices);
+        setError(null);
+      })
+      .catch((e) => {
+        if (!signal?.aborted) setError(apiErrorMessage(e));
+      });
 
   useEffect(() => {
+    // Pause the list poll while a detail view is open — it runs its own.
+    if (selected !== null) return;
     const ctrl = new AbortController();
-    const load = () =>
-      api
-        .devices(ctrl.signal)
-        .then((r) => {
-          setDevices(r.devices);
-          setError(null);
-        })
-        .catch((e) => {
-          if (!ctrl.signal.aborted) setError(apiErrorMessage(e));
-        });
-    void load();
-    const timer = setInterval(load, REFRESH_MS);
+    void load(ctrl.signal);
+    const timer = setInterval(() => void load(ctrl.signal), REFRESH_MS);
     return () => {
       clearInterval(timer);
       ctrl.abort();
     };
-  }, []);
+  }, [selected]);
 
-  if (error) return <p className="panel-error">Geräte konnten nicht geladen werden: {error}</p>;
-  if (devices === null) return <p className="panel-muted">Lade Geräte…</p>;
-  if (devices.length === 0) {
+  if (selected !== null) {
     return (
-      <div className="empty-state">
-        <h2>Noch keine Geräte</h2>
-        <p>
-          In Phase 1 kommt hier der „Gerät hinzufügen“-Flow: Einmal-Token erzeugen,
-          Agent installieren, fertig.
-        </p>
-      </div>
+      <DeviceDetail
+        deviceId={selected}
+        isAdmin={isAdmin}
+        onBack={() => setSelected(null)}
+        onDeleted={() => {
+          setSelected(null);
+          void load();
+        }}
+      />
     );
   }
 
   return (
-    <table className="device-table">
-      <thead>
-        <tr>
-          <th>Status</th>
-          <th>Hostname</th>
-          <th>Besitzer</th>
-          <th>OS</th>
-          <th>Agent</th>
-          <th>Zuletzt gesehen</th>
-        </tr>
-      </thead>
-      <tbody>
-        {devices.map((d) => (
-          <tr key={d.id}>
-            <td>
-              <span className={d.online ? 'dot dot-online' : 'dot dot-offline'} />
-              {d.online ? 'online' : 'offline'}
-            </td>
-            <td>{d.hostname}</td>
-            <td>{d.owner_label || '—'}</td>
-            <td>
-              {d.os} {d.os_version}
-            </td>
-            <td>{d.agent_version || '—'}</td>
-            <td>{formatLastSeen(d.last_seen_at)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <>
+      <div className="page-head">
+        <h2>Geräte {devices ? `(${devices.length})` : ''}</h2>
+        {isAdmin && <button onClick={() => setEnrolling(true)}>+ Gerät hinzufügen</button>}
+      </div>
+
+      {error && <p className="panel-error">{error}</p>}
+      {devices === null && !error && <p className="panel-muted">Lade Geräte…</p>}
+
+      {devices !== null && devices.length === 0 && (
+        <div className="empty-state">
+          <h2>Noch keine Geräte</h2>
+          <p>
+            {isAdmin
+              ? 'Klicke „Gerät hinzufügen“, erzeuge ein Token und führe den Agent-Befehl auf dem Zielgerät aus.'
+              : 'Es sind noch keine Geräte enrollt.'}
+          </p>
+        </div>
+      )}
+
+      {devices !== null && devices.length > 0 && (
+        <table className="device-table">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Hostname</th>
+              <th>Besitzer</th>
+              <th>OS</th>
+              <th>Agent</th>
+              <th>Zuletzt gesehen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {devices.map((d) => (
+              <tr key={d.id} className="clickable" onClick={() => setSelected(d.id)}>
+                <td>
+                  <span className={d.online ? 'dot dot-online' : 'dot dot-offline'} />
+                  {d.online ? 'online' : 'offline'}
+                </td>
+                <td>{d.hostname}</td>
+                <td>{d.owner_label || '—'}</td>
+                <td>
+                  {osLabel(d.os)} {d.os_version}
+                </td>
+                <td>{d.agent_version || '—'}</td>
+                <td>{formatRelative(d.last_seen_at)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {enrolling && (
+        <EnrollModal
+          onClose={() => {
+            setEnrolling(false);
+            void load();
+          }}
+        />
+      )}
+    </>
   );
 }

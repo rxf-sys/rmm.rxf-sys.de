@@ -1,4 +1,10 @@
-import type { Account, Device } from '../types';
+import type {
+  Account,
+  CreatedEnrollToken,
+  Device,
+  DeviceDetail,
+  EnrollToken,
+} from '../types';
 
 class ApiError extends Error {
   constructor(public status: number, public body: string) {
@@ -15,9 +21,13 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-async function post<T>(path: string, body?: unknown): Promise<T> {
+async function send<T>(
+  method: 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: unknown,
+): Promise<T> {
   const r = await fetch(path, {
-    method: 'POST',
+    method,
     credentials: 'include',
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -28,6 +38,10 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   }
   return r.json() as Promise<T>;
 }
+
+const post = <T>(path: string, body?: unknown) => send<T>('POST', path, body);
+const patch = <T>(path: string, body?: unknown) => send<T>('PATCH', path, body);
+const del = <T>(path: string) => send<T>('DELETE', path);
 
 /** Pull a human-readable message out of an ApiError's JSON body. */
 export function apiErrorMessage(e: unknown): string {
@@ -48,5 +62,17 @@ export const api = {
     post<{ user: Account }>('/api/auth/login', { username, password }),
   logout: () => post<{ ok: boolean }>('/api/auth/logout'),
   authMe: () => get<{ user: Account }>('/api/auth/me'),
+
   devices: (signal?: AbortSignal) => get<{ devices: Device[] }>('/api/devices', signal),
+  device: (id: number, signal?: AbortSignal) =>
+    get<DeviceDetail>(`/api/devices/${id}`, signal),
+  updateDevice: (id: number, body: { owner_label?: string; tags?: string[] }) =>
+    patch<{ device: Device }>(`/api/devices/${id}`, body),
+  deleteDevice: (id: number) => del<{ ok: boolean }>(`/api/devices/${id}`),
+
+  enrollTokens: (signal?: AbortSignal) =>
+    get<{ tokens: EnrollToken[] }>('/api/devices/enroll-tokens', signal),
+  createEnrollToken: (body: { label?: string; ttl_hours?: number }) =>
+    post<CreatedEnrollToken>('/api/devices/enroll-tokens', body),
+  deleteEnrollToken: (id: number) => del<{ ok: boolean }>(`/api/devices/enroll-tokens/${id}`),
 };

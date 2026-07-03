@@ -55,7 +55,7 @@ export default function App() {
       </header>
       <main className="app-main">
         {tab === 'devices' ? (
-          <DevicesPage />
+          <DevicesPage isAdmin={user.role === 'admin'} />
         ) : (
           <div className="empty-state">
             <h2>{TABS.find((t) => t.id === tab)?.label}</h2>

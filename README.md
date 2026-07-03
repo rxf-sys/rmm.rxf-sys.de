@@ -66,8 +66,9 @@ Portfreigaben, siehe `infrastructure/docker-compose.yml`.
 - [x] **Phase 0** — Fundament: Auth (Argon2id + Session-Cookies, Bootstrap-Admin),
       Geräte-Schema, Dashboard-Skeleton mit Login + Tabs, Agent-Skeleton
       (Dienst-Installation, WSS-Reconnect, Heartbeat-Metriken, Enroll-Client), CI
-- [ ] **Phase 1** — Enrollment-Endpoint, Agent-WSS-Endpoint + ConnectionManager,
-      Inventar, Geräteliste live
+- [x] **Phase 1** — Enrollment (Einmal-Token → Geräte-Credentials), Agent-WSS
+      `/api/agent/ws` + ConnectionManager, Heartbeat + Hardware-/Software-Inventar,
+      Geräteliste live mit Detailseite (Metriken, Inventar, umbenennen/taggen/löschen)
 - [ ] **Phase 2** — Metrik-Historie + Alerts (ntfy)
 - [ ] **Phase 3** — Remote-Shell + Skript-Bibliothek + Audit-Log
 - [ ] **Phase 4** — Patch-Management (Windows Update / apt / softwareupdate)

@@ -22,3 +22,6 @@ agent/dist/
 .DS_Store
 .idea/
 .vscode/
+
+# TS build cache
+frontend/*.tsbuildinfo

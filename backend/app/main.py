@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import accounts, devices
 from .config import get_settings
+from .routers import agent as agent_router
 from .routers import auth as auth_router
 from .routers import devices as devices_router
 
@@ -103,3 +104,4 @@ async def health() -> dict[str, str]:
 
 app.include_router(auth_router.router)
 app.include_router(devices_router.router)
+app.include_router(agent_router.router)
