@@ -1,9 +1,11 @@
 import type {
   Account,
+  Alert,
   CreatedEnrollToken,
   Device,
   DeviceDetail,
   EnrollToken,
+  MetricSample,
 } from '../types';
 
 class ApiError extends Error {
@@ -66,6 +68,9 @@ export const api = {
   devices: (signal?: AbortSignal) => get<{ devices: Device[] }>('/api/devices', signal),
   device: (id: number, signal?: AbortSignal) =>
     get<DeviceDetail>(`/api/devices/${id}`, signal),
+  deviceHistory: (id: number, hours: number, signal?: AbortSignal) =>
+    get<{ samples: MetricSample[] }>(`/api/devices/${id}/history?hours=${hours}`, signal),
+  alerts: (signal?: AbortSignal) => get<{ alerts: Alert[] }>('/api/alerts', signal),
   updateDevice: (id: number, body: { owner_label?: string; tags?: string[] }) =>
     patch<{ device: Device }>(`/api/devices/${id}`, body),
   deleteDevice: (id: number) => del<{ ok: boolean }>(`/api/devices/${id}`),

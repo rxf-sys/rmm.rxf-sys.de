@@ -9,9 +9,10 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import accounts, devices
+from . import accounts, alerts, devices, metrics, notify
 from .config import get_settings
 from .routers import agent as agent_router
+from .routers import alerts as alerts_router
 from .routers import auth as auth_router
 from .routers import devices as devices_router
 
@@ -39,17 +40,37 @@ structlog.configure(
 
 
 async def _cleanup_loop() -> None:
-    """Periodically drop expired sessions and stale enrollment tokens."""
+    """Periodically drop expired sessions, stale enrollment tokens and old
+    metric samples (raw → hourly rollup happens in the same tick)."""
     while True:
         try:
             await asyncio.sleep(_settings.cleanup_interval_s)
             await accounts.cleanup_expired_sessions()
             await devices.cleanup_expired_enrollment_tokens()
+            await metrics.aggregate_and_cleanup(_settings)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 - never let the loop die
             structlog.get_logger().error(
                 "cleanup.loop_error", error=str(e), error_type=type(e).__name__
+            )
+
+
+async def _alert_loop() -> None:
+    """Evaluate alert rules on a fixed tick and push via ntfy."""
+
+    async def _ntfy(title: str, message: str, tags: str, priority: str) -> bool:
+        return await notify.send_ntfy(_settings, title, message, tags=tags, priority=priority)
+
+    while True:
+        try:
+            await asyncio.sleep(_settings.alert_interval_s)
+            await alerts.evaluate(_settings, _ntfy)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 - never let the loop die
+            structlog.get_logger().error(
+                "alerts.loop_error", error=str(e), error_type=type(e).__name__
             )
 
 
@@ -60,16 +81,25 @@ async def lifespan(app: FastAPI):
     await accounts.ensure_schema(_settings)
     await accounts.bootstrap_admin(_settings)
     await devices.ensure_schema(_settings)
+    await metrics.ensure_schema(_settings)
+    await alerts.ensure_schema(_settings)
 
-    cleanup_task = asyncio.create_task(_cleanup_loop())
+    tasks = [
+        asyncio.create_task(_cleanup_loop()),
+        asyncio.create_task(_alert_loop()),
+    ]
+    structlog.get_logger().info(
+        "notify.ntfy", enabled=bool(_settings.ntfy_base), topic=_settings.ntfy_topic
+    )
     try:
         yield
     finally:
-        cleanup_task.cancel()
-        try:
-            await cleanup_task
-        except (asyncio.CancelledError, Exception):
-            pass
+        for task in tasks:
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
 
 
 # Interactive docs + OpenAPI schema are dev conveniences: in production the
@@ -105,3 +135,4 @@ async def health() -> dict[str, str]:
 app.include_router(auth_router.router)
 app.include_router(devices_router.router)
 app.include_router(agent_router.router)
+app.include_router(alerts_router.router)

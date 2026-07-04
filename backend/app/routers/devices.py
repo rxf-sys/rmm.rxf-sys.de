@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from .. import devices
+from .. import devices, metrics
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..auth import require_admin, verify_session
@@ -91,6 +91,18 @@ async def get_device(
     }
 
 
+@router.get("/{device_id}/history")
+async def device_history(
+    device_id: int,
+    hours: int = Query(default=24, ge=1, le=24 * 30),
+    user: dict = Depends(verify_session),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    if await devices.get_device(device_id, settings.offline_after_s) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    return {"samples": await metrics.history(device_id, hours)}
+
+
 class UpdateDeviceRequest(BaseModel):
     owner_label: str | None = Field(default=None, max_length=120)
     tags: list[str] | None = None
@@ -121,5 +133,6 @@ async def delete_device(device_id: int, user: dict = Depends(require_admin)) -> 
     await manager.disconnect(device_id)
     if not await devices.delete_device(device_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    await metrics.delete_for_device(device_id)
     audit_record("devices.deleted", user=user["username"], device_id=device_id)
     return {"ok": True}

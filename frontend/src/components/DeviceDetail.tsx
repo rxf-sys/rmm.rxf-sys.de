@@ -1,7 +1,65 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { formatBytes, formatRelative, osLabel } from '../format';
-import type { DeviceDetail as DeviceDetailData, Heartbeat, InventorySection } from '../types';
+import type {
+  DeviceDetail as DeviceDetailData,
+  Heartbeat,
+  InventorySection,
+  MetricSample,
+} from '../types';
+import { HistoryChart } from './HistoryChart';
+
+const RANGES = [
+  { label: '6 h', hours: 6 },
+  { label: '24 h', hours: 24 },
+  { label: '7 Tage', hours: 168 },
+] as const;
+
+function HistoryCard({ deviceId }: { deviceId: number }) {
+  const [hours, setHours] = useState<number>(24);
+  const [samples, setSamples] = useState<MetricSample[] | null>(null);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const load = () =>
+      api
+        .deviceHistory(deviceId, hours, ctrl.signal)
+        .then((r) => setSamples(r.samples))
+        .catch(() => {
+          /* chart is non-critical; the metrics card still shows live data */
+        });
+    void load();
+    const timer = setInterval(load, 60_000);
+    return () => {
+      clearInterval(timer);
+      ctrl.abort();
+    };
+  }, [deviceId, hours]);
+
+  return (
+    <div className="detail-card">
+      <div className="chart-head">
+        <h3>Verlauf</h3>
+        <div className="range-picker" role="group" aria-label="Zeitraum">
+          {RANGES.map((r) => (
+            <button
+              key={r.hours}
+              className={hours === r.hours ? 'range-btn active' : 'range-btn'}
+              onClick={() => setHours(r.hours)}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {samples === null ? (
+        <p className="panel-muted">Lade Verlauf…</p>
+      ) : (
+        <HistoryChart samples={samples} />
+      )}
+    </div>
+  );
+}
 
 interface Props {
   deviceId: number;
@@ -241,6 +299,7 @@ export function DeviceDetail({ deviceId, isAdmin, onBack, onDeleted }: Props) {
       )}
 
       <Heartbeats hb={d.heartbeat} />
+      <HistoryCard deviceId={deviceId} />
       <HardwareCard section={detail.inventory.hardware} />
       <SoftwareCard section={detail.inventory.software} />
     </div>

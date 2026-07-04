@@ -48,6 +48,23 @@ export interface DeviceDetail {
   };
 }
 
+export interface MetricSample {
+  ts: number;
+  cpu_pct: number;
+  mem_pct: number;
+  disk_max_pct: number;
+}
+
+export interface Alert {
+  id: number;
+  device_id: number;
+  rule: 'offline' | 'disk' | string;
+  message: string;
+  fired_at: number;
+  resolved_at: number | null;
+  notified: boolean;
+}
+
 export interface EnrollToken {
   id: number;
   label: string;

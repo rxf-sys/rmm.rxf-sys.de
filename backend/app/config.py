@@ -48,6 +48,31 @@ class Settings(BaseSettings):
     # Lifetime of a one-time enrollment token.
     enrollment_token_ttl_hours: int = 24
 
+    # ---- Metrics history ----
+    # Raw heartbeat samples (one row per heartbeat) are kept this long, then
+    # dropped — the hourly aggregate carries the long tail.
+    metrics_raw_retention_h: int = 48
+    metrics_hourly_retention_d: int = 30
+
+    # ---- Alerting ----
+    # Alert evaluation tick.
+    alert_interval_s: int = 60
+    # A device must be silent this long before the offline alert fires
+    # (anti-flap; sits above offline_after_s so brief reconnects never page).
+    offline_alert_after_s: int = 300
+    # Disk-full alert threshold with clear-hysteresis: fires at >= alert_pct,
+    # resolves only once usage drops below clear_pct.
+    disk_alert_pct: float = 90.0
+    disk_alert_clear_pct: float = 85.0
+
+    # ---- ntfy push ----
+    # Server root (e.g. https://ntfy.rxf-sys.de or https://ntfy.sh); empty
+    # disables push entirely. Token is the optional Bearer for protected
+    # topics.
+    ntfy_base: str = ""
+    ntfy_topic: str = "rxf-rmm"
+    ntfy_token: str = ""
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

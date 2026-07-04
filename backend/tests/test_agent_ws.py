@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app import accounts, devices
+from app import accounts, alerts, devices, metrics
 from app.agents_ws import manager
 from app.config import Settings, get_settings
 from app.main import app
@@ -24,6 +24,8 @@ def ws_client(settings: Settings):
     """
     asyncio.run(accounts.ensure_schema(settings))
     asyncio.run(devices.ensure_schema(settings))
+    asyncio.run(metrics.ensure_schema(settings))
+    asyncio.run(alerts.ensure_schema(settings))
     manager.reset_for_tests()
     app.dependency_overrides[get_settings] = lambda: settings
     yield TestClient(app)
@@ -99,6 +101,12 @@ def test_ws_heartbeat_and_inventory_roundtrip(ws_client: TestClient, settings: S
         inv = asyncio.run(devices.get_inventory(device_id))
         assert inv["hardware"]["data"]["platform"] == "debian"
         assert inv["software"]["data"] == [{"name": "vim", "version": "9.0"}]
+
+        # The heartbeat also lands in the metric history (Phase 2).
+        samples = asyncio.run(metrics.history(device_id, hours=1))
+        assert len(samples) == 1
+        assert samples[0]["cpu_pct"] == 12.5
+        assert samples[0]["disk_max_pct"] == 55.0
 
     # After the socket closes the manager entry is cleaned up (the handler's
     # finally block runs inside the portal; give it a moment).

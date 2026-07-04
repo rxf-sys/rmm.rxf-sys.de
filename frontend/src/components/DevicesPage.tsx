@@ -7,14 +7,16 @@ import { EnrollModal } from './EnrollModal';
 
 interface Props {
   isAdmin: boolean;
+  /** Selection is owned by App so the overview can deep-link into a device. */
+  selected: number | null;
+  onSelect: (id: number | null) => void;
 }
 
 const REFRESH_MS = 30_000;
 
-export function DevicesPage({ isAdmin }: Props) {
+export function DevicesPage({ isAdmin, selected, onSelect }: Props) {
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<number | null>(null);
   const [enrolling, setEnrolling] = useState(false);
 
   const load = (signal?: AbortSignal) =>
@@ -45,9 +47,9 @@ export function DevicesPage({ isAdmin }: Props) {
       <DeviceDetail
         deviceId={selected}
         isAdmin={isAdmin}
-        onBack={() => setSelected(null)}
+        onBack={() => onSelect(null)}
         onDeleted={() => {
-          setSelected(null);
+          onSelect(null);
           void load();
         }}
       />
@@ -89,7 +91,7 @@ export function DevicesPage({ isAdmin }: Props) {
           </thead>
           <tbody>
             {devices.map((d) => (
-              <tr key={d.id} className="clickable" onClick={() => setSelected(d.id)}>
+              <tr key={d.id} className="clickable" onClick={() => onSelect(d.id)}>
                 <td>
                   <span className={d.online ? 'dot dot-online' : 'dot dot-offline'} />
                   {d.online ? 'online' : 'offline'}

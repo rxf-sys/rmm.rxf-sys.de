@@ -69,7 +69,9 @@ Portfreigaben, siehe `infrastructure/docker-compose.yml`.
 - [x] **Phase 1** — Enrollment (Einmal-Token → Geräte-Credentials), Agent-WSS
       `/api/agent/ws` + ConnectionManager, Heartbeat + Hardware-/Software-Inventar,
       Geräteliste live mit Detailseite (Metriken, Inventar, umbenennen/taggen/löschen)
-- [ ] **Phase 2** — Metrik-Historie + Alerts (ntfy)
+- [x] **Phase 2** — Metrik-Historie (Raw 48 h → Stunden-Rollup 30 Tage) mit
+      Verlaufschart, Alert-Engine (offline / Disk voll, mit Hysterese und
+      Resolved-Erkennung) + ntfy-Push, Ampel-Übersichtsseite
 - [ ] **Phase 3** — Remote-Shell + Skript-Bibliothek + Audit-Log
 - [ ] **Phase 4** — Patch-Management (Windows Update / apt / softwareupdate)
 - [ ] **Phase 5** — Remote Desktop (RustDesk self-hosted)

@@ -11,7 +11,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
 
-from .. import devices
+from .. import devices, metrics
 from ..agents_ws import manager
 from ..audit import record as audit_record
 
@@ -60,6 +60,14 @@ async def enroll(body: EnrollRequest) -> dict:
     return result
 
 
+def _as_pct(value: object) -> float:
+    """Clamp an untrusted agent-reported percentage into [0, 100]."""
+    try:
+        return max(0.0, min(100.0, float(value)))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _parse_bearer(header: str) -> tuple[int, str] | None:
     """``Bearer <device_id>:<secret>`` → (device_id, secret), or None."""
     if not header.lower().startswith("bearer "):
@@ -106,6 +114,19 @@ async def agent_ws(ws: WebSocket) -> None:
 
             if msg_type == "heartbeat" and isinstance(payload, dict):
                 await devices.record_heartbeat(device_id, payload)
+                await metrics.record(
+                    device_id,
+                    cpu_pct=_as_pct(payload.get("cpu_pct")),
+                    mem_pct=_as_pct(payload.get("mem_pct")),
+                    disk_max_pct=max(
+                        (
+                            _as_pct(d.get("used_pct"))
+                            for d in payload.get("disks") or []
+                            if isinstance(d, dict)
+                        ),
+                        default=0.0,
+                    ),
+                )
             elif msg_type == "inventory" and isinstance(payload, dict):
                 for kind in devices.INVENTORY_KINDS:
                     if kind in payload:
