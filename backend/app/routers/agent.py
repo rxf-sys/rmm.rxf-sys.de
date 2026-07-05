@@ -11,7 +11,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
 
-from .. import devices, metrics
+from .. import devices, jobs, metrics
 from ..agents_ws import manager
 from ..audit import record as audit_record
 
@@ -51,7 +51,7 @@ async def enroll(body: EnrollRequest) -> dict:
         # 403 for all token failures; the message says why. No 404-vs-410
         # split — an attacker probing tokens learns nothing extra.
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
-    audit_record(
+    await audit_record(
         "agent.enrolled",
         device_id=result["device_id"],
         hostname=body.hostname,
@@ -131,6 +131,25 @@ async def agent_ws(ws: WebSocket) -> None:
                 for kind in devices.INVENTORY_KINDS:
                     if kind in payload:
                         await devices.set_inventory(device_id, kind, payload[kind])
+            elif msg_type == "job_started" and isinstance(payload, dict):
+                job_id = payload.get("job_id")
+                if isinstance(job_id, int):
+                    await jobs.mark_running(job_id)
+            elif msg_type == "job_output" and isinstance(payload, dict):
+                job_id = payload.get("job_id")
+                chunk = payload.get("chunk")
+                if isinstance(job_id, int) and isinstance(chunk, str):
+                    await jobs.append_output(job_id, chunk)
+            elif msg_type == "job_result" and isinstance(payload, dict):
+                job_id = payload.get("job_id")
+                result_status = payload.get("status")
+                exit_code = payload.get("exit_code")
+                if isinstance(job_id, int) and isinstance(result_status, str):
+                    await jobs.finish_job(
+                        job_id,
+                        result_status,
+                        exit_code if isinstance(exit_code, int) else None,
+                    )
             elif msg_type == "ping":
                 # Lets agents (and tests) confirm the pipeline end-to-end:
                 # everything sent before the ping has been processed.

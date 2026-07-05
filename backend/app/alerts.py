@@ -82,7 +82,7 @@ async def _fire(device_id: int, rule: str, message: str) -> int:
         )
         await db.commit()
         alert_id = int(cur.lastrowid or 0)
-    audit_record("alert.fired", device_id=device_id, rule=rule, message=message)
+    await audit_record("alert.fired", device_id=device_id, rule=rule, message=message)
     return alert_id
 
 

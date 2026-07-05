@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app import accounts, alerts, devices, metrics
+from app import accounts, alerts, audit, devices, jobs, metrics, scripts
 from app.agents_ws import manager
 from app.config import Settings, get_settings
 from app.main import app
@@ -26,7 +26,11 @@ def ws_client(settings: Settings):
     asyncio.run(devices.ensure_schema(settings))
     asyncio.run(metrics.ensure_schema(settings))
     asyncio.run(alerts.ensure_schema(settings))
+    asyncio.run(audit.ensure_schema(settings))
+    asyncio.run(jobs.ensure_schema(settings))
+    asyncio.run(scripts.ensure_schema(settings))
     manager.reset_for_tests()
+    jobs.hub.reset_for_tests()
     app.dependency_overrides[get_settings] = lambda: settings
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -147,3 +151,86 @@ async def test_manager_send_to_disconnected_device_is_false():
     manager.reset_for_tests()
     assert await manager.send(999, {"type": "ping"}) is False
     assert manager.connected_ids() == set()
+
+
+def _login_admin(ws_client: TestClient) -> None:
+    asyncio.run(accounts.create_user("boss", "super-secret-pw", role="admin"))
+    r = ws_client.post("/api/auth/login", json={"username": "boss", "password": "super-secret-pw"})
+    assert r.status_code == 200
+
+
+def test_job_end_to_end_live_stream(ws_client: TestClient, settings: Settings):
+    """Full Phase-3 loop: admin dispatches a job → the server pushes it to the
+    connected agent → the agent reports start/output/result → a browser socket
+    observing the job sees each event live → the job's final state persists."""
+    _login_admin(ws_client)
+    creds = _enroll("live-pc")
+    device_id = creds["device_id"]
+
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as agent_ws:
+        _sync(agent_ws)
+        assert manager.is_connected(device_id)
+
+        # Admin creates the job; the server dispatches it over the agent socket.
+        r = ws_client.post(
+            f"/api/devices/{device_id}/jobs",
+            json={"kind": "shell", "command": "echo hi", "shell": "bash"},
+        )
+        assert r.status_code == 200
+        job_id = r.json()["job"]["id"]
+
+        dispatched = agent_ws.receive_json()
+        assert dispatched["type"] == "job"
+        assert dispatched["payload"]["job_id"] == job_id
+        assert dispatched["payload"]["command"] == "echo hi"
+
+        # A dashboard opens the live view for this job.
+        with ws_client.websocket_connect(f"/api/jobs/{job_id}/ws") as browser_ws:
+            snap = browser_ws.receive_json()
+            assert snap["type"] == "snapshot"
+            assert snap["job"]["status"] == "queued"
+
+            # The agent reports the lifecycle; the browser sees each step.
+            agent_ws.send_json({"type": "job_started", "payload": {"job_id": job_id}})
+            assert browser_ws.receive_json() == {"type": "status", "status": "running"}
+
+            agent_ws.send_json(
+                {"type": "job_output", "payload": {"job_id": job_id, "chunk": "hi\n"}}
+            )
+            ev = browser_ws.receive_json()
+            assert ev["type"] == "output" and ev["chunk"] == "hi\n"
+
+            agent_ws.send_json(
+                {"type": "job_result", "payload": {"job_id": job_id, "status": "done", "exit_code": 0}}
+            )
+            done = browser_ws.receive_json()
+            assert done == {"type": "done", "status": "done", "exit_code": 0}
+
+    final = asyncio.run(jobs.get_job(job_id))
+    assert final["status"] == "done"
+    assert final["exit_code"] == 0
+    assert final["output"] == "hi\n"
+
+
+def test_job_ws_requires_auth(ws_client: TestClient):
+    creds = _enroll("noauth-pc")
+    job = asyncio.run(
+        jobs.create_job(creds["device_id"], kind="shell", command="echo x", created_by="boss")
+    )
+    # No session cookie on the client → the live socket rejects with 4401.
+    with ws_client.websocket_connect(f"/api/jobs/{job['id']}/ws") as ws:
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_json()
+        assert exc.value.code == 4401
+
+
+def test_job_ws_finished_job_sends_snapshot_then_done(ws_client: TestClient):
+    _login_admin(ws_client)
+    creds = _enroll("done-pc")
+    job = asyncio.run(
+        jobs.create_job(creds["device_id"], kind="shell", command="echo x", created_by="boss")
+    )
+    asyncio.run(jobs.finish_job(job["id"], "done", 0))
+    with ws_client.websocket_connect(f"/api/jobs/{job['id']}/ws") as ws:
+        assert ws.receive_json()["type"] == "snapshot"
+        assert ws.receive_json()["type"] == "done"

@@ -72,7 +72,9 @@ Portfreigaben, siehe `infrastructure/docker-compose.yml`.
 - [x] **Phase 2** — Metrik-Historie (Raw 48 h → Stunden-Rollup 30 Tage) mit
       Verlaufschart, Alert-Engine (offline / Disk voll, mit Hysterese und
       Resolved-Erkennung) + ntfy-Push, Ampel-Übersichtsseite
-- [ ] **Phase 3** — Remote-Shell + Skript-Bibliothek + Audit-Log
+- [x] **Phase 3** — Job-Engine mit Live-Output (Agent → Server → Browser via
+      WebSocket), Ad-hoc-Remote-Shell + Skript-Bibliothek (bash/zsh/powershell),
+      persistenter Audit-Log
 - [ ] **Phase 4** — Patch-Management (Windows Update / apt / softwareupdate)
 - [ ] **Phase 5** — Remote Desktop (RustDesk self-hosted)
 - [ ] **Phase 6** — Installer + signiertes Agent-Auto-Update

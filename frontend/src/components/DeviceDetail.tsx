@@ -8,6 +8,7 @@ import type {
   MetricSample,
 } from '../types';
 import { HistoryChart } from './HistoryChart';
+import { JobsPanel } from './JobsPanel';
 
 const RANGES = [
   { label: '6 h', hours: 6 },
@@ -298,6 +299,7 @@ export function DeviceDetail({ deviceId, isAdmin, onBack, onDeleted }: Props) {
         </div>
       )}
 
+      {isAdmin && <JobsPanel deviceId={deviceId} deviceOs={d.os} connected={d.connected} />}
       <Heartbeats hb={d.heartbeat} />
       <HistoryCard deviceId={deviceId} />
       <HardwareCard section={detail.inventory.hardware} />

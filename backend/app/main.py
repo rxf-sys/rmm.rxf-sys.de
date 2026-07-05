@@ -9,12 +9,15 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import accounts, alerts, devices, metrics, notify
+from . import accounts, alerts, audit, devices, jobs, metrics, notify, scripts
 from .config import get_settings
 from .routers import agent as agent_router
 from .routers import alerts as alerts_router
+from .routers import audit as audit_router
 from .routers import auth as auth_router
 from .routers import devices as devices_router
+from .routers import jobs as jobs_router
+from .routers import scripts as scripts_router
 
 _settings = get_settings()
 logging.basicConfig(
@@ -48,6 +51,7 @@ async def _cleanup_loop() -> None:
             await accounts.cleanup_expired_sessions()
             await devices.cleanup_expired_enrollment_tokens()
             await metrics.aggregate_and_cleanup(_settings)
+            await jobs.sweep_stale(_settings.job_timeout_s)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 - never let the loop die
@@ -83,6 +87,9 @@ async def lifespan(app: FastAPI):
     await devices.ensure_schema(_settings)
     await metrics.ensure_schema(_settings)
     await alerts.ensure_schema(_settings)
+    await audit.ensure_schema(_settings)
+    await jobs.ensure_schema(_settings)
+    await scripts.ensure_schema(_settings)
 
     tasks = [
         asyncio.create_task(_cleanup_loop()),
@@ -136,3 +143,6 @@ app.include_router(auth_router.router)
 app.include_router(devices_router.router)
 app.include_router(agent_router.router)
 app.include_router(alerts_router.router)
+app.include_router(jobs_router.router)
+app.include_router(scripts_router.router)
+app.include_router(audit_router.router)

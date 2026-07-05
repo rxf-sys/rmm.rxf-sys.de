@@ -1,11 +1,15 @@
 import type {
   Account,
   Alert,
+  AuditEvent,
   CreatedEnrollToken,
   Device,
   DeviceDetail,
   EnrollToken,
+  Job,
   MetricSample,
+  Script,
+  Shell,
 } from '../types';
 
 class ApiError extends Error {
@@ -24,7 +28,7 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 async function send<T>(
-  method: 'POST' | 'PATCH' | 'DELETE',
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -80,4 +84,33 @@ export const api = {
   createEnrollToken: (body: { label?: string; ttl_hours?: number }) =>
     post<CreatedEnrollToken>('/api/devices/enroll-tokens', body),
   deleteEnrollToken: (id: number) => del<{ ok: boolean }>(`/api/devices/enroll-tokens/${id}`),
+
+  // Jobs
+  deviceJobs: (deviceId: number, signal?: AbortSignal) =>
+    get<{ jobs: Job[] }>(`/api/devices/${deviceId}/jobs`, signal),
+  job: (jobId: number, signal?: AbortSignal) => get<{ job: Job }>(`/api/jobs/${jobId}`, signal),
+  createShellJob: (deviceId: number, command: string, shell: Shell) =>
+    post<{ job: Job }>(`/api/devices/${deviceId}/jobs`, { kind: 'shell', command, shell }),
+  createScriptJob: (deviceId: number, scriptId: number) =>
+    post<{ job: Job }>(`/api/devices/${deviceId}/jobs`, { kind: 'script', script_id: scriptId }),
+
+  // Scripts
+  scripts: (signal?: AbortSignal) => get<{ scripts: Script[] }>('/api/scripts', signal),
+  createScript: (body: { name: string; shell: Shell; content: string }) =>
+    post<{ script: Script }>('/api/scripts', body),
+  updateScript: (id: number, body: { name: string; shell: Shell; content: string }) =>
+    send<{ script: Script }>('PUT', `/api/scripts/${id}`, body),
+  deleteScript: (id: number) => del<{ ok: boolean }>(`/api/scripts/${id}`),
+
+  // Audit
+  audit: (limit = 100, signal?: AbortSignal) =>
+    get<{ events: AuditEvent[] }>(`/api/audit?limit=${limit}`, signal),
 };
+
+/** Open the live-output WebSocket for a job. Returns the socket; the caller
+ * wires up onmessage/onclose. Uses the page origin so it rides the same
+ * Cloudflare tunnel as the REST API. */
+export function openJobSocket(jobId: number): WebSocket {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return new WebSocket(`${proto}//${window.location.host}/api/jobs/${jobId}/ws`);
+}

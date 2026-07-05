@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     # Lifetime of a one-time enrollment token.
     enrollment_token_ttl_hours: int = 24
 
+    # ---- Jobs ----
+    # Safety net: a job still queued/running this long after creation is
+    # swept to 'timeout' (agent crashed mid-job). Sits above the agent's own
+    # per-job timeout so the agent normally reports first.
+    job_timeout_s: int = 900
+
     # ---- Metrics history ----
     # Raw heartbeat samples (one row per heartbeat) are kept this long, then
     # dropped — the hourly aggregate carries the long tail.

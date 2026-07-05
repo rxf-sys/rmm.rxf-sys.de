@@ -122,7 +122,7 @@ async def login(
         await accounts.delete_session(old_token)
     token = await accounts.create_session(user["id"], settings.session_ttl_hours)
     _set_session_cookie(response, token, settings)
-    audit_record("auth.login", user=user["username"], ip=ip)
+    await audit_record("auth.login", user=user["username"], ip=ip)
     log.info("auth.login_ok", username=user["username"], ip=ip)
     return {"user": user}
 

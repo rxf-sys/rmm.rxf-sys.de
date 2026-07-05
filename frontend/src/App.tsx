@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { AuditPage } from './components/AuditPage';
 import { DevicesPage } from './components/DevicesPage';
 import { LoginPage } from './components/LoginPage';
 import { OverviewPage } from './components/OverviewPage';
+import { ScriptsPage } from './components/ScriptsPage';
 import { useAuth } from './hooks/useAuth';
 
 const TABS = [
@@ -9,16 +11,10 @@ const TABS = [
   { id: 'devices', label: 'Geräte' },
   { id: 'scripts', label: 'Skripte' },
   { id: 'patches', label: 'Patches' },
-  { id: 'audit', label: 'Audit' },
+  { id: 'audit', label: 'Audit', adminOnly: true },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
-
-const PLACEHOLDER: Record<Exclude<TabId, 'overview' | 'devices'>, string> = {
-  scripts: 'Skript-Bibliothek und Remote-Shell kommen in Phase 3.',
-  patches: 'Patch-Management kommt in Phase 4.',
-  audit: 'Der Audit-Log-Viewer kommt in Phase 3.',
-};
 
 export default function App() {
   const { user, status, login, logout } = useAuth();
@@ -45,18 +41,20 @@ export default function App() {
           rxf-sys <span className="accent">RMM</span>
         </span>
         <nav className="tab-nav" aria-label="Bereiche">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              className={tab === t.id ? 'tab active' : 'tab'}
-              onClick={() => {
-                setTab(t.id);
-                if (t.id !== 'devices') setOpenDevice(null);
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
+          {TABS.filter((t) => !('adminOnly' in t && t.adminOnly) || user.role === 'admin').map(
+            (t) => (
+              <button
+                key={t.id}
+                className={tab === t.id ? 'tab active' : 'tab'}
+                onClick={() => {
+                  setTab(t.id);
+                  if (t.id !== 'devices') setOpenDevice(null);
+                }}
+              >
+                {t.label}
+              </button>
+            ),
+          )}
         </nav>
         <div className="header-right">
           <span className="username">{user.username}</span>
@@ -74,10 +72,14 @@ export default function App() {
             selected={openDevice}
             onSelect={setOpenDevice}
           />
+        ) : tab === 'scripts' ? (
+          <ScriptsPage isAdmin={user.role === 'admin'} />
+        ) : tab === 'audit' ? (
+          <AuditPage />
         ) : (
           <div className="empty-state">
             <h2>{TABS.find((t) => t.id === tab)?.label}</h2>
-            <p>{PLACEHOLDER[tab]}</p>
+            <p>Patch-Management kommt in Phase 4.</p>
           </div>
         )}
       </main>

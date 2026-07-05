@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from .. import devices, metrics
+from .. import devices, jobs, metrics
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..auth import require_admin, verify_session
@@ -55,7 +55,7 @@ async def create_enroll_token(
 ) -> dict:
     ttl = body.ttl_hours or settings.enrollment_token_ttl_hours
     raw, meta = await devices.create_enrollment_token(body.label, ttl)
-    audit_record("devices.token_created", user=user["username"], label=body.label, ttl_hours=ttl)
+    await audit_record("devices.token_created", user=user["username"], label=body.label, ttl_hours=ttl)
     # The raw token appears exactly once — here. Only its hash is stored.
     return {"token": raw, **meta}
 
@@ -69,7 +69,7 @@ async def list_enroll_tokens(user: dict = Depends(require_admin)) -> dict:
 async def delete_enroll_token(token_id: int, user: dict = Depends(require_admin)) -> dict:
     if not await devices.delete_enrollment_token(token_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token nicht gefunden")
-    audit_record("devices.token_deleted", user=user["username"], token_id=token_id)
+    await audit_record("devices.token_deleted", user=user["username"], token_id=token_id)
     return {"ok": True}
 
 
@@ -120,7 +120,7 @@ async def update_device(
     )
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
-    audit_record("devices.updated", user=user["username"], device_id=device_id)
+    await audit_record("devices.updated", user=user["username"], device_id=device_id)
     # Re-read with the real threshold so the response carries correct 'online'.
     fresh = await devices.get_device(device_id, settings.offline_after_s)
     return {"device": _with_connected(fresh or device)}
@@ -134,5 +134,6 @@ async def delete_device(device_id: int, user: dict = Depends(require_admin)) -> 
     if not await devices.delete_device(device_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
     await metrics.delete_for_device(device_id)
-    audit_record("devices.deleted", user=user["username"], device_id=device_id)
+    await jobs.delete_for_device(device_id)
+    await audit_record("devices.deleted", user=user["username"], device_id=device_id)
     return {"ok": True}

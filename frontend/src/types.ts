@@ -76,3 +76,43 @@ export interface CreatedEnrollToken extends EnrollToken {
   /** The raw token — shown exactly once, never retrievable again. */
   token: string;
 }
+
+export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'timeout';
+
+export interface Job {
+  id: number;
+  device_id: number;
+  kind: 'shell' | 'script';
+  command: string;
+  shell: string;
+  script_id: number | null;
+  script_name: string;
+  status: JobStatus;
+  exit_code: number | null;
+  created_by: string;
+  created_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+  /** Present on the detail endpoint, omitted from the list endpoint. */
+  output?: string;
+}
+
+export type Shell = 'bash' | 'zsh' | 'powershell';
+
+export interface Script {
+  id: number;
+  name: string;
+  shell: Shell;
+  content: string;
+  updated_by: string;
+  updated_at: number;
+}
+
+export interface AuditEvent {
+  id: number;
+  ts: number;
+  event: string;
+  actor: string;
+  device_id: number | null;
+  detail: Record<string, unknown>;
+}
