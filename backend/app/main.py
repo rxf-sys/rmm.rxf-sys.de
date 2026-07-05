@@ -18,6 +18,7 @@ from .routers import auth as auth_router
 from .routers import devices as devices_router
 from .routers import jobs as jobs_router
 from .routers import patches as patches_router
+from .routers import remote as remote_router
 from .routers import scripts as scripts_router
 
 _settings = get_settings()
@@ -149,3 +150,4 @@ app.include_router(jobs_router.router)
 app.include_router(scripts_router.router)
 app.include_router(audit_router.router)
 app.include_router(patches_router.router)
+app.include_router(remote_router.router)

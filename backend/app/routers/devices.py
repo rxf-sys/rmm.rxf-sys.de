@@ -106,6 +106,8 @@ async def device_history(
 class UpdateDeviceRequest(BaseModel):
     owner_label: str | None = Field(default=None, max_length=120)
     tags: list[str] | None = None
+    # Manual fallback when the agent can't auto-report the RustDesk ID.
+    rustdesk_id: str | None = Field(default=None, max_length=40)
 
 
 @router.patch("/{device_id}")
@@ -116,7 +118,7 @@ async def update_device(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     device = await devices.update_device(
-        device_id, owner_label=body.owner_label, tags=body.tags
+        device_id, owner_label=body.owner_label, tags=body.tags, rustdesk_id=body.rustdesk_id
     )
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")

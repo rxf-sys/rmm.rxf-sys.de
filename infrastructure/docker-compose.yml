@@ -39,31 +39,37 @@ services:
     networks:
       - rmm
 
-  # --- Phase 5: RustDesk (uncomment when remote desktop lands) -------------
-  # Needs router port-forwards: TCP 21115-21117 (+21118/21119 for web
-  # clients), UDP 21116 — raw TCP/UDP cannot ride the Cloudflare tunnel.
+  # --- RustDesk self-hosted relay (Phase 5) --------------------------------
+  # RustDesk speaks raw TCP/UDP, which cannot ride the Cloudflare tunnel — so
+  # this is the one exception to "kein direkter Port nach außen". Forward on
+  # the router to 192.168.2.211: TCP 21115-21117 (+21118/21119 for web
+  # clients) and UDP 21116. host networking keeps the client-visible source
+  # ports intact (RustDesk is picky about NAT). See infrastructure/RUSTDESK.md.
   #
-  # rustdesk-hbbs:
-  #   image: rustdesk/rustdesk-server:latest
-  #   container_name: rxf-rmm-hbbs
-  #   command: hbbs -r rd.rxf-sys.de:21117
-  #   restart: unless-stopped
-  #   volumes:
-  #     - rxf-rmm-rustdesk:/root
-  #   network_mode: host
-  #
-  # rustdesk-hbbr:
-  #   image: rustdesk/rustdesk-server:latest
-  #   container_name: rxf-rmm-hbbr
-  #   command: hbbr
-  #   restart: unless-stopped
-  #   volumes:
-  #     - rxf-rmm-rustdesk:/root
-  #   network_mode: host
+  # First start generates a key pair under the volume; read the public key
+  # with `docker exec rxf-rmm-hbbs cat /root/id_ed25519.pub` and set it as
+  # RUSTDESK_KEY in .env so agents pin exactly this relay.
+  rustdesk-hbbs:
+    image: rustdesk/rustdesk-server:latest
+    container_name: rxf-rmm-hbbs
+    command: hbbs -r rd.rxf-sys.de:21117
+    restart: unless-stopped
+    volumes:
+      - rxf-rmm-rustdesk:/root
+    network_mode: host
+
+  rustdesk-hbbr:
+    image: rustdesk/rustdesk-server:latest
+    container_name: rxf-rmm-hbbr
+    command: hbbr
+    restart: unless-stopped
+    volumes:
+      - rxf-rmm-rustdesk:/root
+    network_mode: host
 
 volumes:
   rxf-rmm-data:
-  # rxf-rmm-rustdesk:
+  rxf-rmm-rustdesk:
 
 networks:
   rmm:

@@ -20,6 +20,7 @@ type heartbeatPayload struct {
 	CPUPct       float64      `json:"cpu_pct"`
 	MemPct       float64      `json:"mem_pct"`
 	Disks        []diskMetric `json:"disks"`
+	RustDeskID   string       `json:"rustdesk_id,omitempty"`
 }
 
 // collectHeartbeat gathers the lightweight metric set sent with every
@@ -53,5 +54,6 @@ func collectHeartbeat() heartbeatPayload {
 			})
 		}
 	}
+	hb.RustDeskID = rustDeskID()
 	return hb
 }

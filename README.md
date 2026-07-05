@@ -78,6 +78,8 @@ Portfreigaben, siehe `infrastructure/docker-compose.yml`.
 - [x] **Phase 4** — Patch-Management: Scan + Installation pro OS (apt / Windows
       Update COM-API / softwareupdate), Patch-Panel pro Gerät + flottenweite
       Übersicht, Alarm bei überfälligen Sicherheitsupdates
-- [ ] **Phase 5** — Remote Desktop (RustDesk self-hosted)
+- [x] **Phase 5** — Remote Desktop: self-hosted RustDesk (hbbs/hbbr im Compose),
+      Agent meldet RustDesk-ID, Remote-Panel mit Deploy-Kommando + Deep-Link-
+      Sitzung (`rustdesk://`), Doku in infrastructure/RUSTDESK.md
 - [ ] **Phase 6** — Installer + signiertes Agent-Auto-Update
 - [ ] **Phase 7** — Deployment CT 111 + Familien-Rollout

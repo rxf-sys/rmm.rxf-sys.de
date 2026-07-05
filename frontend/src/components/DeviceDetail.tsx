@@ -10,6 +10,7 @@ import type {
 import { HistoryChart } from './HistoryChart';
 import { JobsPanel } from './JobsPanel';
 import { PatchesPanel } from './PatchesPanel';
+import { RemotePanel } from './RemotePanel';
 
 const RANGES = [
   { label: '6 h', hours: 6 },
@@ -300,6 +301,7 @@ export function DeviceDetail({ deviceId, isAdmin, onBack, onDeleted }: Props) {
         </div>
       )}
 
+      {isAdmin && <RemotePanel device={d} onChanged={() => void load()} />}
       {isAdmin && <JobsPanel deviceId={deviceId} deviceOs={d.os} connected={d.connected} />}
       {isAdmin && <PatchesPanel deviceId={deviceId} connected={d.connected} />}
       <Heartbeats hb={d.heartbeat} />

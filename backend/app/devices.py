@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS devices (
     device_secret_hash TEXT    NOT NULL,
     tags               TEXT    NOT NULL DEFAULT '',
     heartbeat_json     TEXT    NOT NULL DEFAULT '{}',
+    rustdesk_id        TEXT    NOT NULL DEFAULT '',
     created_at         INTEGER NOT NULL,
     last_seen_at       INTEGER
 );
@@ -93,6 +94,9 @@ async def _migrate_devices(db: aiosqlite.Connection) -> None:
     if "heartbeat_json" not in cols:
         await db.execute("ALTER TABLE devices ADD COLUMN heartbeat_json TEXT NOT NULL DEFAULT '{}'")
         log.info("devices.migrated", column="heartbeat_json")
+    if "rustdesk_id" not in cols:
+        await db.execute("ALTER TABLE devices ADD COLUMN rustdesk_id TEXT NOT NULL DEFAULT ''")
+        log.info("devices.migrated", column="rustdesk_id")
 
 
 @asynccontextmanager
@@ -126,6 +130,7 @@ def _row_to_device(row: aiosqlite.Row, offline_after_s: int) -> dict[str, Any]:
         "agent_version": row["agent_version"],
         "tags": [t for t in str(row["tags"]).split(",") if t],
         "heartbeat": heartbeat if isinstance(heartbeat, dict) else {},
+        "rustdesk_id": row["rustdesk_id"] if "rustdesk_id" in row.keys() else "",
         "created_at": int(row["created_at"]),
         "last_seen_at": last_seen,
         "online": online,
@@ -286,12 +291,16 @@ async def record_heartbeat(device_id: int, payload: dict[str, Any]) -> None:
         return
     now = int(time.time())
     agent_version = str(payload.get("agent_version", ""))[:40]
+    # The agent reports its RustDesk ID once the client is installed; keep the
+    # last non-empty value so a heartbeat before install doesn't wipe it.
+    rustdesk_id = str(payload.get("rustdesk_id", ""))[:40]
     async with _connect() as db:
         await db.execute(
             "UPDATE devices SET last_seen_at = ?, heartbeat_json = ?,"
-            " agent_version = CASE WHEN ? != '' THEN ? ELSE agent_version END"
+            " agent_version = CASE WHEN ? != '' THEN ? ELSE agent_version END,"
+            " rustdesk_id = CASE WHEN ? != '' THEN ? ELSE rustdesk_id END"
             " WHERE id = ?",
-            (now, blob, agent_version, agent_version, device_id),
+            (now, blob, agent_version, agent_version, rustdesk_id, rustdesk_id, device_id),
         )
         await db.commit()
 
@@ -360,6 +369,7 @@ async def update_device(
     *,
     owner_label: str | None = None,
     tags: list[str] | None = None,
+    rustdesk_id: str | None = None,
 ) -> dict[str, Any] | None:
     sets: list[str] = []
     params: list[Any] = []
@@ -370,6 +380,9 @@ async def update_device(
         cleaned = [t.strip()[:40] for t in tags if t.strip()]
         sets.append("tags = ?")
         params.append(",".join(cleaned[:20]))
+    if rustdesk_id is not None:
+        sets.append("rustdesk_id = ?")
+        params.append(rustdesk_id.strip()[:40])
     if sets:
         params.append(device_id)
         async with _connect() as db:

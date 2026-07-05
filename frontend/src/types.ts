@@ -28,11 +28,19 @@ export interface Device {
   agent_version: string;
   tags: string[];
   heartbeat: Heartbeat;
+  rustdesk_id: string;
   created_at: number;
   last_seen_at: number | null;
   online: boolean;
   /** Live WebSocket open right now (raw signal behind `online`). */
   connected: boolean;
+}
+
+export interface RemoteConfig {
+  enabled: boolean;
+  relay_host: string;
+  has_key: boolean;
+  deploy_commands: Partial<Record<'windows' | 'linux' | 'darwin', string>>;
 }
 
 export interface InventorySection {

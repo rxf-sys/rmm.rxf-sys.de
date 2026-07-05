@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     # Fire when a pending security patch has been outstanding this long.
     patch_alert_age_days: int = 30
 
+    # ---- Remote desktop (self-hosted RustDesk) ----
+    # Empty relay host disables the remote-session UI. The relay host is the
+    # DNS-only record pointing at the LXC's public IP (rd.rxf-sys.de); the
+    # key is hbbs's public key so agents pin exactly this relay.
+    rustdesk_relay_host: str = ""
+    rustdesk_key: str = ""
+
     # ---- ntfy push ----
     # Server root (e.g. https://ntfy.rxf-sys.de or https://ntfy.sh); empty
     # disables push entirely. Token is the optional Bearer for protected

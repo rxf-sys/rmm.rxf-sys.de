@@ -10,6 +10,7 @@ import type {
   MetricSample,
   Patch,
   PatchSummary,
+  RemoteConfig,
   Script,
   Shell,
 } from '../types';
@@ -77,7 +78,7 @@ export const api = {
   deviceHistory: (id: number, hours: number, signal?: AbortSignal) =>
     get<{ samples: MetricSample[] }>(`/api/devices/${id}/history?hours=${hours}`, signal),
   alerts: (signal?: AbortSignal) => get<{ alerts: Alert[] }>('/api/alerts', signal),
-  updateDevice: (id: number, body: { owner_label?: string; tags?: string[] }) =>
+  updateDevice: (id: number, body: { owner_label?: string; tags?: string[]; rustdesk_id?: string }) =>
     patch<{ device: Device }>(`/api/devices/${id}`, body),
   deleteDevice: (id: number) => del<{ ok: boolean }>(`/api/devices/${id}`),
 
@@ -119,6 +120,11 @@ export const api = {
   scanPatches: (deviceId: number) => post<{ ok: boolean }>(`/api/devices/${deviceId}/patches/scan`),
   installPatches: (deviceId: number, body: { patch_ids?: string[]; security_only?: boolean }) =>
     post<{ job: Job }>(`/api/devices/${deviceId}/patches/install`, body),
+
+  // Remote desktop
+  remoteConfig: (signal?: AbortSignal) => get<RemoteConfig>('/api/remote/config', signal),
+  remoteSession: (deviceId: number) =>
+    get<{ rustdesk_id: string; deep_link: string }>(`/api/remote/devices/${deviceId}/session`),
 };
 
 /** Open the live-output WebSocket for a job. Returns the socket; the caller
