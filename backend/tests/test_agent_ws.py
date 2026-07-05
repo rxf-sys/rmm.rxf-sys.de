@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app import accounts, alerts, audit, devices, jobs, metrics, scripts
+from app import accounts, alerts, audit, devices, jobs, metrics, patches, scripts
 from app.agents_ws import manager
 from app.config import Settings, get_settings
 from app.main import app
@@ -29,6 +29,7 @@ def ws_client(settings: Settings):
     asyncio.run(audit.ensure_schema(settings))
     asyncio.run(jobs.ensure_schema(settings))
     asyncio.run(scripts.ensure_schema(settings))
+    asyncio.run(patches.ensure_schema(settings))
     manager.reset_for_tests()
     jobs.hub.reset_for_tests()
     app.dependency_overrides[get_settings] = lambda: settings
@@ -234,3 +235,63 @@ def test_job_ws_finished_job_sends_snapshot_then_done(ws_client: TestClient):
     with ws_client.websocket_connect(f"/api/jobs/{job['id']}/ws") as ws:
         assert ws.receive_json()["type"] == "snapshot"
         assert ws.receive_json()["type"] == "done"
+
+
+def test_patch_scan_and_install_end_to_end(ws_client: TestClient):
+    """Admin triggers a scan → agent reports patches → they appear in the
+    list; admin installs → agent gets a patch_install job carrying the ids,
+    reports lifecycle, then re-reports an empty scan → list clears."""
+    _login_admin(ws_client)
+    creds = _enroll("patch-live")
+    device_id = creds["device_id"]
+
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as agent_ws:
+        _sync(agent_ws)
+
+        # Scan request reaches the agent…
+        r = ws_client.post(f"/api/devices/{device_id}/patches/scan")
+        assert r.status_code == 200
+        assert agent_ws.receive_json()["type"] == "patch_scan"
+
+        # …agent reports two patches.
+        agent_ws.send_json(
+            {
+                "type": "patch_report",
+                "payload": {
+                    "patches": [
+                        {"patch_id": "openssl", "title": "OpenSSL", "severity": "critical"},
+                        {"patch_id": "vim", "title": "Vim", "severity": "other"},
+                    ]
+                },
+            }
+        )
+        _sync(agent_ws)  # barrier: report processed
+        r = ws_client.get(f"/api/devices/{device_id}/patches")
+        listed = r.json()["patches"]
+        assert {p["patch_id"] for p in listed} == {"openssl", "vim"}
+        assert listed[0]["patch_id"] == "openssl"  # critical sorts first
+
+        # Install only security → a patch_install job with just openssl.
+        r = ws_client.post(
+            f"/api/devices/{device_id}/patches/install", json={"security_only": True}
+        )
+        assert r.status_code == 200
+        job_id = r.json()["job"]["id"]
+        dispatched = agent_ws.receive_json()
+        assert dispatched["type"] == "job"
+        assert dispatched["payload"]["kind"] == "patch_install"
+        assert dispatched["payload"]["patch_ids"] == ["openssl"]
+
+        # Agent runs it and re-scans (openssl now gone).
+        agent_ws.send_json({"type": "job_started", "payload": {"job_id": job_id}})
+        agent_ws.send_json(
+            {"type": "job_result", "payload": {"job_id": job_id, "status": "done", "exit_code": 0}}
+        )
+        agent_ws.send_json(
+            {"type": "patch_report", "payload": {"patches": [{"patch_id": "vim", "severity": "other"}]}}
+        )
+        _sync(agent_ws)
+
+    assert asyncio.run(jobs.get_job(job_id))["status"] == "done"
+    remaining = asyncio.run(patches.list_for_device(device_id))
+    assert {p["patch_id"] for p in remaining} == {"vim"}

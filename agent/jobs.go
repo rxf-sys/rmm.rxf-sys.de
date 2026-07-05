@@ -14,10 +14,11 @@ import (
 const perJobTimeout = 10 * time.Minute
 
 type jobSpec struct {
-	JobID   int64  `json:"job_id"`
-	Kind    string `json:"kind"`
-	Command string `json:"command"`
-	Shell   string `json:"shell"`
+	JobID    int64    `json:"job_id"`
+	Kind     string   `json:"kind"`
+	Command  string   `json:"command"`
+	Shell    string   `json:"shell"`
+	PatchIDs []string `json:"patch_ids"`
 }
 
 // chunkWriter forwards process output to the server as job_output messages.

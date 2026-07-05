@@ -191,7 +191,16 @@ func handleMessage(ctx context.Context, msg message, s *sender) {
 			log.Printf("bad job payload: %v", err)
 			return
 		}
-		go runJob(ctx, s, spec)
+		if spec.Kind == "patch_install" {
+			go runPatchInstall(ctx, s, spec)
+		} else {
+			go runJob(ctx, s, spec)
+		}
+	case "patch_scan":
+		go func() {
+			report := scanPatches(ctx)
+			s.send(ctx, "patch_report", map[string]any{"patches": report})
+		}()
 	default:
 		log.Printf("ignoring unknown message type %q", msg.Type)
 	}

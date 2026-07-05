@@ -70,6 +70,8 @@ class Settings(BaseSettings):
     # resolves only once usage drops below clear_pct.
     disk_alert_pct: float = 90.0
     disk_alert_clear_pct: float = 85.0
+    # Fire when a pending security patch has been outstanding this long.
+    patch_alert_age_days: int = 30
 
     # ---- ntfy push ----
     # Server root (e.g. https://ntfy.rxf-sys.de or https://ntfy.sh); empty

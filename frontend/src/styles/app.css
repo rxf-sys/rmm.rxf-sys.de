@@ -787,3 +787,50 @@ button.danger,
   color: var(--text-muted);
   font-size: 0.82rem;
 }
+
+/* --- Phase 4: patches --- */
+
+.patch-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.patch-table td {
+  padding: 0.4rem 0.5rem 0.4rem 0;
+  border-top: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.patch-title {
+  width: 100%;
+  word-break: break-word;
+}
+
+.sev-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.sev-critical {
+  background: rgba(255, 107, 107, 0.18);
+  color: #ff8a8a;
+}
+
+.sev-important {
+  background: rgba(201, 133, 0, 0.2);
+  color: #e0a020;
+}
+
+.sev-moderate {
+  background: rgba(108, 140, 255, 0.15);
+  color: var(--accent);
+}
+
+.sev-low,
+.sev-other {
+  background: var(--bg);
+  color: var(--text-muted);
+}

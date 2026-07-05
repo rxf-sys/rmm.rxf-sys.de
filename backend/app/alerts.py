@@ -23,7 +23,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 import aiosqlite
 import structlog
 
-from . import devices
+from . import devices, patches
 from .audit import record as audit_record
 from .config import Settings
 
@@ -147,6 +147,22 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
                     "RMM: Disk wieder ok", f"{name}: Disk bei {max_pct:.0f}%", "white_check_mark", ""
                 )
 
+        # --- overdue security patches --------------------------------------
+        oldest = await patches.oldest_pending_security(d["id"])
+        key = (d["id"], "patch_age")
+        overdue = (
+            oldest is not None and (now - oldest) > settings.patch_alert_age_days * 86400
+        )
+        if overdue and key not in open_alerts:
+            days = int((now - oldest) / 86400)
+            await _fire(d["id"], "patch_age", f"{name}: Sicherheitsupdates seit {days} Tagen offen")
+        elif not overdue and key in open_alerts:
+            await _resolve(open_alerts[key]["id"])
+            await notify(
+                "RMM: Updates installiert", f"{name}: keine überfälligen Sicherheitsupdates mehr",
+                "white_check_mark", "",
+            )
+
     # --- push unsent alerts (new ones + earlier failures) ---------------------
     async with _connect() as db:
         db.row_factory = aiosqlite.Row
@@ -154,8 +170,9 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
             "SELECT id, rule, message FROM alerts WHERE notified = 0 AND resolved_at IS NULL"
         ) as cur:
             unsent = await cur.fetchall()
+    tag_by_rule = {"offline": "red_circle", "disk": "floppy_disk", "patch_age": "package"}
     for row in unsent:
-        tags = "red_circle" if row["rule"] == "offline" else "floppy_disk"
+        tags = tag_by_rule.get(row["rule"], "warning")
         if await notify("RMM: Alarm", str(row["message"]), tags, "high"):
             await _mark_notified(int(row["id"]))
 

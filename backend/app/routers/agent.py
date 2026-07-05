@@ -11,7 +11,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
 
-from .. import devices, jobs, metrics
+from .. import devices, jobs, metrics, patches
 from ..agents_ws import manager
 from ..audit import record as audit_record
 
@@ -150,6 +150,10 @@ async def agent_ws(ws: WebSocket) -> None:
                         result_status,
                         exit_code if isinstance(exit_code, int) else None,
                     )
+            elif msg_type == "patch_report" and isinstance(payload, dict):
+                items = payload.get("patches")
+                if isinstance(items, list):
+                    await patches.apply_scan(device_id, items)
             elif msg_type == "ping":
                 # Lets agents (and tests) confirm the pipeline end-to-end:
                 # everything sent before the ping has been processed.

@@ -8,6 +8,8 @@ import type {
   EnrollToken,
   Job,
   MetricSample,
+  Patch,
+  PatchSummary,
   Script,
   Shell,
 } from '../types';
@@ -105,6 +107,18 @@ export const api = {
   // Audit
   audit: (limit = 100, signal?: AbortSignal) =>
     get<{ events: AuditEvent[] }>(`/api/audit?limit=${limit}`, signal),
+
+  // Patches
+  patchSummary: (signal?: AbortSignal) =>
+    get<{ summary: PatchSummary }>('/api/patches/summary', signal),
+  devicePatches: (deviceId: number, signal?: AbortSignal) =>
+    get<{ patches: Patch[]; installing_job: number | null }>(
+      `/api/devices/${deviceId}/patches`,
+      signal,
+    ),
+  scanPatches: (deviceId: number) => post<{ ok: boolean }>(`/api/devices/${deviceId}/patches/scan`),
+  installPatches: (deviceId: number, body: { patch_ids?: string[]; security_only?: boolean }) =>
+    post<{ job: Job }>(`/api/devices/${deviceId}/patches/install`, body),
 };
 
 /** Open the live-output WebSocket for a job. Returns the socket; the caller

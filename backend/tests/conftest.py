@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from app import accounts, alerts, audit, devices, jobs, metrics, scripts
+from app import accounts, alerts, audit, devices, jobs, metrics, patches, scripts
 from app.config import Settings, get_settings
 from app.main import app
 from app.routers import auth as auth_router
@@ -38,6 +38,7 @@ async def client(settings: Settings):
     await audit.ensure_schema(settings)
     await jobs.ensure_schema(settings)
     await scripts.ensure_schema(settings)
+    await patches.ensure_schema(settings)
     await audit.clear()
     jobs.hub.reset_for_tests()
     auth_router.reset_rate_limiter_for_tests()

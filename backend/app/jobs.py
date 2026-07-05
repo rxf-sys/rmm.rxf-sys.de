@@ -15,6 +15,7 @@ job never reports back (agent died mid-job).
 from __future__ import annotations
 
 import asyncio
+import json as _json
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -160,16 +161,21 @@ async def create_job(
 
 
 def dispatch_payload(job: dict[str, Any]) -> dict[str, Any]:
-    """The message body sent to the agent over its socket."""
-    return {
-        "type": "job",
-        "payload": {
-            "job_id": job["id"],
-            "kind": job["kind"],
-            "command": job["command"],
-            "shell": job["shell"],
-        },
+    """The message body sent to the agent over its socket. For patch_install
+    the ``command`` column carries a JSON list of patch ids (reusing the
+    column keeps the jobs schema single-purpose)."""
+    payload: dict[str, Any] = {
+        "job_id": job["id"],
+        "kind": job["kind"],
+        "command": job["command"],
+        "shell": job["shell"],
     }
+    if job["kind"] == "patch_install":
+        try:
+            payload["patch_ids"] = _json.loads(job["command"]) if job["command"] else []
+        except (ValueError, TypeError):
+            payload["patch_ids"] = []
+    return {"type": "job", "payload": payload}
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +291,20 @@ async def list_jobs(device_id: int | None = None, limit: int = 50) -> list[dict[
             rows = await cur.fetchall()
     # List view omits the (potentially large) output blob.
     return [_row_to_job(r, include_output=False) for r in rows]
+
+
+async def active_job_of_kind(device_id: int, kind: str) -> int | None:
+    """Id of a still-running job of ``kind`` for a device, else None. Used to
+    show "Installation läuft" and to block a second concurrent patch run."""
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id FROM jobs WHERE device_id = ? AND kind = ?"
+            " AND status IN ('queued', 'running') ORDER BY id DESC LIMIT 1",
+            (device_id, kind),
+        ) as cur:
+            row = await cur.fetchone()
+    return int(row["id"]) if row else None
 
 
 async def delete_for_device(device_id: int) -> None:

@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from .. import devices, jobs, metrics
+from .. import devices, jobs, metrics, patches
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..auth import require_admin, verify_session
@@ -135,5 +135,6 @@ async def delete_device(device_id: int, user: dict = Depends(require_admin)) -> 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
     await metrics.delete_for_device(device_id)
     await jobs.delete_for_device(device_id)
+    await patches.delete_for_device(device_id)
     await audit_record("devices.deleted", user=user["username"], device_id=device_id)
     return {"ok": True}

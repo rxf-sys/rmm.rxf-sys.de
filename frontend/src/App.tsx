@@ -3,6 +3,7 @@ import { AuditPage } from './components/AuditPage';
 import { DevicesPage } from './components/DevicesPage';
 import { LoginPage } from './components/LoginPage';
 import { OverviewPage } from './components/OverviewPage';
+import { PatchesPage } from './components/PatchesPage';
 import { ScriptsPage } from './components/ScriptsPage';
 import { useAuth } from './hooks/useAuth';
 
@@ -74,13 +75,10 @@ export default function App() {
           />
         ) : tab === 'scripts' ? (
           <ScriptsPage isAdmin={user.role === 'admin'} />
-        ) : tab === 'audit' ? (
-          <AuditPage />
+        ) : tab === 'patches' ? (
+          <PatchesPage onOpenDevice={jumpToDevice} />
         ) : (
-          <div className="empty-state">
-            <h2>{TABS.find((t) => t.id === tab)?.label}</h2>
-            <p>Patch-Management kommt in Phase 4.</p>
-          </div>
+          <AuditPage />
         )}
       </main>
     </div>

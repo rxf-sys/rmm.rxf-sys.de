@@ -116,3 +116,16 @@ export interface AuditEvent {
   device_id: number | null;
   detail: Record<string, unknown>;
 }
+
+export type Severity = 'critical' | 'important' | 'moderate' | 'low' | 'other';
+
+export interface Patch {
+  patch_id: string;
+  title: string;
+  severity: Severity;
+  detected_at: number;
+  updated_at: number;
+}
+
+/** Per-device patch counts, keyed by device id (as string from JSON). */
+export type PatchSummary = Record<string, { pending: number; security: number }>;
