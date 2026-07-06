@@ -9,7 +9,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import accounts, alerts, audit, devices, jobs, metrics, notify, patches, scripts
+from . import accounts, alerts, audit, devices, jobs, metrics, notify, patches, releases, scripts
 from .config import get_settings
 from .routers import agent as agent_router
 from .routers import alerts as alerts_router
@@ -93,6 +93,9 @@ async def lifespan(app: FastAPI):
     await jobs.ensure_schema(_settings)
     await scripts.ensure_schema(_settings)
     await patches.ensure_schema(_settings)
+    # Agent release manifest (signed self-update). Best-effort — a missing
+    # manifest just disables auto-update.
+    releases.load(_settings)
 
     tasks = [
         asyncio.create_task(_cleanup_loop()),

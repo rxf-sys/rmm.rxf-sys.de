@@ -8,10 +8,11 @@ credentials: a one-time enrollment token for POST /enroll, and
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Header, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from .. import devices, jobs, metrics, patches
+from .. import devices, jobs, metrics, patches, releases
 from ..agents_ws import manager
 from ..audit import record as audit_record
 
@@ -60,6 +61,21 @@ async def enroll(body: EnrollRequest) -> dict:
     return result
 
 
+@router.get("/download/{target}")
+async def download_agent(target: str, authorization: str = Header(default="")) -> FileResponse:
+    """Serve a signed agent binary for self-update. Device-authenticated —
+    an agent downloads the target the server pointed it at, then verifies the
+    signature against its pinned key before installing."""
+    creds = _parse_bearer(authorization)
+    device = await devices.authenticate_device(*creds) if creds else None
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
+    path = releases.binary_path(target)
+    if path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown target")
+    return FileResponse(path, media_type="application/octet-stream", filename=path.name)
+
+
 def _as_pct(value: object) -> float:
     """Clamp an untrusted agent-reported percentage into [0, 100]."""
     try:
@@ -99,6 +115,7 @@ async def agent_ws(ws: WebSocket) -> None:
         except Exception:  # noqa: BLE001 - stale socket is usually already dead
             pass
 
+    update_offered = False
     try:
         while True:
             try:
@@ -114,6 +131,19 @@ async def agent_ws(ws: WebSocket) -> None:
 
             if msg_type == "heartbeat" and isinstance(payload, dict):
                 await devices.record_heartbeat(device_id, payload)
+                # Offer a signed update once per connection if this agent is
+                # behind the current release. The agent verifies the signature
+                # before installing, so this is a hint, not a trusted push.
+                if not update_offered:
+                    update_offered = True
+                    upd = releases.update_for(
+                        str(payload.get("agent_version", "")) or device["agent_version"],
+                        device["os"],
+                        device["arch"],
+                    )
+                    if upd is not None:
+                        await ws.send_json({"type": "update", "payload": upd})
+                        log.info("agent.update_offered", device_id=device_id, version=upd["version"])
                 await metrics.record(
                     device_id,
                     cpu_pct=_as_pct(payload.get("cpu_pct")),

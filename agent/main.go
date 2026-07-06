@@ -59,6 +59,15 @@ func newService() (service.Service, error) {
 		DisplayName: "rxf-sys RMM Agent",
 		Description: "Monitoring and management agent for rmm.rxf-sys.de",
 		Arguments:   []string{"run"},
+		// Restart on exit — self-update replaces the binary and exits, relying
+		// on the service manager to bring the new version back up. These
+		// options are honoured by the systemd and launchd generators; the
+		// Windows SCM restart policy is set by install.ps1.
+		Option: service.KeyValue{
+			"Restart":         "always",
+			"RestartSec":      3,
+			"SuccessExitStatus": "0",
+		},
 	})
 }
 

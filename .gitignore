@@ -25,3 +25,7 @@ agent/dist/
 
 # TS build cache
 frontend/*.tsbuildinfo
+
+# Signierte Agent-Binaries nicht einchecken (nur .gitkeep)
+infrastructure/agent-releases/*
+!infrastructure/agent-releases/.gitkeep

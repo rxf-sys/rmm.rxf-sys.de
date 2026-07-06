@@ -81,5 +81,7 @@ Portfreigaben, siehe `infrastructure/docker-compose.yml`.
 - [x] **Phase 5** — Remote Desktop: self-hosted RustDesk (hbbs/hbbr im Compose),
       Agent meldet RustDesk-ID, Remote-Panel mit Deploy-Kommando + Deep-Link-
       Sitzung (`rustdesk://`), Doku in infrastructure/RUSTDESK.md
-- [ ] **Phase 6** — Installer + signiertes Agent-Auto-Update
+- [x] **Phase 6** — Installer pro OS (install.sh / install.ps1), ed25519-
+      signiertes Agent-Auto-Update (Server bietet an, Agent prüft Signatur +
+      SHA-256, ersetzt sich atomar), Signing-Toolchain (make keygen/sign)
 - [ ] **Phase 7** — Deployment CT 111 + Familien-Rollout

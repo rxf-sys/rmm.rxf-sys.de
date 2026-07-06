@@ -10,9 +10,13 @@ services:
     expose:
       - "8080"
     volumes:
-      # Persists the RMM SQLite file (accounts, devices, later metrics/jobs)
+      # Persists the RMM SQLite file (accounts, devices, metrics, jobs, …)
       # across container restarts.
       - rxf-rmm-data:/data
+      # Signed agent binaries + manifest.json for self-update. Drop the output
+      # of `make sign` here (host path ./agent-releases). Read-only — the
+      # backend only serves from it. See agent/install/README.md.
+      - ./agent-releases:/data/agent-releases:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health').read()"]
       interval: 30s

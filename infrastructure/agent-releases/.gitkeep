@@ -1,0 +1,2 @@
+# Signierte Agent-Releases (make sign) hierher legen. Binaries + manifest.json
+# werden NICHT eingecheckt — nur dieses Verzeichnis existiert.

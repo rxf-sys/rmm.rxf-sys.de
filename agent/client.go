@@ -173,7 +173,7 @@ func connectAndServe(ctx context.Context, cfg Config) error {
 			if !ok {
 				return <-readErr
 			}
-			handleMessage(connCtx, msg, s)
+			handleMessage(connCtx, cfg, msg, s)
 		}
 	}
 }
@@ -181,7 +181,7 @@ func connectAndServe(ctx context.Context, cfg Config) error {
 // handleMessage dispatches a server message. Ping/pong keeps the pipeline
 // observable; "job" hands off to a goroutine so long commands never block
 // heartbeats or other messages.
-func handleMessage(ctx context.Context, msg message, s *sender) {
+func handleMessage(ctx context.Context, cfg Config, msg message, s *sender) {
 	switch msg.Type {
 	case "ping":
 		s.send(ctx, "pong", map[string]any{"ts": time.Now().Unix()})
@@ -200,6 +200,17 @@ func handleMessage(ctx context.Context, msg message, s *sender) {
 		go func() {
 			report := scanPatches(ctx)
 			s.send(ctx, "patch_report", map[string]any{"patches": report})
+		}()
+	case "update":
+		var spec updateSpec
+		if err := json.Unmarshal(msg.Payload, &spec); err != nil {
+			log.Printf("bad update payload: %v", err)
+			return
+		}
+		go func() {
+			if err := applyUpdate(ctx, cfg, spec); err != nil {
+				log.Printf("self-update failed: %v", err)
+			}
 		}()
 	default:
 		log.Printf("ignoring unknown message type %q", msg.Type)

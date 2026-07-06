@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # Lifetime of a one-time enrollment token.
     enrollment_token_ttl_hours: int = 24
 
+    # ---- Agent releases / self-update ----
+    # Directory holding the signed agent binaries + manifest.json (produced by
+    # `make sign`). Empty disables auto-update — agents keep their version.
+    agent_release_dir: str = "/data/agent-releases"
+
     # ---- Jobs ----
     # Safety net: a job still queued/running this long after creation is
     # swept to 'timeout' (agent crashed mid-job). Sits above the agent's own

@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app import accounts, alerts, audit, devices, jobs, metrics, patches, scripts
+from app import accounts, alerts, audit, devices, jobs, metrics, patches, releases, scripts
 from app.agents_ws import manager
 from app.config import Settings, get_settings
 from app.main import app
@@ -32,6 +32,7 @@ def ws_client(settings: Settings):
     asyncio.run(patches.ensure_schema(settings))
     manager.reset_for_tests()
     jobs.hub.reset_for_tests()
+    releases.reset_for_tests(None, "")
     app.dependency_overrides[get_settings] = lambda: settings
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -211,6 +212,33 @@ def test_job_end_to_end_live_stream(ws_client: TestClient, settings: Settings):
     assert final["status"] == "done"
     assert final["exit_code"] == 0
     assert final["output"] == "hi\n"
+
+
+def test_outdated_agent_is_offered_an_update(ws_client: TestClient):
+    """An agent reporting an old version gets an `update` message with the
+    signed download pointer."""
+    releases.reset_for_tests(
+        {
+            "version": "0.9.0",
+            "targets": {
+                "linux-amd64": {"file": "rmm-agent-linux-amd64", "sha256": "aa", "sig": "bb"}
+            },
+        },
+        "/tmp/rel",
+    )
+    try:
+        raw, _ = asyncio.run(devices.create_enrollment_token("t", 1))
+        creds = asyncio.run(
+            devices.enroll_device(token=raw, hostname="old-agent", os="linux", arch="amd64")
+        )
+        with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as ws:
+            ws.send_json({"type": "heartbeat", "payload": {"agent_version": "0.1.0"}})
+            msg = ws.receive_json()
+            assert msg["type"] == "update"
+            assert msg["payload"]["version"] == "0.9.0"
+            assert msg["payload"]["url"] == "/api/agent/download/linux-amd64"
+    finally:
+        releases.reset_for_tests(None, "")
 
 
 def test_job_ws_requires_auth(ws_client: TestClient):
