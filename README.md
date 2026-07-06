@@ -57,9 +57,14 @@ bash infrastructure/setup-lxc.sh
 bash /opt/rxf-rmm/infrastructure/deploy.sh
 ```
 
-Cloudflare Tunnel (cloudflared auf CT 104): `rmm.rxf-sys.de → http://192.168.2.211:80`.
-WebSockets laufen durch den Tunnel; nur RustDesk (Phase 5) braucht eigene
-Portfreigaben, siehe `infrastructure/docker-compose.yml`.
+Automatisierter CD via `.github/workflows/cd.yml` — nach jedem grünen CI auf
+`main` deployt GitHub Actions per SSH (Secrets `DEPLOY_HOST`/`DEPLOY_USER`/
+`DEPLOY_SSH_KEY`). Cloudflare Tunnel (cloudflared auf CT 104):
+`rmm.rxf-sys.de → http://192.168.2.211:80`. WebSockets laufen durch den
+Tunnel; nur RustDesk braucht eigene Portfreigaben.
+
+**Vollständige Schritt-für-Schritt-Anleitung inkl. RustDesk, Backup und
+Familien-Rollout: [`infrastructure/DEPLOYMENT.md`](infrastructure/DEPLOYMENT.md).**
 
 ## Phasenstand
 
@@ -84,4 +89,6 @@ Portfreigaben, siehe `infrastructure/docker-compose.yml`.
 - [x] **Phase 6** — Installer pro OS (install.sh / install.ps1), ed25519-
       signiertes Agent-Auto-Update (Server bietet an, Agent prüft Signatur +
       SHA-256, ersetzt sich atomar), Signing-Toolchain (make keygen/sign)
-- [ ] **Phase 7** — Deployment CT 111 + Familien-Rollout
+- [x] **Phase 7** — Deployment: setup-lxc.sh (CT 111), CD-Pipeline (Auto-Deploy
+      per SSH nach grünem CI), deploy.sh mit Health-Gate, tägliches Backup,
+      vollständige Rollout-Anleitung infrastructure/DEPLOYMENT.md

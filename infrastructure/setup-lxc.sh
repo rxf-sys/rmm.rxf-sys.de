@@ -103,10 +103,7 @@ if [[ ! -f .env ]]; then
   cp .env.example .env
   echo
   echo "==> /opt/rxf-rmm/infrastructure/.env created from template."
-  echo "    Edit it with API tokens, then run:"
-  echo "      pct enter $CT_ID"
-  echo "      cd /opt/rxf-rmm/infrastructure"
-  echo "      docker compose up -d --build"
+  echo "    Set BOOTSTRAP_ADMIN_PASSWORD (first admin) before first start."
 else
   docker compose up -d --build
 fi
@@ -117,13 +114,21 @@ cat <<EOF
 =================================================================
  rxf-sys rmm LXC ready: CT $CT_ID @ ${IP_CIDR%/*}
 -----------------------------------------------------------------
- Next steps:
+ Next steps (details: infrastructure/DEPLOYMENT.md):
    1. pct enter $CT_ID
-   2. nano /opt/rxf-rmm/infrastructure/.env   # fill in tokens
+   2. nano /opt/rxf-rmm/infrastructure/.env
+        - BOOTSTRAP_ADMIN_PASSWORD=<einmaliges Admin-Passwort>
+        - NTFY_BASE / NTFY_TOPIC   (Alerts, optional)
+        - RUSTDESK_RELAY_HOST / RUSTDESK_KEY  (Remote Desktop)
    3. cd /opt/rxf-rmm/infrastructure && docker compose up -d --build
-   4. In the cloudflared LXC (CT 104), add a public hostname:
+        -> RustDesk-Key auslesen und in .env eintragen:
+           docker exec rxf-rmm-hbbs cat /root/id_ed25519.pub
+   4. Im cloudflared-LXC (CT 104) einen Public Hostname anlegen:
         rmm.rxf-sys.de  ->  http://${IP_CIDR%/*}:80
-   5. Create a Cloudflare Access application protecting the host
-      and copy its AUD tag into .env (CF_ACCESS_AUD).
+      (RMM bringt EIGENE Auth mit — KEIN Cloudflare Access nötig.)
+   5. Router-Portfreigaben auf ${IP_CIDR%/*} für RustDesk:
+        TCP 21115-21117, UDP 21116  (+ DNS-only rd.rxf-sys.de)
+      -> siehe infrastructure/RUSTDESK.md
+   6. Nach erstem Login BOOTSTRAP_ADMIN_PASSWORD in .env leeren.
 =================================================================
 EOF
