@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from .. import alerts
 from ..auth import verify_session
@@ -16,3 +16,15 @@ async def list_alerts(
     user: dict = Depends(verify_session),
 ) -> dict:
     return {"alerts": await alerts.list_recent(limit)}
+
+
+@router.post("/{alert_id}/ack")
+async def ack_alert(alert_id: int, user: dict = Depends(verify_session)) -> dict:
+    """Acknowledge an open alert. Deliberately not admin-only — "gesehen"
+    is a statement, not an action on a device."""
+    alert = await alerts.ack(alert_id, user["username"])
+    if alert is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Kein offener Alarm mit dieser ID"
+        )
+    return {"alert": alert}

@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { formatRelative } from '../format';
 import { osShort } from '../ui';
-import type { Device } from '../types';
+import type { Device, PatchSummary } from '../types';
 import { Dot, Skeleton, deviceState, diskColor, stateColor } from '../ui';
 
 interface Props {
   devices: Device[];
+  patchSummary: PatchSummary;
   loading: boolean;
   onOpenDevice: (id: number) => void;
 }
@@ -30,7 +31,7 @@ function Bar({ pct, color }: { pct: number; color: string }) {
   );
 }
 
-export function DevicesPage({ devices, loading, onOpenDevice }: Props) {
+export function DevicesPage({ devices, patchSummary, loading, onOpenDevice }: Props) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('alle');
 
@@ -112,6 +113,7 @@ export function DevicesPage({ devices, loading, onOpenDevice }: Props) {
               const disk = Math.max(0, ...(d.heartbeat.disks ?? []).map((x) => x.used_pct));
               const cpu = d.online ? Math.round(d.heartbeat.cpu_pct ?? 0) : 0;
               const ram = d.online ? Math.round(d.heartbeat.mem_pct ?? 0) : 0;
+              const patches = patchSummary[String(d.id)];
               return (
                 <button
                   key={d.id}
@@ -146,7 +148,22 @@ export function DevicesPage({ devices, loading, onOpenDevice }: Props) {
                       {disk ? `${Math.round(disk)}%` : '—'}
                     </span>
                   </span>
-                  <span>—</span>
+                  <span>
+                    {patches && patches.pending > 0 ? (
+                      <span
+                        className={patches.security > 0 ? 'badge badge-danger' : 'badge badge-warn'}
+                        title={
+                          patches.security > 0
+                            ? `${patches.pending} ausstehend, davon ${patches.security} sicherheitsrelevant`
+                            : `${patches.pending} ausstehend`
+                        }
+                      >
+                        {patches.pending}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--ok)', fontWeight: 700, fontSize: 11 }}>✓</span>
+                    )}
+                  </span>
                   <span className="mono" style={{ fontSize: 10.5, color: 'var(--tx2)' }}>
                     {d.agent_version || '—'}
                   </span>

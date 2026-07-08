@@ -9,12 +9,25 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import accounts, alerts, audit, devices, jobs, metrics, notify, patches, releases, scripts
+from . import (
+    accounts,
+    alerts,
+    audit,
+    automation,
+    devices,
+    jobs,
+    metrics,
+    notify,
+    patches,
+    releases,
+    scripts,
+)
 from .config import get_settings
 from .routers import agent as agent_router
 from .routers import alerts as alerts_router
 from .routers import audit as audit_router
 from .routers import auth as auth_router
+from .routers import automation as automation_router
 from .routers import devices as devices_router
 from .routers import jobs as jobs_router
 from .routers import patches as patches_router
@@ -72,6 +85,7 @@ async def _alert_loop() -> None:
         try:
             await asyncio.sleep(_settings.alert_interval_s)
             await alerts.evaluate(_settings, _ntfy)
+            await automation.run_patch_window(_settings)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 - never let the loop die
@@ -93,6 +107,7 @@ async def lifespan(app: FastAPI):
     await jobs.ensure_schema(_settings)
     await scripts.ensure_schema(_settings)
     await patches.ensure_schema(_settings)
+    await automation.ensure_schema(_settings)
     # Agent release manifest (signed self-update). Best-effort — a missing
     # manifest just disables auto-update.
     releases.load(_settings)
@@ -153,4 +168,5 @@ app.include_router(jobs_router.router)
 app.include_router(scripts_router.router)
 app.include_router(audit_router.router)
 app.include_router(patches_router.router)
+app.include_router(automation_router.router)
 app.include_router(remote_router.router)
