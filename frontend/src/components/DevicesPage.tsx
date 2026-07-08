@@ -1,122 +1,164 @@
-import { useEffect, useState } from 'react';
-import { api, apiErrorMessage } from '../api/client';
-import { formatRelative, osLabel } from '../format';
+import { useMemo, useState } from 'react';
+import { formatRelative } from '../format';
+import { osShort } from '../ui';
 import type { Device } from '../types';
-import { DeviceDetail } from './DeviceDetail';
-import { EnrollModal } from './EnrollModal';
+import { Dot, Skeleton, deviceState, diskColor, stateColor } from '../ui';
 
 interface Props {
-  isAdmin: boolean;
-  /** Selection is owned by App so the overview can deep-link into a device. */
-  selected: number | null;
-  onSelect: (id: number | null) => void;
+  devices: Device[];
+  loading: boolean;
+  onOpenDevice: (id: number) => void;
 }
 
-const REFRESH_MS = 30_000;
+type Filter = 'alle' | 'server' | 'familie' | 'probleme' | 'offline';
 
-export function DevicesPage({ isAdmin, selected, onSelect }: Props) {
-  const [devices, setDevices] = useState<Device[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [enrolling, setEnrolling] = useState(false);
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: 'alle', label: 'Alle' },
+  { id: 'server', label: 'Server' },
+  { id: 'familie', label: 'Familie' },
+  { id: 'probleme', label: 'Probleme' },
+  { id: 'offline', label: 'Offline' },
+];
 
-  const load = (signal?: AbortSignal) =>
-    api
-      .devices(signal)
-      .then((r) => {
-        setDevices(r.devices);
-        setError(null);
-      })
-      .catch((e) => {
-        if (!signal?.aborted) setError(apiErrorMessage(e));
-      });
+const COLS = '16fr 8fr 10fr 8fr 8fr 8fr 6fr 6fr 8fr';
 
-  useEffect(() => {
-    // Pause the list poll while a detail view is open — it runs its own.
-    if (selected !== null) return;
-    const ctrl = new AbortController();
-    void load(ctrl.signal);
-    const timer = setInterval(() => void load(ctrl.signal), REFRESH_MS);
-    return () => {
-      clearInterval(timer);
-      ctrl.abort();
-    };
-  }, [selected]);
+function Bar({ pct, color }: { pct: number; color: string }) {
+  return (
+    <span className="bar" style={{ flex: 1 }}>
+      <span className="bar-fill" style={{ width: `${pct}%`, background: color }} />
+    </span>
+  );
+}
 
-  if (selected !== null) {
-    return (
-      <DeviceDetail
-        deviceId={selected}
-        isAdmin={isAdmin}
-        onBack={() => onSelect(null)}
-        onDeleted={() => {
-          onSelect(null);
-          void load();
-        }}
-      />
-    );
-  }
+export function DevicesPage({ devices, loading, onOpenDevice }: Props) {
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState<Filter>('alle');
+
+  const shown = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    return devices.filter((d) => {
+      if (query) {
+        const hay = `${d.hostname} ${d.owner_label} ${d.tags.join(' ')}`.toLowerCase();
+        if (!hay.includes(query)) return false;
+      }
+      const st = deviceState(d);
+      switch (filter) {
+        case 'server':
+          return d.tags.includes('server');
+        case 'familie':
+          return d.tags.includes('familie') || d.tags.includes('familie'.toLowerCase());
+        case 'probleme':
+          return st !== 'ok';
+        case 'offline':
+          return !d.online;
+        default:
+          return true;
+      }
+    });
+  }, [devices, q, filter]);
 
   return (
-    <>
-      <div className="page-head">
-        <h2>Geräte {devices ? `(${devices.length})` : ''}</h2>
-        {isAdmin && <button onClick={() => setEnrolling(true)}>+ Gerät hinzufügen</button>}
+    <div className="screen">
+      <div className="page-head center">
+        <h1 className="page-title">Geräte</h1>
+        <span className="muted">{devices.length}</span>
+        <input
+          className="input grow"
+          style={{ marginLeft: 'auto', width: 230, flex: 'none' }}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="⌕ Hostname, Besitzer, Tag…"
+        />
       </div>
 
-      {error && <p className="panel-error">{error}</p>}
-      {devices === null && !error && <p className="panel-muted">Lade Geräte…</p>}
+      <div className="row" style={{ gap: 7 }}>
+        {FILTERS.map((f) => (
+          <button
+            key={f.id}
+            className={filter === f.id ? 'btn btn-accent btn-sm' : 'btn btn-sm'}
+            onClick={() => setFilter(f.id)}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
 
-      {devices !== null && devices.length === 0 && (
-        <div className="empty-state">
-          <h2>Noch keine Geräte</h2>
-          <p>
-            {isAdmin
-              ? 'Klicke „Gerät hinzufügen“, erzeuge ein Token und führe den Agent-Befehl auf dem Zielgerät aus.'
-              : 'Es sind noch keine Geräte enrollt.'}
-          </p>
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="tbl-scroll">
+          <div className="tbl-head" style={{ gridTemplateColumns: COLS, minWidth: 820 }}>
+            <span>Gerät</span>
+            <span>Besitzer</span>
+            <span>Tags</span>
+            <span>CPU</span>
+            <span>RAM</span>
+            <span>Disk</span>
+            <span>Patches</span>
+            <span>Agent</span>
+            <span style={{ textAlign: 'right' }}>Zuletzt</span>
+          </div>
+          {loading && devices.length === 0 ? (
+            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Skeleton h={20} />
+              <Skeleton h={20} />
+              <Skeleton h={20} />
+            </div>
+          ) : shown.length === 0 ? (
+            <div style={{ padding: '20px 18px' }} className="muted">
+              Keine Geräte gefunden.
+            </div>
+          ) : (
+            shown.map((d) => {
+              const st = deviceState(d);
+              const disk = Math.max(0, ...(d.heartbeat.disks ?? []).map((x) => x.used_pct));
+              const cpu = d.online ? Math.round(d.heartbeat.cpu_pct ?? 0) : 0;
+              const ram = d.online ? Math.round(d.heartbeat.mem_pct ?? 0) : 0;
+              return (
+                <button
+                  key={d.id}
+                  className="tbl-row"
+                  style={{ gridTemplateColumns: COLS, minWidth: 820 }}
+                  onClick={() => onOpenDevice(d.id)}
+                >
+                  <span className="cell-name">
+                    <Dot color={stateColor(st)} />
+                    <span className="name">{d.hostname}</span>
+                    <span className="chip-mono">{osShort(d.os)}</span>
+                  </span>
+                  <span style={{ color: 'var(--tx2)', fontWeight: 600 }}>{d.owner_label || '—'}</span>
+                  <span style={{ display: 'flex', gap: 4, overflow: 'hidden' }}>
+                    {d.tags.slice(0, 2).map((t) => (
+                      <span key={t} className="chip">
+                        {t}
+                      </span>
+                    ))}
+                  </span>
+                  <span className="cell-bar">
+                    <Bar pct={cpu} color="var(--accent)" />
+                    <span className="pct">{d.online ? `${cpu}%` : '—'}</span>
+                  </span>
+                  <span className="cell-bar">
+                    <Bar pct={ram} color="var(--violet)" />
+                    <span className="pct">{d.online ? `${ram}%` : '—'}</span>
+                  </span>
+                  <span className="cell-bar">
+                    <Bar pct={Math.round(disk)} color={diskColor(disk)} />
+                    <span className="pct" style={{ color: diskColor(disk) }}>
+                      {disk ? `${Math.round(disk)}%` : '—'}
+                    </span>
+                  </span>
+                  <span>—</span>
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--tx2)' }}>
+                    {d.agent_version || '—'}
+                  </span>
+                  <span style={{ textAlign: 'right', fontWeight: 500, fontSize: 11, color: 'var(--tx3)' }}>
+                    {formatRelative(d.last_seen_at)}
+                  </span>
+                </button>
+              );
+            })
+          )}
         </div>
-      )}
-
-      {devices !== null && devices.length > 0 && (
-        <table className="device-table">
-          <thead>
-            <tr>
-              <th>Status</th>
-              <th>Hostname</th>
-              <th>Besitzer</th>
-              <th>OS</th>
-              <th>Agent</th>
-              <th>Zuletzt gesehen</th>
-            </tr>
-          </thead>
-          <tbody>
-            {devices.map((d) => (
-              <tr key={d.id} className="clickable" onClick={() => onSelect(d.id)}>
-                <td>
-                  <span className={d.online ? 'dot dot-online' : 'dot dot-offline'} />
-                  {d.online ? 'online' : 'offline'}
-                </td>
-                <td>{d.hostname}</td>
-                <td>{d.owner_label || '—'}</td>
-                <td>
-                  {osLabel(d.os)} {d.os_version}
-                </td>
-                <td>{d.agent_version || '—'}</td>
-                <td>{formatRelative(d.last_seen_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {enrolling && (
-        <EnrollModal
-          onClose={() => {
-            setEnrolling(false);
-            void load();
-          }}
-        />
-      )}
-    </>
+      </div>
+    </div>
   );
 }

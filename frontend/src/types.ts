@@ -90,7 +90,7 @@ export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'timeout';
 export interface Job {
   id: number;
   device_id: number;
-  kind: 'shell' | 'script';
+  kind: 'shell' | 'script' | 'patch_install';
   command: string;
   shell: string;
   script_id: number | null;

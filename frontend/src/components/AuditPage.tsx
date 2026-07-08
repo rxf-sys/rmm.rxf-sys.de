@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
-import { formatDateTime } from '../format';
 import type { AuditEvent } from '../types';
 
 const REFRESH_MS = 30_000;
 
-/** Human summary of an audit row from its event type + detail blob. */
-function describe(e: AuditEvent): string {
+/** Human summary of an audit row from its event type + detail blob. Exported
+ * so the overview's activity feed reuses the same phrasing. */
+export function describeAudit(e: AuditEvent): string {
   const d = e.detail;
   switch (e.event) {
     case 'auth.login':
@@ -26,11 +26,17 @@ function describe(e: AuditEvent): string {
     case 'devices.token_created':
       return `Enrollment-Token erzeugt${d.label ? ` (${d.label})` : ''}`;
     case 'devices.token_deleted':
-      return `Enrollment-Token widerrufen`;
+      return 'Enrollment-Token widerrufen';
     case 'devices.updated':
       return `Gerät ${e.device_id} bearbeitet`;
     case 'devices.deleted':
       return `Gerät ${e.device_id} entfernt`;
+    case 'patch.scan_requested':
+      return `Patch-Scan auf Gerät ${e.device_id}`;
+    case 'patch.install':
+      return `Updates installiert auf Gerät ${e.device_id} (${d.count ?? '?'})`;
+    case 'remote.session_opened':
+      return `Remote-Sitzung auf Gerät ${e.device_id}`;
     case 'alert.fired':
       return `Alarm: ${d.message ?? d.rule ?? ''}`;
     default:
@@ -62,39 +68,56 @@ export function AuditPage() {
     };
   }, []);
 
-  if (error) return <p className="panel-error">{error}</p>;
-  if (events === null) return <p className="panel-muted">Lade Audit-Log…</p>;
-
   return (
-    <>
+    <div className="screen">
       <div className="page-head">
-        <h2>Audit-Log</h2>
-        <span className="panel-muted">letzte {events.length} Ereignisse</span>
+        <h1 className="page-title">Audit-Log</h1>
+        <span className="muted">append-only · jede Aktion mit Akteur, Gerät und Zeitstempel</span>
       </div>
-      {events.length === 0 ? (
-        <div className="empty-state">
+      {error && <p className="err">{error}</p>}
+      {events === null ? (
+        <div className="card" style={{ padding: 16 }} />
+      ) : events.length === 0 ? (
+        <div className="empty">
           <h2>Noch keine Ereignisse</h2>
         </div>
       ) : (
-        <table className="device-table">
-          <thead>
-            <tr>
-              <th>Zeit</th>
-              <th>Akteur</th>
-              <th>Ereignis</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.map((e) => (
-              <tr key={e.id}>
-                <td className="audit-time">{formatDateTime(e.ts)}</td>
-                <td>{e.actor || '—'}</td>
-                <td>{describe(e)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="card" style={{ overflow: 'hidden' }}>
+          {events.map((e) => {
+            const actorColor =
+              e.actor === 'system' || !e.actor
+                ? { color: 'var(--violet)', background: 'color-mix(in srgb, var(--violet) 15%, transparent)' }
+                : { color: 'var(--accT)', background: 'var(--accBg)' };
+            return (
+              <div
+                key={e.id}
+                className="row"
+                style={{ gap: 14, padding: '9px 18px', borderBottom: '1px solid var(--line2)' }}
+              >
+                <span className="mono" style={{ flex: 'none', fontSize: 11, color: 'var(--tx3)', width: 118 }}>
+                  {new Date(e.ts * 1000).toLocaleString('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })}
+                </span>
+                <span
+                  className="badge"
+                  style={{ flex: 'none', width: 64, textAlign: 'center', ...actorColor }}
+                >
+                  {e.actor || 'system'}
+                </span>
+                <span className="mono" style={{ flex: 'none', fontSize: 10, color: 'var(--tx3)', width: 140 }}>
+                  {e.event}
+                </span>
+                <span style={{ fontWeight: 600, fontSize: 12.5 }}>{describeAudit(e)}</span>
+              </div>
+            );
+          })}
+        </div>
       )}
-    </>
+    </div>
   );
 }

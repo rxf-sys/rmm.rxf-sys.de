@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { formatRelative } from '../format';
-import type { Script, Shell } from '../types';
+import type { Device, Script, Shell } from '../types';
 
 interface Props {
   isAdmin: boolean;
+  devices: Device[];
+  onOpenDevice: (id: number) => void;
 }
 
 interface Draft {
@@ -16,10 +18,97 @@ interface Draft {
 
 const EMPTY: Draft = { id: null, name: '', shell: 'bash', content: '' };
 
-const STARTER_HINT = `Beispiele: Temp-Verzeichnis leeren, Drucker-Spooler neu starten,
-Netzwerk-Diagnose (ipconfig /all, ping), Windows-Update-Status abfragen.`;
+/** One script card with a "run on device" picker. Running creates a job and
+ * jumps to that device's detail so the operator sees the live output. */
+function ScriptCard({
+  s,
+  isAdmin,
+  onlineDevices,
+  onEdit,
+  onDelete,
+  onOpenDevice,
+  onError,
+}: {
+  s: Script;
+  isAdmin: boolean;
+  onlineDevices: Device[];
+  onEdit: () => void;
+  onDelete: () => void;
+  onOpenDevice: (id: number) => void;
+  onError: (msg: string) => void;
+}) {
+  const [target, setTarget] = useState<number | ''>(onlineDevices[0]?.id ?? '');
+  const [busy, setBusy] = useState(false);
 
-export function ScriptsPage({ isAdmin }: Props) {
+  const run = async () => {
+    if (target === '' || busy) return;
+    setBusy(true);
+    try {
+      await api.createScriptJob(target, s.id);
+      onOpenDevice(target);
+    } catch (e) {
+      onError(apiErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div className="row" style={{ gap: 9, padding: '12px 16px' }}>
+        <span className="card-title-sm">{s.name}</span>
+        <span className="badge badge-accent mono" style={{ fontSize: 9.5 }}>
+          {s.shell}
+        </span>
+        <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 10.5 }}>
+          {s.updated_by} · {formatRelative(s.updated_at)}
+        </span>
+      </div>
+      <pre
+        style={{
+          margin: 0,
+          padding: '11px 16px',
+          background: 'var(--console)',
+          color: '#8b95a5',
+          font: '400 11px var(--mono)',
+          maxHeight: 96,
+          overflow: 'hidden',
+          borderTop: '1px solid var(--consoleLine)',
+        }}
+      >
+        {s.content}
+      </pre>
+      {isAdmin && (
+        <div className="row" style={{ gap: 7, padding: '10px 16px', borderTop: '1px solid var(--line2)' }}>
+          <select
+            className="input btn-sm"
+            style={{ padding: '5px 8px' }}
+            value={target}
+            onChange={(e) => setTarget(e.target.value ? Number(e.target.value) : '')}
+          >
+            {onlineDevices.length === 0 && <option value="">kein Gerät online</option>}
+            {onlineDevices.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.hostname}
+              </option>
+            ))}
+          </select>
+          <button className="btn btn-accent btn-sm" onClick={() => void run()} disabled={busy || target === ''}>
+            ▶ Ausführen
+          </button>
+          <button className="btn btn-sm" onClick={onEdit}>
+            Bearbeiten
+          </button>
+          <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={onDelete}>
+            Löschen
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ScriptsPage({ isAdmin, devices, onOpenDevice }: Props) {
   const [scripts, setScripts] = useState<Script[] | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,28 +147,35 @@ export function ScriptsPage({ isAdmin }: Props) {
     }
   };
 
-  if (scripts === null) return <p className="panel-muted">Lade Skripte…</p>;
+  const online = devices.filter((d) => d.online);
 
   return (
-    <>
-      <div className="page-head">
-        <h2>Skripte {scripts.length ? `(${scripts.length})` : ''}</h2>
-        {isAdmin && !draft && <button onClick={() => setDraft({ ...EMPTY })}>+ Neues Skript</button>}
+    <div className="screen">
+      <div className="page-head center">
+        <h1 className="page-title">Skript-Bibliothek</h1>
+        <span className="muted">{scripts?.length ?? ''}</span>
+        {isAdmin && !draft && (
+          <button className="btn btn-primary grow" style={{ marginLeft: 'auto' }} onClick={() => setDraft({ ...EMPTY })}>
+            + Neues Skript
+          </button>
+        )}
       </div>
 
-      {error && <p className="panel-error">{error}</p>}
+      {error && <p className="err">{error}</p>}
 
       {draft && (
-        <div className="detail-card">
-          <h3>{draft.id === null ? 'Neues Skript' : 'Skript bearbeiten'}</h3>
-          <div className="shell-row">
+        <div className="card card-pad" style={{ borderColor: 'var(--accLine)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <span className="card-title">{draft.id === null ? 'Neues Skript' : 'Skript bearbeiten'}</span>
+          <div className="row" style={{ gap: 9 }}>
             <input
-              className="shell-input"
+              className="input grow"
+              style={{ flex: 1 }}
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               placeholder="Name, z. B. Drucker-Spooler-Reset"
             />
             <select
+              className="input"
               value={draft.shell}
               onChange={(e) => setDraft({ ...draft, shell: e.target.value as Shell })}
             >
@@ -89,53 +185,49 @@ export function ScriptsPage({ isAdmin }: Props) {
             </select>
           </div>
           <textarea
-            className="script-editor"
+            className="code-area"
             value={draft.content}
             onChange={(e) => setDraft({ ...draft, content: e.target.value })}
             spellCheck={false}
             rows={10}
-            placeholder="#!/usr/bin/env bash&#10;…"
+            placeholder="#!/usr/bin/env bash"
           />
-          <div className="cmd-actions">
-            <button onClick={() => void save()} disabled={!draft.name.trim()}>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn btn-primary" onClick={() => void save()} disabled={!draft.name.trim()}>
               Speichern
             </button>
-            <button className="ghost" onClick={() => setDraft(null)}>
+            <button className="btn" onClick={() => setDraft(null)}>
               Abbrechen
             </button>
           </div>
         </div>
       )}
 
-      {scripts.length === 0 && !draft && (
-        <div className="empty-state">
+      {scripts !== null && scripts.length === 0 && !draft && (
+        <div className="empty">
           <h2>Noch keine Skripte</h2>
-          <p>{STARTER_HINT}</p>
+          <p className="muted">
+            Beispiele: Temp-Cleanup, Drucker-Spooler-Reset, Netzwerk-Diagnose, Windows-Update-Status.
+          </p>
         </div>
       )}
 
-      {scripts.map((s) => (
-        <div className="detail-card script-card" key={s.id}>
-          <div className="script-card-head">
-            <strong>{s.name}</strong>
-            <span className="badge">{s.shell}</span>
-            <span className="job-meta">
-              {s.updated_by} · {formatRelative(s.updated_at)}
-            </span>
-            {isAdmin && (
-              <div className="detail-actions">
-                <button className="ghost" onClick={() => setDraft({ ...s })}>
-                  Bearbeiten
-                </button>
-                <button className="ghost danger" onClick={() => void remove(s.id)}>
-                  Löschen
-                </button>
-              </div>
-            )}
-          </div>
-          <pre className="script-preview">{s.content}</pre>
+      {scripts !== null && scripts.length > 0 && (
+        <div className="grid-2">
+          {scripts.map((s) => (
+            <ScriptCard
+              key={s.id}
+              s={s}
+              isAdmin={isAdmin}
+              onlineDevices={online}
+              onEdit={() => setDraft({ ...s })}
+              onDelete={() => void remove(s.id)}
+              onOpenDevice={onOpenDevice}
+              onError={setError}
+            />
+          ))}
         </div>
-      ))}
-    </>
+      )}
+    </div>
   );
 }

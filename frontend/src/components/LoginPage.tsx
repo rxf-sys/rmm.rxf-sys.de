@@ -29,32 +29,43 @@ export function LoginPage({ onLogin }: Props) {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
-        <h1 className="login-title">
-          rxf-sys <span className="accent">RMM</span>
-        </h1>
-        <p className="login-sub">Remote Monitoring &amp; Management</p>
-        <label>
-          Benutzername
+        <div className="brand" style={{ padding: 0 }}>
+          <span className="brand-mark" style={{ width: 34, height: 34, fontSize: 16 }}>
+            V
+          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+            <span style={{ fontWeight: 800, fontSize: 18 }}>Vektor</span>
+            <span className="brand-sub">Remote Monitoring &amp; Management</span>
+          </div>
+        </div>
+        <div className="field">
+          <span className="field-label">Benutzername</span>
           <input
+            className="input"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
             autoFocus
             required
           />
-        </label>
-        <label>
-          Passwort
+        </div>
+        <div className="field">
+          <span className="field-label">Passwort</span>
           <input
+            className="input"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
             required
           />
-        </label>
-        {error && <p className="login-error" role="alert">{error}</p>}
-        <button type="submit" disabled={busy}>
+        </div>
+        {error && (
+          <p className="err" role="alert">
+            {error}
+          </p>
+        )}
+        <button className="btn btn-primary" type="submit" disabled={busy} style={{ marginTop: 4 }}>
           {busy ? 'Anmelden…' : 'Anmelden'}
         </button>
       </form>

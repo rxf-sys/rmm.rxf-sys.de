@@ -25,9 +25,10 @@
 		# TLS terminates at the Cloudflare edge; the header still has to be
 		# emitted by the origin so browsers pin HTTPS for the domain.
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		# 'unsafe-inline' for styles only (React style props). Scripts stay
-		# strictly self-hosted; Vite emits external module bundles.
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		# 'unsafe-inline' for styles only (React style props + the Google Fonts
+		# stylesheet). Scripts stay strictly self-hosted; Vite emits external
+		# module bundles, no inline scripts. Fonts load from Google Fonts.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 	}
 
