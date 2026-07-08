@@ -70,67 +70,86 @@ export function EnrollModal({ onClose }: Props) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="overlay modal-wrap" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-head">
-          <h2>Gerät hinzufügen</h2>
-          <button className="ghost" onClick={onClose} aria-label="Schließen">
+        <div className="row">
+          <span style={{ fontWeight: 800, fontSize: 16 }}>Gerät hinzufügen</span>
+          <button className="modal-close" onClick={onClose} aria-label="Schließen">
             ✕
           </button>
         </div>
 
         {!created ? (
           <>
-            <p className="modal-intro">
-              Erzeugt ein Einmal-Token. Damit meldet sich der Agent auf dem Zielgerät an.
-            </p>
-            <label className="field">
-              Besitzer / Bezeichnung (optional)
+            <span className="muted" style={{ lineHeight: 1.6 }}>
+              Erzeugt ein Einmal-Token (24 h gültig). Damit meldet sich der Agent auf dem Zielgerät
+              an und installiert sich als Dienst.
+            </span>
+            <div className="field">
+              <span className="field-label">Besitzer / Bezeichnung (optional)</span>
               <input
+                className="input"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="z. B. Laptop Mama"
                 autoFocus
               />
-            </label>
-            <button onClick={() => void mint()} disabled={busy}>
+            </div>
+            <button
+              className="btn btn-primary"
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => void mint()}
+              disabled={busy}
+            >
               {busy ? 'Erzeuge…' : 'Token erzeugen'}
             </button>
           </>
         ) : (
           <>
-            <p className="modal-intro">
+            <span className="muted" style={{ lineHeight: 1.6 }}>
               Token erzeugt{created.label ? ` für „${created.label}“` : ''}. Auf dem Zielgerät
-              ausführen (der Agent installiert sich anschließend als Dienst):
-            </p>
-            <pre className="cmd-box">{installCmd}</pre>
-            <div className="cmd-actions">
-              <button onClick={() => void copyCmd()}>{copied ? 'Kopiert ✓' : 'Kopieren'}</button>
-              <button className="ghost" onClick={() => setCreated(null)}>
+              ausführen — der Agent installiert sich anschließend als Dienst:
+            </span>
+            <pre className="pre-box">{installCmd}</pre>
+            <div className="row" style={{ gap: 8 }}>
+              <button className="btn btn-accent btn-sm" onClick={() => void copyCmd()}>
+                {copied ? 'Kopiert ✓' : 'Kopieren'}
+              </button>
+              <button className="btn btn-sm" onClick={() => setCreated(null)}>
                 Weiteres Token
               </button>
             </div>
-            <p className="modal-warn">
-              Das Token wird nur einmal angezeigt und ist{' '}
-              {new Date(created.expires_at * 1000).toLocaleString('de-DE')} gültig.
-            </p>
+            <span style={{ fontWeight: 600, fontSize: 11, color: 'var(--warn)' }}>
+              ⚠ Das Token wird nur einmal angezeigt und ist {formatDateTime(created.expires_at)}{' '}
+              gültig.
+            </span>
           </>
         )}
 
         {error && (
-          <p className="login-error" role="alert">
+          <p className="err" role="alert">
             {error}
           </p>
         )}
 
         {tokens.length > 0 && (
-          <div className="token-list">
-            <h3>Offene Tokens</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div className="sidebar-label" style={{ margin: '4px 0 4px', padding: 0 }}>
+              Offene Tokens
+            </div>
             {tokens.map((t) => (
-              <div className="token-row" key={t.id}>
-                <span>{t.label || <em>ohne Bezeichnung</em>}</span>
-                <span className="token-exp">gültig bis {formatDateTime(t.expires_at)}</span>
-                <button className="ghost danger" onClick={() => void revoke(t.id)}>
+              <div
+                key={t.id}
+                className="row"
+                style={{ padding: '6px 0', borderTop: '1px solid var(--line2)', fontSize: 12 }}
+              >
+                <span style={{ flex: 1 }}>
+                  {t.label || <em style={{ color: 'var(--tx3)' }}>ohne Bezeichnung</em>}
+                </span>
+                <span className="muted" style={{ fontSize: 11 }}>
+                  bis {formatDateTime(t.expires_at)}
+                </span>
+                <button className="btn btn-danger btn-sm" onClick={() => void revoke(t.id)}>
                   Widerrufen
                 </button>
               </div>

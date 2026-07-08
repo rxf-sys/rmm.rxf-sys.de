@@ -1,173 +1,84 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { formatBytes, formatRelative, osLabel } from '../format';
+import { useJobStream } from '../hooks/useJobStream';
 import type {
+  Device,
   DeviceDetail as DeviceDetailData,
-  Heartbeat,
-  InventorySection,
+  Job,
+  JobStatus,
   MetricSample,
+  Patch,
+  RemoteConfig,
+  Script,
+  Severity,
+  Shell,
 } from '../types';
-import { HistoryChart } from './HistoryChart';
-import { JobsPanel } from './JobsPanel';
-import { PatchesPanel } from './PatchesPanel';
-import { RemotePanel } from './RemotePanel';
-
-const RANGES = [
-  { label: '6 h', hours: 6 },
-  { label: '24 h', hours: 24 },
-  { label: '7 Tage', hours: 168 },
-] as const;
-
-function HistoryCard({ deviceId }: { deviceId: number }) {
-  const [hours, setHours] = useState<number>(24);
-  const [samples, setSamples] = useState<MetricSample[] | null>(null);
-
-  useEffect(() => {
-    const ctrl = new AbortController();
-    const load = () =>
-      api
-        .deviceHistory(deviceId, hours, ctrl.signal)
-        .then((r) => setSamples(r.samples))
-        .catch(() => {
-          /* chart is non-critical; the metrics card still shows live data */
-        });
-    void load();
-    const timer = setInterval(load, 60_000);
-    return () => {
-      clearInterval(timer);
-      ctrl.abort();
-    };
-  }, [deviceId, hours]);
-
-  return (
-    <div className="detail-card">
-      <div className="chart-head">
-        <h3>Verlauf</h3>
-        <div className="range-picker" role="group" aria-label="Zeitraum">
-          {RANGES.map((r) => (
-            <button
-              key={r.hours}
-              className={hours === r.hours ? 'range-btn active' : 'range-btn'}
-              onClick={() => setHours(r.hours)}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {samples === null ? (
-        <p className="panel-muted">Lade Verlauf…</p>
-      ) : (
-        <HistoryChart samples={samples} />
-      )}
-    </div>
-  );
-}
+import { Dot, deviceState, diskColor, stateColor } from '../ui';
+// (osShort available via ../format if needed by future tab work)
 
 interface Props {
   deviceId: number;
   isAdmin: boolean;
+  favorite: boolean;
+  onToggleFavorite: () => void;
   onBack: () => void;
   onDeleted: () => void;
+  onLogout: () => void;
 }
 
-const REFRESH_MS = 15_000;
+type TabId = 'overview' | 'history' | 'inventory' | 'remote' | 'patches' | 'jobs';
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'overview', label: 'Übersicht' },
+  { id: 'history', label: 'Verlauf' },
+  { id: 'inventory', label: 'Inventar' },
+  { id: 'remote', label: 'Remote' },
+  { id: 'patches', label: 'Updates' },
+  { id: 'jobs', label: 'Aktivität' },
+];
 
-function Meter({ label, pct }: { label: string; pct: number | undefined }) {
-  const value = typeof pct === 'number' ? Math.round(pct) : null;
-  return (
-    <div className="meter">
-      <div className="meter-head">
-        <span>{label}</span>
-        <span>{value === null ? '—' : `${value}%`}</span>
-      </div>
-      <div className="meter-track">
-        <div
-          className="meter-fill"
-          style={{ width: `${value ?? 0}%`, background: value !== null && value > 90 ? 'var(--danger)' : 'var(--accent)' }}
-        />
-      </div>
-    </div>
-  );
+const JOB_STATUS_LABEL: Record<JobStatus, string> = {
+  queued: 'wartet',
+  running: 'läuft',
+  done: 'fertig',
+  failed: 'fehlgeschlagen',
+  timeout: 'Timeout',
+};
+function jobBadge(s: JobStatus): string {
+  if (s === 'done') return 'badge-ok';
+  if (s === 'failed' || s === 'timeout') return 'badge-danger';
+  return 'badge-accent';
 }
 
-function Heartbeats({ hb }: { hb: Heartbeat }) {
-  return (
-    <div className="detail-card">
-      <h3>Live-Metriken</h3>
-      <Meter label="CPU" pct={hb.cpu_pct} />
-      <Meter label="RAM" pct={hb.mem_pct} />
-      {(hb.disks ?? []).map((d) => (
-        <Meter key={d.mount} label={`Disk ${d.mount} (${formatBytes(d.total_b)})`} pct={d.used_pct} />
-      ))}
-      {(!hb.disks || hb.disks.length === 0) && <p className="panel-muted">Keine Disk-Daten.</p>}
-    </div>
-  );
+const SEV_LABEL: Record<Severity, string> = {
+  critical: 'kritisch',
+  important: 'wichtig',
+  moderate: 'mittel',
+  low: 'niedrig',
+  other: 'sonstige',
+};
+function sevBadge(s: Severity): string {
+  if (s === 'critical') return 'badge-danger';
+  if (s === 'important') return 'badge-warn';
+  if (s === 'moderate') return 'badge-accent';
+  return 'badge-off';
 }
 
-function HardwareCard({ section }: { section: InventorySection | undefined }) {
-  if (!section) return null;
-  const hw = section.data as Record<string, unknown>;
-  const rows: [string, string][] = [
-    ['Plattform', `${hw.platform ?? ''} ${hw.platform_version ?? ''}`.trim()],
-    ['Kernel', String(hw.kernel_version ?? '—')],
-    ['CPU', String(hw.cpu_model ?? '—')],
-    ['Threads', String(hw.cpu_threads ?? '—')],
-    ['RAM', typeof hw.mem_total_b === 'number' ? formatBytes(hw.mem_total_b) : '—'],
-  ];
-  return (
-    <div className="detail-card">
-      <h3>Hardware</h3>
-      <table className="kv-table">
-        <tbody>
-          {rows.map(([k, v]) => (
-            <tr key={k}>
-              <th>{k}</th>
-              <td>{v || '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+// ---------------------------------------------------------------------------
 
-function SoftwareCard({ section }: { section: InventorySection | undefined }) {
-  const [filter, setFilter] = useState('');
-  if (!section) return null;
-  const items = (section.data as { name: string; version?: string }[]) ?? [];
-  const shown = items.filter((s) => s.name.toLowerCase().includes(filter.toLowerCase()));
-  return (
-    <div className="detail-card">
-      <h3>Software ({items.length})</h3>
-      <input
-        className="filter-input"
-        placeholder="Filtern…"
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-      />
-      <div className="software-scroll">
-        <table className="kv-table">
-          <tbody>
-            {shown.slice(0, 500).map((s, i) => (
-              <tr key={`${s.name}-${i}`}>
-                <th>{s.name}</th>
-                <td>{s.version ?? ''}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-export function DeviceDetail({ deviceId, isAdmin, onBack, onDeleted }: Props) {
+export function DeviceDetail({
+  deviceId,
+  isAdmin,
+  favorite,
+  onToggleFavorite,
+  onBack,
+  onDeleted,
+}: Props) {
   const [detail, setDetail] = useState<DeviceDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<TabId>('overview');
+  const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [ownerLabel, setOwnerLabel] = useState('');
-  const [tagsText, setTagsText] = useState('');
 
   const load = useCallback(
     (signal?: AbortSignal) =>
@@ -186,32 +97,12 @@ export function DeviceDetail({ deviceId, isAdmin, onBack, onDeleted }: Props) {
   useEffect(() => {
     const ctrl = new AbortController();
     void load(ctrl.signal);
-    const timer = setInterval(() => void load(ctrl.signal), REFRESH_MS);
+    const timer = setInterval(() => void load(ctrl.signal), 15_000);
     return () => {
       clearInterval(timer);
       ctrl.abort();
     };
   }, [load]);
-
-  const startEdit = () => {
-    if (!detail) return;
-    setOwnerLabel(detail.device.owner_label);
-    setTagsText(detail.device.tags.join(', '));
-    setEditing(true);
-  };
-
-  const saveEdit = async () => {
-    try {
-      await api.updateDevice(deviceId, {
-        owner_label: ownerLabel.trim(),
-        tags: tagsText.split(',').map((t) => t.trim()).filter(Boolean),
-      });
-      setEditing(false);
-      await load();
-    } catch (e) {
-      setError(apiErrorMessage(e));
-    }
-  };
 
   const remove = async () => {
     if (!confirm('Gerät wirklich entfernen? Der Agent verliert damit den Zugang.')) return;
@@ -223,91 +114,654 @@ export function DeviceDetail({ deviceId, isAdmin, onBack, onDeleted }: Props) {
     }
   };
 
-  if (error && !detail) return <p className="panel-error">{error}</p>;
-  if (!detail) return <p className="panel-muted">Lade Gerät…</p>;
+  const openRemoteSession = async () => {
+    try {
+      const r = await api.remoteSession(deviceId);
+      window.location.href = r.deep_link;
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    }
+  };
+
+  if (error && !detail) return <div className="screen"><p className="err">{error}</p></div>;
+  if (!detail) return <div className="screen"><span className="muted">Lade Gerät…</span></div>;
 
   const d = detail.device;
+  const st = deviceState(d);
+
   return (
-    <div className="device-detail">
-      <div className="detail-head">
-        <button className="ghost" onClick={onBack}>
-          ← Zurück
+    <div className="screen" style={{ paddingTop: 18 }}>
+      <div className="row" style={{ gap: 12 }}>
+        <button className="btn-icon sq30" onClick={onBack}>
+          ←
         </button>
-        <span className={d.online ? 'dot dot-online' : 'dot dot-offline'} />
-        <h2>{d.hostname}</h2>
-        <span className="badge">{osLabel(d.os)}</span>
+        <Dot color={stateColor(st)} lg />
+        <h1 className="page-title">{d.hostname}</h1>
+        <span className="chip chip-os">{d.os_version || osLabel(d.os)}</span>
+        <span className="row" style={{ gap: 5 }}>
+          {d.tags.map((t) => (
+            <span key={t} className="chip">
+              {t}
+            </span>
+          ))}
+        </span>
+        <div className="row grow" style={{ marginLeft: 'auto', gap: 8, position: 'relative' }}>
+          <button className="btn" onClick={() => setTab('remote')}>
+            ⌘ Terminal
+          </button>
+          {d.rustdesk_id && (
+            <button className="btn btn-primary" onClick={() => void openRemoteSession()}>
+              ▶ Remote-Sitzung
+            </button>
+          )}
+          <button className="btn-icon" onClick={() => setMenuOpen((o) => !o)}>
+            ⋯
+          </button>
+          {menuOpen && (
+            <div
+              className="card"
+              style={{ position: 'absolute', top: 38, right: 0, zIndex: 20, padding: 6, minWidth: 180 }}
+              onMouseLeave={() => setMenuOpen(false)}
+            >
+              <button className="palette-item" onClick={() => { onToggleFavorite(); setMenuOpen(false); }}>
+                {favorite ? '★ Favorit entfernen' : '☆ Zu Favoriten'}
+              </button>
+              {isAdmin && (
+                <button className="palette-item" onClick={() => { setEditing(true); setMenuOpen(false); }}>
+                  Bearbeiten
+                </button>
+              )}
+              {isAdmin && (
+                <button className="palette-item" style={{ color: 'var(--danger)' }} onClick={() => { setMenuOpen(false); void remove(); }}>
+                  Entfernen
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {error && <p className="err">{error}</p>}
+
+      <div className="tabs">
+        {TABS.map((t) => (
+          <button key={t.id} className={tab === t.id ? 'tab active' : 'tab'} onClick={() => setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {editing && isAdmin && (
+        <EditCard device={d} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void load(); }} onError={setError} />
+      )}
+
+      {tab === 'overview' && <OverviewTab detail={detail} onGoTab={setTab} />}
+      {tab === 'history' && <HistoryTab deviceId={deviceId} />}
+      {tab === 'inventory' && <InventoryTab detail={detail} />}
+      {tab === 'remote' && <RemoteTab device={d} isAdmin={isAdmin} onSession={openRemoteSession} onChanged={() => void load()} />}
+      {tab === 'patches' && <UpdatesTab deviceId={deviceId} connected={d.connected} isAdmin={isAdmin} />}
+      {tab === 'jobs' && <JobsTab deviceId={deviceId} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit card
+// ---------------------------------------------------------------------------
+function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
+  const [owner, setOwner] = useState(device.owner_label);
+  const [tags, setTags] = useState(device.tags.join(', '));
+  const save = async () => {
+    try {
+      await api.updateDevice(device.id, {
+        owner_label: owner.trim(),
+        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+      });
+      onSaved();
+    } catch (e) {
+      onError(apiErrorMessage(e));
+    }
+  };
+  return (
+    <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <span className="card-title">Gerät bearbeiten</span>
+      <div className="field">
+        <span className="field-label">Besitzer / Bezeichnung</span>
+        <input className="input" value={owner} onChange={(e) => setOwner(e.target.value)} />
+      </div>
+      <div className="field">
+        <span className="field-label">Tags (kommagetrennt)</span>
+        <input className="input" value={tags} onChange={(e) => setTags(e.target.value)} />
+      </div>
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn btn-primary" onClick={() => void save()}>Speichern</button>
+        <button className="btn" onClick={onClose}>Abbrechen</button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Overview tab
+// ---------------------------------------------------------------------------
+function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (t: TabId) => void }) {
+  const d = detail.device;
+  const hw = (detail.inventory.hardware?.data ?? {}) as Record<string, unknown>;
+  const disks = d.heartbeat.disks ?? [];
+  const meters = [
+    { label: 'CPU', pct: Math.round(d.heartbeat.cpu_pct ?? 0), color: 'var(--accent)' },
+    { label: 'RAM', pct: Math.round(d.heartbeat.mem_pct ?? 0), color: 'var(--violet)' },
+    ...disks.map((x) => ({ label: `Disk ${x.mount}`, pct: Math.round(x.used_pct), color: diskColor(x.used_pct) })),
+  ];
+  const kv: [string, string][] = [
+    ['Status', `${d.online ? 'online' : 'offline'}${d.connected ? ' · verbunden' : ''}`],
+    ['Besitzer', d.owner_label || '—'],
+    ['OS', `${osLabel(d.os)} ${d.os_version} (${d.arch})`],
+    ['Agent', d.agent_version || '—'],
+    ['Uptime', typeof hw.uptime_s === 'number' ? `${Math.floor((hw.uptime_s as number) / 86400)} Tage` : '—'],
+    ['Enroll', formatRelative(d.created_at)],
+  ];
+
+  return (
+    <div className="grid-detail">
+      <div className="col">
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <span className="card-title-sm">Stammdaten</span>
+          {kv.map(([k, v]) => (
+            <div key={k} className="kv">
+              <span className="k">{k}</span>
+              <span className="v">{v}</span>
+            </div>
+          ))}
+        </div>
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span className="card-title-sm">Remote-Desktop</span>
+          {d.rustdesk_id ? (
+            <>
+              <span className="muted" style={{ fontSize: 11.5 }}>
+                RustDesk-ID <span className="mono" style={{ color: 'var(--tx2)' }}>{d.rustdesk_id}</span>
+              </span>
+              <button className="btn btn-accent btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => onGoTab('remote')}>
+                Einrichten ↗
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="muted" style={{ fontSize: 11.5 }}>Noch nicht eingerichtet.</span>
+              <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => onGoTab('remote')}>
+                Einrichten →
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <span className="card-title-sm">
+          Live-Metriken <span className="muted" style={{ fontSize: 10.5 }}>· zuletzt {formatRelative(d.last_seen_at)}</span>
+        </span>
+        {meters.map((m) => (
+          <div key={m.label} className="meter">
+            <div className="meter-head">
+              <span style={{ color: 'var(--tx2)' }}>{m.label}</span>
+              <span className="pct" style={{ color: m.color }}>{m.pct}%</span>
+            </div>
+            <div className="bar">
+              <span className="bar-fill" style={{ width: `${m.pct}%`, background: m.color }} />
+            </div>
+          </div>
+        ))}
+        {meters.length === 0 && <span className="muted">Keine Live-Daten.</span>}
+      </div>
+
+      <div className="col">
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="row">
+            <span className="card-title-sm">Software</span>
+            <button className="link-btn" style={{ marginLeft: 'auto' }} onClick={() => onGoTab('inventory')}>
+              Inventar →
+            </button>
+          </div>
+          <div className="row" style={{ alignItems: 'baseline', gap: 8 }}>
+            <span style={{ fontWeight: 800, fontSize: 22 }}>
+              {Array.isArray(detail.inventory.software?.data) ? (detail.inventory.software?.data as unknown[]).length : 0}
+            </span>
+            <span className="muted" style={{ fontSize: 11.5 }}>installierte Pakete</span>
+          </div>
+        </div>
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <div className="row">
+            <span className="card-title-sm">Updates & Jobs</span>
+            <button className="link-btn" style={{ marginLeft: 'auto' }} onClick={() => onGoTab('patches')}>
+              Verwalten →
+            </button>
+          </div>
+          <span className="muted" style={{ fontSize: 11.5 }}>
+            Verlauf und Patch-Status in den Tabs „Aktivität" und „Updates".
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// History tab
+// ---------------------------------------------------------------------------
+const RANGES = [
+  { label: '6 h', hours: 6 },
+  { label: '24 h', hours: 24 },
+  { label: '7 Tage', hours: 168 },
+];
+function HistoryTab({ deviceId }: { deviceId: number }) {
+  const [hours, setHours] = useState(24);
+  const [samples, setSamples] = useState<MetricSample[] | null>(null);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    api
+      .deviceHistory(deviceId, hours, ctrl.signal)
+      .then((r) => setSamples(r.samples))
+      .catch(() => setSamples([]));
+    return () => ctrl.abort();
+  }, [deviceId, hours]);
+
+  const W = 600;
+  const H = 220;
+  const line = (key: 'cpu_pct' | 'mem_pct' | 'disk_max_pct') => {
+    if (!samples || samples.length < 2) return '';
+    const t0 = samples[0].ts;
+    const t1 = Math.max(samples[samples.length - 1].ts, t0 + 1);
+    return samples
+      .map((s) => `${(((s.ts - t0) / (t1 - t0)) * W).toFixed(1)},${(H - (s[key] / 100) * H).toFixed(1)}`)
+      .join(' ');
+  };
+  const tsLabel = (frac: number) => {
+    if (!samples || samples.length < 2) return '';
+    const t = samples[0].ts + frac * (samples[samples.length - 1].ts - samples[0].ts);
+    return new Date(t * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="row" style={{ gap: 12 }}>
+        <span className="card-title">Metrik-Verlauf</span>
+        <span className="row" style={{ gap: 12, fontWeight: 600, fontSize: 11, color: 'var(--tx2)' }}>
+          <span><span style={{ color: 'var(--accent)' }}>■</span> CPU</span>
+          <span><span style={{ color: 'var(--violet)' }}>■</span> RAM</span>
+          <span><span style={{ color: 'var(--warn)' }}>■</span> Disk max</span>
+        </span>
+        <div className="row grow" style={{ marginLeft: 'auto', gap: 5 }}>
+          {RANGES.map((r) => (
+            <button key={r.hours} className={hours === r.hours ? 'btn btn-accent btn-sm' : 'btn btn-sm'} onClick={() => setHours(r.hours)}>
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {samples && samples.length >= 2 ? (
+        <>
+          <svg width="100%" height="220" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+            {[55, 110, 165].map((y) => (
+              <line key={y} x1="0" y1={y} x2={W} y2={y} style={{ stroke: 'var(--line)' }} strokeWidth="1" />
+            ))}
+            <polyline points={line('disk_max_pct')} fill="none" style={{ stroke: 'var(--warn)' }} strokeWidth="1.5" strokeDasharray="4 3" />
+            <polyline points={line('mem_pct')} fill="none" style={{ stroke: 'var(--violet)' }} strokeWidth="2" />
+            <polyline points={line('cpu_pct')} fill="none" style={{ stroke: 'var(--accent)' }} strokeWidth="2" />
+          </svg>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--tx3)' }}>{tsLabel(0)}</span>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--tx3)' }}>{tsLabel(0.5)}</span>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--tx3)' }}>jetzt</span>
+          </div>
+        </>
+      ) : (
+        <span className="muted">Noch nicht genug Verlaufsdaten — der Chart füllt sich mit jedem Heartbeat.</span>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Inventory tab
+// ---------------------------------------------------------------------------
+function InventoryTab({ detail }: { detail: DeviceDetailData }) {
+  const [q, setQ] = useState('');
+  const hw = (detail.inventory.hardware?.data ?? {}) as Record<string, unknown>;
+  const sw = (detail.inventory.software?.data ?? []) as { name: string; version?: string }[];
+  const rows: [string, string][] = [
+    ['Plattform', `${hw.platform ?? ''} ${hw.platform_version ?? ''}`.trim() || '—'],
+    ['Kernel', String(hw.kernel_version ?? '—')],
+    ['CPU', String(hw.cpu_model ?? '—')],
+    ['Threads', String(hw.cpu_threads ?? '—')],
+    ['RAM', typeof hw.mem_total_b === 'number' ? formatBytes(hw.mem_total_b as number) : '—'],
+  ];
+  const shown = sw.filter((s) => s.name.toLowerCase().includes(q.toLowerCase()));
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }} className="inv-grid">
+      <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+        <span className="card-title-sm">Hardware</span>
+        {rows.map(([k, v]) => (
+          <div key={k} className="kv">
+            <span className="k">{k}</span>
+            <span className="v">{v}</span>
+          </div>
+        ))}
+      </div>
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card-head">
+          <span className="card-title-sm">Software <span className="muted" style={{ fontSize: 11 }}>{sw.length}</span></span>
+          <input className="input btn-sm grow" style={{ marginLeft: 'auto', width: 180, flex: 'none' }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="⌕ Filtern…" />
+        </div>
+        <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+          {shown.slice(0, 500).map((s, i) => (
+            <div key={`${s.name}-${i}`} className="row" style={{ padding: '7px 16px', borderBottom: '1px solid var(--line2)', fontSize: 12 }}>
+              <span style={{ fontWeight: 600 }}>{s.name}</span>
+              <span className="mono grow" style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--tx3)' }}>{s.version ?? ''}</span>
+            </div>
+          ))}
+          {shown.length === 0 && <div style={{ padding: '14px 16px' }} className="muted">Keine Treffer.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Remote tab (terminal + scripts)
+// ---------------------------------------------------------------------------
+function RemoteTab({ device, isAdmin, onSession, onChanged }: { device: Device; isAdmin: boolean; onSession: () => void; onChanged: () => void }) {
+  const [scripts, setScripts] = useState<Script[]>([]);
+  const [command, setCommand] = useState('');
+  const [shell, setShell] = useState<Shell>(device.os === 'windows' ? 'powershell' : 'bash');
+  const [activeJob, setActiveJob] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const stream = useJobStream(activeJob);
+  const outRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api.scripts().then((r) => setScripts(r.scripts)).catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (outRef.current) outRef.current.scrollTop = outRef.current.scrollHeight;
+  }, [stream.output]);
+
+  const runShell = async () => {
+    if (!command.trim()) return;
+    try {
+      const r = await api.createShellJob(device.id, command.trim(), shell);
+      setActiveJob(r.job.id);
+      setCommand('');
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    }
+  };
+  const runScript = async (id: number) => {
+    try {
+      const r = await api.createScriptJob(device.id, id);
+      setActiveJob(r.job.id);
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    }
+  };
+
+  if (!isAdmin) return <div className="card card-pad muted">Remote-Aktionen sind Administratoren vorbehalten.</div>;
+
+  const connBadge = device.connected ? { label: 'verbunden', cls: 'badge-ok' } : { label: 'getrennt', cls: 'badge-danger' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {device.rustdesk_id && (
+        <div className="card card-pad row" style={{ gap: 10 }}>
+          <span className="card-title-sm">Remote-Desktop</span>
+          <span className="muted" style={{ fontSize: 11.5 }}>RustDesk-ID <span className="mono">{device.rustdesk_id}</span></span>
+          <button className="btn btn-accent btn-sm grow" style={{ marginLeft: 'auto' }} onClick={onSession}>Sitzung öffnen ↗</button>
+        </div>
+      )}
+      {!device.rustdesk_id && <RemoteSetup device={device} onChanged={onChanged} />}
+
+      <div className="console">
+        <div className="console-head">
+          <span className="console-dots"><span /><span /><span /></span>
+          <span className="console-title">{shell} @ {device.hostname}</span>
+          <span className={`badge grow ${connBadge.cls}`} style={{ marginLeft: 'auto' }}>{connBadge.label}</span>
+        </div>
+        <div className="console-body" ref={outRef}>
+          {activeJob === null ? (
+            <span className="console-line" style={{ color: '#4a5361' }}>Bereit · Live-Ausgabe über Agent-WebSocket</span>
+          ) : (
+            <span className="console-line">{stream.output || (stream.status === 'running' ? '…' : '')}</span>
+          )}
+          {stream.status && activeJob !== null && (stream.status === 'done' || stream.status === 'failed' || stream.status === 'timeout') && (
+            <span className="console-line" style={{ color: stream.exitCode === 0 ? '#4ade80' : '#f0766e' }}>
+              [{JOB_STATUS_LABEL[stream.status]}{stream.exitCode !== null ? ` · exit ${stream.exitCode}` : ''}]
+            </span>
+          )}
+        </div>
+        <div className="console-input-row">
+          <span className="console-prompt">$</span>
+          <input
+            className="console-input"
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void runShell(); }}
+            placeholder="Befehl eingeben und Enter — z. B. df -h"
+            spellCheck={false}
+          />
+          <select className="input btn-sm" style={{ padding: '4px 8px' }} value={shell} onChange={(e) => setShell(e.target.value as Shell)}>
+            <option value="bash">bash</option>
+            <option value="zsh">zsh</option>
+            <option value="powershell">powershell</option>
+          </select>
+          <button className="btn btn-accent btn-sm" onClick={() => void runShell()}>Ausführen</button>
+        </div>
+      </div>
+      {error && <p className="err">{error}</p>}
+      {scripts.length > 0 && (
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <span className="muted" style={{ fontSize: 11.5 }}>Skript ausführen:</span>
+          {scripts.map((s) => (
+            <button key={s.id} className="btn btn-sm" onClick={() => void runScript(s.id)}>▶ {s.name}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RemoteSetup({ device, onChanged }: { device: Device; onChanged: () => void }) {
+  const [config, setConfig] = useState<RemoteConfig | null>(null);
+  const [manualId, setManualId] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.remoteConfig().then(setConfig).catch(() => setConfig({ enabled: false, relay_host: '', has_key: false, deploy_commands: {} }));
+  }, []);
+
+  if (!config) return null;
+  if (!config.enabled) {
+    return (
+      <div className="card card-pad muted">
+        Remote-Desktop nicht konfiguriert (RUSTDESK_RELAY_HOST/KEY in der .env).
+      </div>
+    );
+  }
+  const cmd = config.deploy_commands[device.os as 'windows' | 'linux' | 'darwin'] ?? '';
+  const save = async () => {
+    try {
+      await api.updateDevice(device.id, { rustdesk_id: manualId.trim() });
+      onChanged();
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    }
+  };
+  return (
+    <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+      <span className="card-title-sm">Remote-Desktop einrichten</span>
+      <span className="muted" style={{ fontSize: 11.5 }}>
+        RustDesk installieren und einmalig ausführen (setzt Relay + Schlüssel) — der Agent meldet die ID danach automatisch:
+      </span>
+      {cmd && <pre className="pre-box">{cmd}</pre>}
+      <div className="row" style={{ gap: 8 }}>
+        {cmd && (
+          <button className="btn btn-accent btn-sm" onClick={async () => { try { await navigator.clipboard.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* blocked */ } }}>
+            {copied ? 'Kopiert ✓' : 'Kopieren'}
+          </button>
+        )}
+      </div>
+      <div className="row" style={{ gap: 8 }}>
+        <input className="input grow" style={{ flex: 1 }} value={manualId} onChange={(e) => setManualId(e.target.value)} placeholder="…oder RustDesk-ID manuell eintragen" />
+        <button className="btn btn-sm" onClick={() => void save()} disabled={!manualId.trim()}>Speichern</button>
+      </div>
+      {error && <p className="err">{error}</p>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Updates tab (patches)
+// ---------------------------------------------------------------------------
+function UpdatesTab({ deviceId, connected, isAdmin }: { deviceId: number; connected: boolean; isAdmin: boolean }) {
+  const [patches, setPatches] = useState<Patch[] | null>(null);
+  const [installingJob, setInstallingJob] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const stream = useJobStream(installingJob);
+  const outRef = useRef<HTMLDivElement>(null);
+
+  const load = useCallback((signal?: AbortSignal) =>
+    api.devicePatches(deviceId, signal).then((r) => {
+      setPatches(r.patches);
+      if (r.installing_job !== null) setInstallingJob(r.installing_job);
+    }).catch((e) => { if (!signal?.aborted) setError(apiErrorMessage(e)); }), [deviceId]);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    void load(ctrl.signal);
+    return () => ctrl.abort();
+  }, [load]);
+  useEffect(() => {
+    if (outRef.current) outRef.current.scrollTop = outRef.current.scrollHeight;
+  }, [stream.output]);
+  useEffect(() => {
+    if (stream.status === 'done' || stream.status === 'failed' || stream.status === 'timeout') {
+      const t = setTimeout(() => void load(), 800);
+      return () => clearTimeout(t);
+    }
+  }, [stream.status, load]);
+
+  const scan = async () => {
+    setBusy(true);
+    try {
+      await api.scanPatches(deviceId);
+      setTimeout(() => void load(), 1200);
+      setTimeout(() => void load(), 4000);
+    } catch (e) { setError(apiErrorMessage(e)); } finally { setBusy(false); }
+  };
+  const install = async (securityOnly: boolean) => {
+    setBusy(true);
+    try {
+      const r = await api.installPatches(deviceId, { security_only: securityOnly });
+      setInstallingJob(r.job.id);
+    } catch (e) { setError(apiErrorMessage(e)); } finally { setBusy(false); }
+  };
+
+  const security = (patches ?? []).filter((p) => p.severity === 'critical' || p.severity === 'important').length;
+  const running = stream.status === 'running' || stream.status === 'queued';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="row" style={{ gap: 8 }}>
+        <span className="card-title">Updates {patches ? `(${patches.length})` : ''}</span>
         {isAdmin && (
-          <div className="detail-actions">
-            <button className="ghost" onClick={startEdit}>
-              Bearbeiten
-            </button>
-            <button className="ghost danger" onClick={() => void remove()}>
-              Entfernen
-            </button>
+          <div className="row grow" style={{ marginLeft: 'auto', gap: 8 }}>
+            <button className="btn btn-sm" onClick={() => void scan()} disabled={busy || !connected}>⟳ Scannen</button>
+            {security > 0 && <button className="btn btn-warn btn-sm" onClick={() => void install(true)} disabled={busy || running || !connected}>Nur Sicherheit ({security})</button>}
+            {patches && patches.length > 0 && <button className="btn btn-primary btn-sm" onClick={() => void install(false)} disabled={busy || running || !connected}>Alle installieren</button>}
           </div>
         )}
       </div>
-
-      {error && <p className="panel-error">{error}</p>}
-
-      {editing ? (
-        <div className="detail-card">
-          <label className="field">
-            Besitzer / Bezeichnung
-            <input value={ownerLabel} onChange={(e) => setOwnerLabel(e.target.value)} />
-          </label>
-          <label className="field">
-            Tags (kommagetrennt)
-            <input value={tagsText} onChange={(e) => setTagsText(e.target.value)} />
-          </label>
-          <div className="cmd-actions">
-            <button onClick={() => void saveEdit()}>Speichern</button>
-            <button className="ghost" onClick={() => setEditing(false)}>
-              Abbrechen
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="detail-card">
-          <table className="kv-table">
-            <tbody>
-              <tr>
-                <th>Status</th>
-                <td>
-                  {d.online ? 'online' : 'offline'}
-                  {d.connected ? ' · verbunden' : ''} · zuletzt {formatRelative(d.last_seen_at)}
-                </td>
-              </tr>
-              <tr>
-                <th>Besitzer</th>
-                <td>{d.owner_label || '—'}</td>
-              </tr>
-              <tr>
-                <th>OS</th>
-                <td>
-                  {osLabel(d.os)} {d.os_version} ({d.arch})
-                </td>
-              </tr>
-              <tr>
-                <th>Agent</th>
-                <td>{d.agent_version || '—'}</td>
-              </tr>
-              <tr>
-                <th>Tags</th>
-                <td>{d.tags.length ? d.tags.join(', ') : '—'}</td>
-              </tr>
-            </tbody>
-          </table>
+      {!connected && <span className="muted">Gerät ist nicht verbunden.</span>}
+      {error && <p className="err">{error}</p>}
+      {patches === null && <span className="muted">Lade Updates…</span>}
+      {patches && patches.length === 0 && !running && (
+        <div className="empty">
+          <span style={{ fontSize: 22, color: 'var(--ok)' }}>✓</span>
+          <h2>Alles aktuell</h2>
+          <p className="muted">Keine ausstehenden Updates — oder noch nicht gescannt.</p>
         </div>
       )}
+      {patches && patches.length > 0 && (
+        <div className="card" style={{ overflow: 'hidden' }}>
+          {patches.map((p) => (
+            <div key={p.patch_id} className="row" style={{ gap: 12, padding: '11px 16px', borderBottom: '1px solid var(--line2)' }}>
+              <span className={`badge ${sevBadge(p.severity)}`} style={{ width: 66, textAlign: 'center', flex: 'none' }}>{SEV_LABEL[p.severity]}</span>
+              <span style={{ fontWeight: 600, fontSize: 12.5 }}>{p.title}</span>
+              <span className="mono grow" style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--tx3)' }}>{p.patch_id}</span>
+              <span className="muted" style={{ fontSize: 11, flex: 'none' }}>seit {formatRelative(p.detected_at)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {installingJob !== null && (
+        <div className="console">
+          <div className="console-head">
+            <span className="console-title">Installation · Job #{installingJob}</span>
+            {running && <span className="badge badge-accent grow" style={{ marginLeft: 'auto', animation: 'vPulse 1.4s infinite' }}>läuft</span>}
+          </div>
+          <div className="console-body" ref={outRef}>
+            <span className="console-line">{stream.output || '…'}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
-      {isAdmin && <RemotePanel device={d} onChanged={() => void load()} />}
-      {isAdmin && <JobsPanel deviceId={deviceId} deviceOs={d.os} connected={d.connected} />}
-      {isAdmin && <PatchesPanel deviceId={deviceId} connected={d.connected} />}
-      <Heartbeats hb={d.heartbeat} />
-      <HistoryCard deviceId={deviceId} />
-      <HardwareCard section={detail.inventory.hardware} />
-      <SoftwareCard section={detail.inventory.software} />
+// ---------------------------------------------------------------------------
+// Jobs (activity) tab
+// ---------------------------------------------------------------------------
+function JobsTab({ deviceId }: { deviceId: number }) {
+  const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [openJob, setOpenJob] = useState<number | null>(null);
+  const stream = useJobStream(openJob);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const load = () => api.deviceJobs(deviceId, ctrl.signal).then((r) => setJobs(r.jobs)).catch(() => {});
+    void load();
+    const timer = setInterval(load, 10_000);
+    return () => { clearInterval(timer); ctrl.abort(); };
+  }, [deviceId]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card-head"><span className="card-title-sm">Job-Verlauf</span></div>
+        {jobs === null ? (
+          <div style={{ padding: '14px 16px' }} className="muted">Lade…</div>
+        ) : jobs.length === 0 ? (
+          <div style={{ padding: '14px 16px' }} className="muted">Noch keine Jobs.</div>
+        ) : (
+          jobs.map((j) => (
+            <button key={j.id} className="row" style={{ gap: 12, padding: '10px 16px', width: '100%', background: openJob === j.id ? 'var(--hover)' : 'none', border: 'none', borderBottom: '1px solid var(--line2)', cursor: 'pointer', color: 'var(--tx)', textAlign: 'left' }} onClick={() => setOpenJob(j.id)}>
+              <span className={`badge ${jobBadge(j.status)}`} style={{ width: 90, textAlign: 'center', flex: 'none' }}>{JOB_STATUS_LABEL[j.status]}</span>
+              <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {j.kind === 'script' ? `📜 ${j.script_name}` : j.kind === 'patch_install' ? '⛨ Patch-Installation' : j.command}
+              </span>
+              <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 11, flex: 'none' }}>{j.created_by} · {formatRelative(j.created_at)}</span>
+            </button>
+          ))
+        )}
+      </div>
+      {openJob !== null && (
+        <div className="console">
+          <div className="console-head"><span className="console-title">Job #{openJob}</span></div>
+          <div className="console-body"><span className="console-line">{stream.output || '…'}</span></div>
+        </div>
+      )}
     </div>
   );
 }

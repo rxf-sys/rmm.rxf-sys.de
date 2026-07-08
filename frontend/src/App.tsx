@@ -1,86 +1,180 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { AlertsPage } from './components/AlertsPage';
 import { AuditPage } from './components/AuditPage';
+import { AutomationPage } from './components/AutomationPage';
+import { CommandPalette } from './components/CommandPalette';
+import { DeviceDetail } from './components/DeviceDetail';
 import { DevicesPage } from './components/DevicesPage';
+import { EnrollModal } from './components/EnrollModal';
+import { Header } from './components/Header';
 import { LoginPage } from './components/LoginPage';
 import { OverviewPage } from './components/OverviewPage';
 import { PatchesPage } from './components/PatchesPage';
 import { ScriptsPage } from './components/ScriptsPage';
+import { Sidebar, type PageId } from './components/Sidebar';
 import { useAuth } from './hooks/useAuth';
+import { useFleet } from './hooks/useFleet';
+import { useTheme } from './hooks/useTheme';
 
-const TABS = [
-  { id: 'overview', label: 'Übersicht' },
-  { id: 'devices', label: 'Geräte' },
-  { id: 'scripts', label: 'Skripte' },
-  { id: 'patches', label: 'Patches' },
-  { id: 'audit', label: 'Audit', adminOnly: true },
-] as const;
+const PAGE_LABEL: Record<PageId, string> = {
+  overview: 'Übersicht',
+  devices: 'Geräte',
+  alerts: 'Alarm-Center',
+  patches: 'Patches',
+  scripts: 'Skripte',
+  automation: 'Automatisierung',
+  audit: 'Audit-Log',
+};
 
-type TabId = (typeof TABS)[number]['id'];
+const FAV_KEY = 'vektor-favorites';
+
+function loadFavorites(): number[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]');
+    return Array.isArray(raw) ? raw.filter((x) => typeof x === 'number') : [];
+  } catch {
+    return [];
+  }
+}
 
 export default function App() {
   const { user, status, login, logout } = useAuth();
-  const [tab, setTab] = useState<TabId>('overview');
-  // Lifted so the overview cards can deep-link into a device's detail view.
-  const [openDevice, setOpenDevice] = useState<number | null>(null);
+  const { theme, toggle: toggleTheme } = useTheme();
+  const fleet = useFleet();
 
-  if (status === 'loading') {
-    return <div className="app-loading">Lade…</div>;
-  }
-  if (status === 'anon' || !user) {
-    return <LoginPage onLogin={login} />;
-  }
+  const [page, setPage] = useState<PageId>('overview');
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [favorites, setFavorites] = useState<number[]>(loadFavorites);
 
-  const jumpToDevice = (id: number) => {
-    setOpenDevice(id);
-    setTab('devices');
+  const toggleFavorite = useCallback((id: number) => {
+    setFavorites((f) => {
+      const next = f.includes(id) ? f.filter((x) => x !== id) : [...f, id];
+      localStorage.setItem(FAV_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  // ⌘K / Ctrl+K toggles the palette; Esc closes overlays.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      } else if (e.key === 'Escape') {
+        setPaletteOpen(false);
+        setEnrollOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  if (status === 'loading') return <div className="app-loading">Lade…</div>;
+  if (status === 'anon' || !user) return <LoginPage onLogin={login} />;
+
+  const isAdmin = user.role === 'admin';
+  const goPage = (p: PageId) => {
+    setPage(p);
+    setDetailId(null);
+    setPaletteOpen(false);
   };
+  const openDevice = (id: number) => {
+    setDetailId(id);
+    setPage('devices');
+    setPaletteOpen(false);
+  };
+
+  const openAlerts = fleet.alerts.filter((a) => a.resolved_at === null).length;
+  const openPatches = Object.values(fleet.patchSummary).reduce((a, s) => a + s.pending, 0);
+
+  const detailDevice = detailId !== null ? fleet.devices.find((d) => d.id === detailId) : undefined;
+  const crumbCur = detailId !== null ? (detailDevice?.hostname ?? `Gerät ${detailId}`) : PAGE_LABEL[page];
+  const crumbPre = detailId !== null ? 'Vektor / Geräte / ' : 'Vektor / ';
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <span className="brand">
-          rxf-sys <span className="accent">RMM</span>
-        </span>
-        <nav className="tab-nav" aria-label="Bereiche">
-          {TABS.filter((t) => !('adminOnly' in t && t.adminOnly) || user.role === 'admin').map(
-            (t) => (
-              <button
-                key={t.id}
-                className={tab === t.id ? 'tab active' : 'tab'}
-                onClick={() => {
-                  setTab(t.id);
-                  if (t.id !== 'devices') setOpenDevice(null);
-                }}
-              >
-                {t.label}
-              </button>
-            ),
+      <Sidebar
+        page={page}
+        onNavigate={goPage}
+        user={user}
+        devices={fleet.devices}
+        favorites={favorites}
+        openAlerts={openAlerts}
+        openPatches={openPatches}
+        onOpenDevice={openDevice}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+      <div className="main">
+        <Header
+          crumbPre={crumbPre}
+          crumbCur={crumbCur}
+          openAlerts={openAlerts}
+          isAdmin={isAdmin}
+          onOpenPalette={() => setPaletteOpen(true)}
+          onOpenAlerts={() => goPage('alerts')}
+          onOpenEnroll={() => setEnrollOpen(true)}
+        />
+        <div className="content">
+          {detailId !== null ? (
+            <DeviceDetail
+              deviceId={detailId}
+              isAdmin={isAdmin}
+              favorite={favorites.includes(detailId)}
+              onToggleFavorite={() => toggleFavorite(detailId)}
+              onBack={() => setDetailId(null)}
+              onDeleted={() => {
+                setDetailId(null);
+                fleet.refresh();
+              }}
+              onLogout={logout}
+            />
+          ) : page === 'overview' ? (
+            <OverviewPage fleet={fleet} user={user} onOpenDevice={openDevice} onNavigate={goPage} />
+          ) : page === 'devices' ? (
+            <DevicesPage devices={fleet.devices} loading={fleet.loading} onOpenDevice={openDevice} />
+          ) : page === 'alerts' ? (
+            <AlertsPage alerts={fleet.alerts} devices={fleet.devices} onOpenDevice={openDevice} />
+          ) : page === 'patches' ? (
+            <PatchesPage
+              devices={fleet.devices}
+              patchSummary={fleet.patchSummary}
+              onOpenDevice={openDevice}
+            />
+          ) : page === 'scripts' ? (
+            <ScriptsPage isAdmin={isAdmin} devices={fleet.devices} onOpenDevice={openDevice} />
+          ) : page === 'automation' ? (
+            <AutomationPage devices={fleet.devices} />
+          ) : (
+            <AuditPage />
           )}
-        </nav>
-        <div className="header-right">
-          <span className="username">{user.username}</span>
-          <button className="ghost" onClick={() => void logout()}>
-            Abmelden
-          </button>
         </div>
-      </header>
-      <main className="app-main">
-        {tab === 'overview' ? (
-          <OverviewPage onOpenDevice={jumpToDevice} />
-        ) : tab === 'devices' ? (
-          <DevicesPage
-            isAdmin={user.role === 'admin'}
-            selected={openDevice}
-            onSelect={setOpenDevice}
-          />
-        ) : tab === 'scripts' ? (
-          <ScriptsPage isAdmin={user.role === 'admin'} />
-        ) : tab === 'patches' ? (
-          <PatchesPage onOpenDevice={jumpToDevice} />
-        ) : (
-          <AuditPage />
-        )}
-      </main>
+      </div>
+
+      {paletteOpen && (
+        <CommandPalette
+          devices={fleet.devices}
+          isAdmin={isAdmin}
+          onClose={() => setPaletteOpen(false)}
+          onNavigate={goPage}
+          onOpenDevice={openDevice}
+          onOpenEnroll={() => {
+            setPaletteOpen(false);
+            setEnrollOpen(true);
+          }}
+          onToggleTheme={toggleTheme}
+        />
+      )}
+      {enrollOpen && (
+        <EnrollModal
+          onClose={() => {
+            setEnrollOpen(false);
+            fleet.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }
