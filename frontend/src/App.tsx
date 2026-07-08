@@ -56,6 +56,15 @@ export default function App() {
     });
   }, []);
 
+  // The fleet poller mounts before login, so its first fetch 401s and the
+  // next tick is 30 s out. Refetch immediately once a session exists.
+  const userId = user?.id ?? null;
+  const refresh = fleet.refresh;
+  useEffect(() => {
+    if (userId !== null) refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
   // ⌘K / Ctrl+K toggles the palette; Esc closes overlays.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -134,9 +143,19 @@ export default function App() {
           ) : page === 'overview' ? (
             <OverviewPage fleet={fleet} user={user} onOpenDevice={openDevice} onNavigate={goPage} />
           ) : page === 'devices' ? (
-            <DevicesPage devices={fleet.devices} loading={fleet.loading} onOpenDevice={openDevice} />
+            <DevicesPage
+              devices={fleet.devices}
+              patchSummary={fleet.patchSummary}
+              loading={fleet.loading}
+              onOpenDevice={openDevice}
+            />
           ) : page === 'alerts' ? (
-            <AlertsPage alerts={fleet.alerts} devices={fleet.devices} onOpenDevice={openDevice} />
+            <AlertsPage
+              alerts={fleet.alerts}
+              devices={fleet.devices}
+              onOpenDevice={openDevice}
+              onRefresh={fleet.refresh}
+            />
           ) : page === 'patches' ? (
             <PatchesPage
               devices={fleet.devices}
@@ -146,7 +165,7 @@ export default function App() {
           ) : page === 'scripts' ? (
             <ScriptsPage isAdmin={isAdmin} devices={fleet.devices} onOpenDevice={openDevice} />
           ) : page === 'automation' ? (
-            <AutomationPage devices={fleet.devices} />
+            <AutomationPage devices={fleet.devices} isAdmin={isAdmin} />
           ) : (
             <AuditPage />
           )}

@@ -152,3 +152,37 @@ async def test_alerts_endpoint(admin_client: AsyncClient, settings: Settings):
 
     r = await admin_client.get("/api/alerts?limit=0")
     assert r.status_code == 422
+
+
+async def test_ack_alert(admin_client: AsyncClient, settings: Settings):
+    await _insert_device(settings, "srv4", last_seen_ago=settings.offline_alert_after_s + 60)
+    await alerts.evaluate(settings, FakeNotifier())
+    alert = (await admin_client.get("/api/alerts")).json()["alerts"][0]
+    assert alert["acked_at"] is None and alert["acked_by"] == ""
+
+    r = await admin_client.post(f"/api/alerts/{alert['id']}/ack")
+    assert r.status_code == 200
+    acked = r.json()["alert"]
+    assert acked["acked_at"] is not None and acked["acked_by"] == "boss"
+
+    # Idempotent: the first acker keeps the byline and timestamp.
+    r2 = await admin_client.post(f"/api/alerts/{alert['id']}/ack")
+    assert r2.status_code == 200
+    assert r2.json()["alert"]["acked_at"] == acked["acked_at"]
+
+    # Ack survives the list endpoint.
+    listed = (await admin_client.get("/api/alerts")).json()["alerts"][0]
+    assert listed["acked_by"] == "boss"
+
+
+async def test_ack_unknown_or_resolved_is_404(admin_client: AsyncClient, settings: Settings):
+    assert (await admin_client.post("/api/alerts/999/ack")).status_code == 404
+
+    device_id = await _insert_device(
+        settings, "srv5", last_seen_ago=settings.offline_alert_after_s + 60
+    )
+    await alerts.evaluate(settings, FakeNotifier())
+    alert = (await admin_client.get("/api/alerts")).json()["alerts"][0]
+    await _set_last_seen(settings, device_id, ago=5)
+    await alerts.evaluate(settings, FakeNotifier())  # resolves the alert
+    assert (await admin_client.post(f"/api/alerts/{alert['id']}/ack")).status_code == 404

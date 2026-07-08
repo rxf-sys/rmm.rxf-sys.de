@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { api } from '../api/client';
 import { formatRelative } from '../format';
 import type { Alert, Device } from '../types';
 
@@ -6,17 +7,7 @@ interface Props {
   alerts: Alert[];
   devices: Device[];
   onOpenDevice: (id: number) => void;
-}
-
-const ACK_KEY = 'vektor-acked-alerts';
-
-function loadAcked(): number[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(ACK_KEY) ?? '[]');
-    return Array.isArray(raw) ? raw : [];
-  } catch {
-    return [];
-  }
+  onRefresh: () => void;
 }
 
 const RULE_LABEL: Record<string, string> = {
@@ -31,17 +22,17 @@ function severity(rule: string): { label: string; color: string; bg: string } {
   return { label: 'warnung', color: 'var(--warn)', bg: 'var(--warnBg)' };
 }
 
-export function AlertsPage({ alerts, devices, onOpenDevice }: Props) {
-  // Ack is a client-side concept: the API has no ack endpoint yet.
-  // TODO: persist acknowledgement server-side once /api/alerts supports it.
-  const [acked, setAcked] = useState<number[]>(loadAcked);
+export function AlertsPage({ alerts, devices, onOpenDevice, onRefresh }: Props) {
+  // Optimistic overlay while the poll catches up with the server-side ack.
+  const [justAcked, setJustAcked] = useState<number[]>([]);
 
-  const ack = (id: number) => {
-    setAcked((a) => {
-      const next = a.includes(id) ? a : [...a, id];
-      localStorage.setItem(ACK_KEY, JSON.stringify(next));
-      return next;
-    });
+  const ack = async (id: number) => {
+    setJustAcked((a) => (a.includes(id) ? a : [...a, id]));
+    try {
+      await api.ackAlert(id);
+    } finally {
+      onRefresh();
+    }
   };
 
   const deviceName = (id: number) => devices.find((d) => d.id === id)?.hostname ?? `Gerät ${id}`;
@@ -68,7 +59,7 @@ export function AlertsPage({ alerts, devices, onOpenDevice }: Props) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {open.map((a) => {
             const sev = severity(a.rule);
-            const isAcked = acked.includes(a.id);
+            const isAcked = a.acked_at !== null || justAcked.includes(a.id);
             return (
               <div
                 key={a.id}
@@ -95,6 +86,7 @@ export function AlertsPage({ alerts, devices, onOpenDevice }: Props) {
                   <span className="muted" style={{ fontSize: 11.5 }}>
                     {deviceName(a.device_id)} · Regel „{RULE_LABEL[a.rule] ?? a.rule}" · ausgelöst{' '}
                     {formatRelative(a.fired_at)}
+                    {a.acked_by ? ` · quittiert von ${a.acked_by}` : ''}
                   </span>
                 </div>
                 <div className="row grow" style={{ marginLeft: 'auto', gap: 8, flex: 'none' }}>

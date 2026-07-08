@@ -23,7 +23,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 import aiosqlite
 import structlog
 
-from . import devices, patches
+from . import automation, devices, patches
 from .audit import record as audit_record
 from .config import Settings
 
@@ -37,7 +37,9 @@ CREATE TABLE IF NOT EXISTS alerts (
     message     TEXT    NOT NULL,
     fired_at    INTEGER NOT NULL,
     resolved_at INTEGER,
-    notified    INTEGER NOT NULL DEFAULT 0
+    notified    INTEGER NOT NULL DEFAULT 0,
+    acked_at    INTEGER,
+    acked_by    TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_open ON alerts (device_id, rule) WHERE resolved_at IS NULL;
 """
@@ -56,6 +58,13 @@ async def ensure_schema(settings: Settings) -> None:
     Path(_db_path).parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(_db_path) as db:
         await db.executescript(_SCHEMA)
+        # Migration for pre-ack databases: CREATE IF NOT EXISTS skips the new
+        # columns on existing tables, so add them here.
+        async with db.execute("PRAGMA table_info(alerts)") as cur:
+            cols = {row[1] for row in await cur.fetchall()}
+        if "acked_at" not in cols:
+            await db.execute("ALTER TABLE alerts ADD COLUMN acked_at INTEGER")
+            await db.execute("ALTER TABLE alerts ADD COLUMN acked_by TEXT NOT NULL DEFAULT ''")
         await db.commit()
     log.info("alerts.ready", db=_db_path)
 
@@ -100,6 +109,28 @@ async def _mark_notified(alert_id: int) -> None:
         await db.commit()
 
 
+async def ack(alert_id: int, username: str) -> dict[str, Any] | None:
+    """Acknowledge an open alert ("gesehen, kümmere mich"). Idempotent — the
+    first acker wins the byline. Returns the row, or None for unknown/
+    resolved alerts (acking history makes no sense)."""
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE alerts SET acked_at = ?, acked_by = ?"
+            " WHERE id = ? AND resolved_at IS NULL AND acked_at IS NULL",
+            (int(time.time()), username, alert_id),
+        )
+        await db.commit()
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM alerts WHERE id = ? AND resolved_at IS NULL", (alert_id,)
+        ) as cur:
+            row = await cur.fetchone()
+    if row is None:
+        return None
+    await audit_record("alert.acked", user=username, device_id=int(row["device_id"]))
+    return _row_to_dict(row)
+
+
 def _max_disk_pct(device: dict[str, Any]) -> float | None:
     disks = device.get("heartbeat", {}).get("disks") or []
     pcts = [float(d.get("used_pct", 0)) for d in disks if isinstance(d, dict)]
@@ -120,48 +151,71 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
     open_alerts = await _open_alerts()
     now = time.time()
 
+    # Rule toggles (Automatisierung tab). A disabled rule neither fires nor
+    # resolves-with-notify; its leftover open alerts are closed quietly so the
+    # dashboard doesn't show frozen alerts nobody watches.
+    rules = (await automation.get_config())["rules"]
+    for (device_id, rule), row in list(open_alerts.items()):
+        if not rules.get(rule, True):
+            await _resolve(row["id"])
+            del open_alerts[(device_id, rule)]
+
     for d in fleet:
         name = _device_name(d)
 
         # --- offline rule -------------------------------------------------
-        last_seen = d.get("last_seen_at")
-        # Never-seen devices (enrolled, agent not started yet) don't page.
-        is_offline = last_seen is not None and (now - last_seen) > settings.offline_alert_after_s
-        key = (d["id"], "offline")
-        if is_offline and key not in open_alerts:
-            minutes = int((now - last_seen) / 60)
-            await _fire(d["id"], "offline", f"{name} ist offline (seit ~{minutes} min)")
-        elif not is_offline and d["online"] and key in open_alerts:
-            await _resolve(open_alerts[key]["id"])
-            await notify("RMM: wieder online", f"{name} ist wieder erreichbar", "white_check_mark", "")
-
-        # --- disk rule ------------------------------------------------------
-        max_pct = _max_disk_pct(d)
-        key = (d["id"], "disk")
-        if max_pct is not None:
-            if max_pct >= settings.disk_alert_pct and key not in open_alerts:
-                await _fire(d["id"], "disk", f"{name}: Disk bei {max_pct:.0f}%")
-            elif max_pct < settings.disk_alert_clear_pct and key in open_alerts:
+        if rules.get("offline", True):
+            last_seen = d.get("last_seen_at")
+            # Never-seen devices (enrolled, agent not started yet) don't page.
+            is_offline = (
+                last_seen is not None and (now - last_seen) > settings.offline_alert_after_s
+            )
+            key = (d["id"], "offline")
+            if is_offline and key not in open_alerts:
+                minutes = int((now - last_seen) / 60)
+                await _fire(d["id"], "offline", f"{name} ist offline (seit ~{minutes} min)")
+            elif not is_offline and d["online"] and key in open_alerts:
                 await _resolve(open_alerts[key]["id"])
                 await notify(
-                    "RMM: Disk wieder ok", f"{name}: Disk bei {max_pct:.0f}%", "white_check_mark", ""
+                    "RMM: wieder online", f"{name} ist wieder erreichbar", "white_check_mark", ""
                 )
 
+        # --- disk rule ------------------------------------------------------
+        if rules.get("disk", True):
+            max_pct = _max_disk_pct(d)
+            key = (d["id"], "disk")
+            if max_pct is not None:
+                if max_pct >= settings.disk_alert_pct and key not in open_alerts:
+                    await _fire(d["id"], "disk", f"{name}: Disk bei {max_pct:.0f}%")
+                elif max_pct < settings.disk_alert_clear_pct and key in open_alerts:
+                    await _resolve(open_alerts[key]["id"])
+                    await notify(
+                        "RMM: Disk wieder ok",
+                        f"{name}: Disk bei {max_pct:.0f}%",
+                        "white_check_mark",
+                        "",
+                    )
+
         # --- overdue security patches --------------------------------------
-        oldest = await patches.oldest_pending_security(d["id"])
-        key = (d["id"], "patch_age")
-        overdue = (
-            oldest is not None and (now - oldest) > settings.patch_alert_age_days * 86400
-        )
-        if overdue and key not in open_alerts:
-            days = int((now - oldest) / 86400)
-            await _fire(d["id"], "patch_age", f"{name}: Sicherheitsupdates seit {days} Tagen offen")
-        elif not overdue and key in open_alerts:
-            await _resolve(open_alerts[key]["id"])
-            await notify(
-                "RMM: Updates installiert", f"{name}: keine überfälligen Sicherheitsupdates mehr",
-                "white_check_mark", "",
+        if rules.get("patch_age", True):
+            oldest = await patches.oldest_pending_security(d["id"])
+            key = (d["id"], "patch_age")
+            overdue = (
+                oldest is not None and (now - oldest) > settings.patch_alert_age_days * 86400
             )
+            if overdue and key not in open_alerts:
+                days = int((now - oldest) / 86400)
+                await _fire(
+                    d["id"], "patch_age", f"{name}: Sicherheitsupdates seit {days} Tagen offen"
+                )
+            elif not overdue and key in open_alerts:
+                await _resolve(open_alerts[key]["id"])
+                await notify(
+                    "RMM: Updates installiert",
+                    f"{name}: keine überfälligen Sicherheitsupdates mehr",
+                    "white_check_mark",
+                    "",
+                )
 
     # --- push unsent alerts (new ones + earlier failures) ---------------------
     async with _connect() as db:
@@ -177,6 +231,20 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
             await _mark_notified(int(row["id"]))
 
 
+def _row_to_dict(r: aiosqlite.Row) -> dict[str, Any]:
+    return {
+        "id": int(r["id"]),
+        "device_id": int(r["device_id"]),
+        "rule": r["rule"],
+        "message": r["message"],
+        "fired_at": int(r["fired_at"]),
+        "resolved_at": int(r["resolved_at"]) if r["resolved_at"] else None,
+        "notified": bool(r["notified"]),
+        "acked_at": int(r["acked_at"]) if r["acked_at"] else None,
+        "acked_by": r["acked_by"] or "",
+    }
+
+
 async def list_recent(limit: int = 50) -> list[dict[str, Any]]:
     """Open alerts first (oldest fire wins the top), then recent resolved."""
     async with _connect() as db:
@@ -186,18 +254,7 @@ async def list_recent(limit: int = 50) -> list[dict[str, Any]]:
             (limit,),
         ) as cur:
             rows = await cur.fetchall()
-    return [
-        {
-            "id": int(r["id"]),
-            "device_id": int(r["device_id"]),
-            "rule": r["rule"],
-            "message": r["message"],
-            "fired_at": int(r["fired_at"]),
-            "resolved_at": int(r["resolved_at"]) if r["resolved_at"] else None,
-            "notified": bool(r["notified"]),
-        }
-        for r in rows
-    ]
+    return [_row_to_dict(r) for r in rows]
 
 
 def reset_for_tests(db_path: str) -> None:

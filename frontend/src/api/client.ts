@@ -2,6 +2,8 @@ import type {
   Account,
   Alert,
   AuditEvent,
+  AutomationConfig,
+  AutomationRules,
   CreatedEnrollToken,
   Device,
   DeviceDetail,
@@ -10,6 +12,7 @@ import type {
   MetricSample,
   Patch,
   PatchSummary,
+  PatchWindow,
   RemoteConfig,
   Script,
   Shell,
@@ -78,6 +81,7 @@ export const api = {
   deviceHistory: (id: number, hours: number, signal?: AbortSignal) =>
     get<{ samples: MetricSample[] }>(`/api/devices/${id}/history?hours=${hours}`, signal),
   alerts: (signal?: AbortSignal) => get<{ alerts: Alert[] }>('/api/alerts', signal),
+  ackAlert: (id: number) => post<{ alert: Alert }>(`/api/alerts/${id}/ack`),
   updateDevice: (id: number, body: { owner_label?: string; tags?: string[]; rustdesk_id?: string }) =>
     patch<{ device: Device }>(`/api/devices/${id}`, body),
   deleteDevice: (id: number) => del<{ ok: boolean }>(`/api/devices/${id}`),
@@ -120,6 +124,11 @@ export const api = {
   scanPatches: (deviceId: number) => post<{ ok: boolean }>(`/api/devices/${deviceId}/patches/scan`),
   installPatches: (deviceId: number, body: { patch_ids?: string[]; security_only?: boolean }) =>
     post<{ job: Job }>(`/api/devices/${deviceId}/patches/install`, body),
+
+  // Automation
+  automation: (signal?: AbortSignal) => get<AutomationConfig>('/api/automation', signal),
+  updateAutomation: (body: { rules: AutomationRules; patch_window: PatchWindow }) =>
+    send<AutomationConfig>('PUT', '/api/automation', body),
 
   // Remote desktop
   remoteConfig: (signal?: AbortSignal) => get<RemoteConfig>('/api/remote/config', signal),

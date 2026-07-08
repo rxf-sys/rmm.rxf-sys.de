@@ -71,6 +71,30 @@ export interface Alert {
   fired_at: number;
   resolved_at: number | null;
   notified: boolean;
+  acked_at: number | null;
+  acked_by: string;
+}
+
+export interface AutomationRules {
+  offline: boolean;
+  disk: boolean;
+  patch_age: boolean;
+}
+
+export interface PatchWindow {
+  enabled: boolean;
+  /** 0 = Montag … 6 = Sonntag (matches Python's tm_wday). */
+  weekday: number;
+  hour: number;
+  security_only: boolean;
+  /** Empty tag = every device. */
+  tag: string;
+}
+
+export interface AutomationConfig {
+  rules: AutomationRules;
+  patch_window: PatchWindow;
+  patch_window_last_run: number | null;
 }
 
 export interface EnrollToken {
