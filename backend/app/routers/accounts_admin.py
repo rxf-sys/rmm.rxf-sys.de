@@ -23,12 +23,12 @@ router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 class CreateAccountRequest(BaseModel):
     username: str = Field(min_length=1, max_length=120)
     password: str = Field(min_length=MIN_PASSWORD_LEN, max_length=256)
-    role: str = Field(default="viewer", pattern="^(admin|viewer)$")
+    role: str = Field(default="viewer", pattern="^(admin|techniker|viewer)$")
     email: str = Field(default="", max_length=200)
 
 
 class UpdateAccountRequest(BaseModel):
-    role: str | None = Field(default=None, pattern="^(admin|viewer)$")
+    role: str | None = Field(default=None, pattern="^(admin|techniker|viewer)$")
     disabled: bool | None = None
     # Set to reset the password; omit to leave it unchanged.
     password: str | None = Field(default=None, min_length=MIN_PASSWORD_LEN, max_length=256)

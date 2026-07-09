@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from .. import scripts
 from ..audit import record as audit_record
-from ..auth import require_admin, verify_session
+from ..auth import require_operator, verify_session
 
 router = APIRouter(prefix="/api/scripts", tags=["scripts"])
 
@@ -24,7 +24,7 @@ async def list_scripts(user: dict = Depends(verify_session)) -> dict:
 
 
 @router.post("")
-async def create_script(body: ScriptBody, user: dict = Depends(require_admin)) -> dict:
+async def create_script(body: ScriptBody, user: dict = Depends(require_operator)) -> dict:
     try:
         script = await scripts.create(body.name, body.shell, body.content, user["username"])
     except scripts.ScriptError as e:
@@ -35,7 +35,7 @@ async def create_script(body: ScriptBody, user: dict = Depends(require_admin)) -
 
 @router.put("/{script_id}")
 async def update_script(
-    script_id: int, body: ScriptBody, user: dict = Depends(require_admin)
+    script_id: int, body: ScriptBody, user: dict = Depends(require_operator)
 ) -> dict:
     try:
         script = await scripts.update(script_id, body.name, body.shell, body.content, user["username"])
@@ -48,7 +48,7 @@ async def update_script(
 
 
 @router.delete("/{script_id}")
-async def delete_script(script_id: int, user: dict = Depends(require_admin)) -> dict:
+async def delete_script(script_id: int, user: dict = Depends(require_operator)) -> dict:
     if not await scripts.delete(script_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skript nicht gefunden")
     await audit_record("script.deleted", user=user["username"], script_id=script_id)

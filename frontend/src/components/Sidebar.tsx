@@ -42,7 +42,14 @@ interface Props {
   onOpenDevice: (id: number) => void;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
+  onLogout: () => void;
 }
+
+const ROLE_LABEL: Record<string, string> = {
+  admin: 'Administrator',
+  techniker: 'Techniker',
+  viewer: 'Betrachter',
+};
 
 export function Sidebar({
   page,
@@ -55,6 +62,7 @@ export function Sidebar({
   onOpenDevice,
   theme,
   onToggleTheme,
+  onLogout,
 }: Props) {
   const isAdmin = user.role === 'admin';
   const favDevices = favorites
@@ -141,17 +149,28 @@ export function Sidebar({
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
             <span style={{ fontWeight: 700, fontSize: 12 }}>{user.username}</span>
             <span style={{ fontWeight: 500, fontSize: 10, color: 'var(--tx3)' }}>
-              {isAdmin ? 'Administrator' : 'Betrachter'}
+              {ROLE_LABEL[user.role] ?? user.role}
             </span>
           </div>
-          <button
-            className="btn-icon"
-            style={{ marginLeft: 'auto', width: 28, height: 28 }}
-            title="Theme wechseln"
-            onClick={onToggleTheme}
-          >
-            {theme === 'dark' ? '☾' : '☀'}
-          </button>
+          <div className="row" style={{ marginLeft: 'auto', gap: 4 }}>
+            <button
+              className="btn-icon"
+              style={{ width: 28, height: 28 }}
+              title="Theme wechseln"
+              onClick={onToggleTheme}
+            >
+              {theme === 'dark' ? '☾' : '☀'}
+            </button>
+            <button
+              className="btn-icon"
+              style={{ width: 28, height: 28 }}
+              title="Abmelden"
+              aria-label="Abmelden"
+              onClick={onLogout}
+            >
+              ⎋
+            </button>
+          </div>
         </div>
       </div>
     </div>

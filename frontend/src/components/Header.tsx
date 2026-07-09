@@ -2,7 +2,7 @@ interface Props {
   crumbPre: string;
   crumbCur: string;
   openAlerts: number;
-  isAdmin: boolean;
+  canEnroll: boolean;
   onOpenPalette: () => void;
   onOpenAlerts: () => void;
   onOpenEnroll: () => void;
@@ -12,7 +12,7 @@ export function Header({
   crumbPre,
   crumbCur,
   openAlerts,
-  isAdmin,
+  canEnroll,
   onOpenPalette,
   onOpenAlerts,
   onOpenEnroll,
@@ -31,7 +31,7 @@ export function Header({
         <button className="btn-icon" title="Alarme" onClick={onOpenAlerts}>
           ◎{openAlerts > 0 && <span className="dot-notify" />}
         </button>
-        {isAdmin && (
+        {canEnroll && (
           <button className="btn btn-primary" onClick={onOpenEnroll}>
             + Gerät
           </button>

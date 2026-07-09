@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from .. import devices, jobs, patches
 from ..agents_ws import manager
 from ..audit import record as audit_record
-from ..auth import require_admin, verify_session
+from ..auth import require_operator, verify_session
 from ..config import Settings, get_settings
 
 log = structlog.get_logger("patches_api")
@@ -47,7 +47,7 @@ async def device_patches(
 @router.post("/api/devices/{device_id}/patches/scan")
 async def scan_patches(
     device_id: int,
-    user: dict = Depends(require_admin),
+    user: dict = Depends(require_operator),
     settings: Settings = Depends(get_settings),
 ) -> dict:
     if await devices.get_device(device_id, settings.offline_after_s) is None:
@@ -70,7 +70,7 @@ class InstallRequest(BaseModel):
 async def install_patches(
     device_id: int,
     body: InstallRequest,
-    user: dict = Depends(require_admin),
+    user: dict = Depends(require_operator),
     settings: Settings = Depends(get_settings),
 ) -> dict:
     if await devices.get_device(device_id, settings.offline_after_s) is None:

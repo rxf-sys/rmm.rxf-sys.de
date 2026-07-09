@@ -15,6 +15,7 @@ interface Result {
 interface Props {
   devices: Device[];
   isAdmin: boolean;
+  canEnroll: boolean;
   onClose: () => void;
   onNavigate: (p: PageId) => void;
   onOpenDevice: (id: number) => void;
@@ -37,6 +38,7 @@ const PAGES: { id: PageId; label: string; adminOnly?: boolean }[] = [
 export function CommandPalette({
   devices,
   isAdmin,
+  canEnroll,
   onClose,
   onNavigate,
   onOpenDevice,
@@ -76,7 +78,7 @@ export function CommandPalette({
       }
     }
     const actions: Result[] = [];
-    if (isAdmin)
+    if (canEnroll)
       actions.push({
         id: 'act-enroll',
         label: 'Gerät hinzufügen',
@@ -95,7 +97,7 @@ export function CommandPalette({
       if (!query || a.label.toLowerCase().includes(query)) out.push(a);
     }
     return out;
-  }, [q, devices, isAdmin, onNavigate, onOpenDevice, onOpenEnroll, onToggleTheme]);
+  }, [q, devices, isAdmin, canEnroll, onNavigate, onOpenDevice, onOpenEnroll, onToggleTheme]);
 
   const clampedSel = Math.min(sel, Math.max(0, results.length - 1));
 

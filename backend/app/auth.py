@@ -56,3 +56,16 @@ async def require_admin(user: dict[str, Any] = Depends(verify_session)) -> dict[
             detail="admin privileges required",
         )
     return user
+
+
+async def require_operator(user: dict[str, Any] = Depends(verify_session)) -> dict[str, Any]:
+    """Admin or Techniker: everything hands-on with devices (jobs, scripts,
+    patches, remote, enrollment, device edits). Admin-only remains what
+    shapes the system: accounts, audit, automation rules, persons,
+    credentials."""
+    if user.get("role") not in ("admin", "techniker"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="operator privileges required",
+        )
+    return user

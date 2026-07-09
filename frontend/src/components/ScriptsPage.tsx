@@ -4,7 +4,7 @@ import { formatRelative } from '../format';
 import type { Device, Script, Shell } from '../types';
 
 interface Props {
-  isAdmin: boolean;
+  canManage: boolean;
   devices: Device[];
   onOpenDevice: (id: number) => void;
 }
@@ -23,7 +23,7 @@ const EMPTY: Draft = { id: null, name: '', shell: 'bash', content: '' };
  * operator sees the live output. */
 function ScriptRow({
   s,
-  isAdmin,
+  canManage,
   onlineDevices,
   expanded,
   onToggle,
@@ -33,7 +33,7 @@ function ScriptRow({
   onError,
 }: {
   s: Script;
-  isAdmin: boolean;
+  canManage: boolean;
   onlineDevices: Device[];
   expanded: boolean;
   onToggle: () => void;
@@ -99,7 +99,7 @@ function ScriptRow({
           >
             {s.content}
           </pre>
-          {isAdmin && (
+          {canManage && (
             <div className="row" style={{ gap: 7, padding: '10px 16px', borderTop: '1px solid var(--line2)' }}>
               <select
                 className="input btn-sm"
@@ -131,7 +131,7 @@ function ScriptRow({
   );
 }
 
-export function ScriptsPage({ isAdmin, devices, onOpenDevice }: Props) {
+export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
   const [scripts, setScripts] = useState<Script[] | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -188,7 +188,7 @@ export function ScriptsPage({ isAdmin, devices, onOpenDevice }: Props) {
             placeholder="⌕ Skript suchen…"
           />
         )}
-        {isAdmin && !draft && (
+        {canManage && !draft && (
           <button className="btn btn-primary grow" style={{ marginLeft: 'auto' }} onClick={() => setDraft({ ...EMPTY })}>
             + Neues Skript
           </button>
@@ -254,7 +254,7 @@ export function ScriptsPage({ isAdmin, devices, onOpenDevice }: Props) {
               <ScriptRow
                 key={s.id}
                 s={s}
-                isAdmin={isAdmin}
+                canManage={canManage}
                 onlineDevices={online}
                 expanded={expandedId === s.id}
                 onToggle={() => setExpandedId(expandedId === s.id ? null : s.id)}

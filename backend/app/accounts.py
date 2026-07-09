@@ -69,9 +69,10 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 _db_path: str = ""
 
-# ``admin`` manages everything (devices, jobs, accounts); ``viewer`` is the
-# planned read-only role for family members watching their own device.
-ROLES = ("admin", "viewer")
+# ``admin`` manages everything; ``techniker`` covers hands-on device work
+# (jobs, scripts, patches, remote, enrollment) without account/audit access;
+# ``viewer`` is read-only for family members watching their own device.
+ROLES = ("admin", "techniker", "viewer")
 
 
 class AccountError(Exception):
