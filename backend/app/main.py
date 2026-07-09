@@ -14,11 +14,13 @@ from . import (
     alerts,
     audit,
     automation,
+    credentials,
     devices,
     jobs,
     metrics,
     notify,
     patches,
+    persons,
     releases,
     scripts,
 )
@@ -27,7 +29,10 @@ from .routers import agent as agent_router
 from .routers import alerts as alerts_router
 from .routers import audit as audit_router
 from .routers import auth as auth_router
+from .routers import accounts_admin as accounts_admin_router
 from .routers import automation as automation_router
+from .routers import credentials as credentials_router
+from .routers import persons as persons_router
 from .routers import devices as devices_router
 from .routers import jobs as jobs_router
 from .routers import patches as patches_router
@@ -108,6 +113,8 @@ async def lifespan(app: FastAPI):
     await scripts.ensure_schema(_settings)
     await patches.ensure_schema(_settings)
     await automation.ensure_schema(_settings)
+    await persons.ensure_schema(_settings)
+    await credentials.ensure_schema(_settings)
     # Agent release manifest (signed self-update). Best-effort — a missing
     # manifest just disables auto-update.
     releases.load(_settings)
@@ -169,4 +176,7 @@ app.include_router(scripts_router.router)
 app.include_router(audit_router.router)
 app.include_router(patches_router.router)
 app.include_router(automation_router.router)
+app.include_router(persons_router.router)
+app.include_router(credentials_router.router)
+app.include_router(accounts_admin_router.router)
 app.include_router(remote_router.router)

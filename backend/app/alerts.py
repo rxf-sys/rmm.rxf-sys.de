@@ -150,26 +150,29 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
     fleet = await devices.list_devices(settings.offline_after_s)
     open_alerts = await _open_alerts()
     now = time.time()
+    rules = await automation.list_rules()
+    devices_by_id = {d["id"]: d for d in fleet}
 
-    # Rule toggles (Automatisierung tab). A disabled rule neither fires nor
-    # resolves-with-notify; its leftover open alerts are closed quietly so the
-    # dashboard doesn't show frozen alerts nobody watches.
-    rules = (await automation.get_config())["rules"]
-    for (device_id, rule), row in list(open_alerts.items()):
-        if not rules.get(rule, True):
+    # A device whose governing rule is gone or disabled must not keep a
+    # frozen open alert around — close those quietly (no recovery push for
+    # a rule nobody watches anymore).
+    for (device_id, rule_type), row in list(open_alerts.items()):
+        device = devices_by_id.get(device_id)
+        governing = automation.effective_rule(rules, device, rule_type) if device else None
+        if device is None or governing is None or not governing["enabled"]:
             await _resolve(row["id"])
-            del open_alerts[(device_id, rule)]
+            del open_alerts[(device_id, rule_type)]
 
     for d in fleet:
         name = _device_name(d)
 
         # --- offline rule -------------------------------------------------
-        if rules.get("offline", True):
+        rule = automation.effective_rule(rules, d, "offline")
+        if rule is not None and rule["enabled"]:
+            after_s = rule["threshold"] or settings.offline_alert_after_s
             last_seen = d.get("last_seen_at")
             # Never-seen devices (enrolled, agent not started yet) don't page.
-            is_offline = (
-                last_seen is not None and (now - last_seen) > settings.offline_alert_after_s
-            )
+            is_offline = last_seen is not None and (now - last_seen) > after_s
             key = (d["id"], "offline")
             if is_offline and key not in open_alerts:
                 minutes = int((now - last_seen) / 60)
@@ -181,13 +184,18 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
                 )
 
         # --- disk rule ------------------------------------------------------
-        if rules.get("disk", True):
+        rule = automation.effective_rule(rules, d, "disk")
+        if rule is not None and rule["enabled"]:
+            alert_pct = rule["threshold"] or settings.disk_alert_pct
+            # Hysteresis: clear a fixed 5 points below the alert threshold
+            # (matches the stock 90/85 pairing from settings).
+            clear_pct = alert_pct - (settings.disk_alert_pct - settings.disk_alert_clear_pct)
             max_pct = _max_disk_pct(d)
             key = (d["id"], "disk")
             if max_pct is not None:
-                if max_pct >= settings.disk_alert_pct and key not in open_alerts:
+                if max_pct >= alert_pct and key not in open_alerts:
                     await _fire(d["id"], "disk", f"{name}: Disk bei {max_pct:.0f}%")
-                elif max_pct < settings.disk_alert_clear_pct and key in open_alerts:
+                elif max_pct < clear_pct and key in open_alerts:
                     await _resolve(open_alerts[key]["id"])
                     await notify(
                         "RMM: Disk wieder ok",
@@ -197,12 +205,12 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
                     )
 
         # --- overdue security patches --------------------------------------
-        if rules.get("patch_age", True):
+        rule = automation.effective_rule(rules, d, "patch_age")
+        if rule is not None and rule["enabled"]:
+            age_days = rule["threshold"] or settings.patch_alert_age_days
             oldest = await patches.oldest_pending_security(d["id"])
             key = (d["id"], "patch_age")
-            overdue = (
-                oldest is not None and (now - oldest) > settings.patch_alert_age_days * 86400
-            )
+            overdue = oldest is not None and (now - oldest) > age_days * 86400
             if overdue and key not in open_alerts:
                 days = int((now - oldest) / 86400)
                 await _fire(

@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from .. import devices, jobs, metrics, patches
+from .. import credentials, devices, jobs, metrics, patches, persons
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..auth import require_admin, verify_session
@@ -108,6 +108,8 @@ class UpdateDeviceRequest(BaseModel):
     tags: list[str] | None = None
     # Manual fallback when the agent can't auto-report the RustDesk ID.
     rustdesk_id: str | None = Field(default=None, max_length=40)
+    # 0 unassigns ("keine Person"); None leaves the assignment untouched.
+    person_id: int | None = Field(default=None, ge=0)
 
 
 @router.patch("/{device_id}")
@@ -117,8 +119,16 @@ async def update_device(
     user: dict = Depends(require_admin),
     settings: Settings = Depends(get_settings),
 ) -> dict:
+    if body.person_id:
+        if await persons.get_person(body.person_id) is None:
+            raise HTTPException(status_code=422, detail="Person nicht gefunden")
     device = await devices.update_device(
-        device_id, owner_label=body.owner_label, tags=body.tags, rustdesk_id=body.rustdesk_id
+        device_id,
+        owner_label=body.owner_label,
+        tags=body.tags,
+        rustdesk_id=body.rustdesk_id,
+        person_id=body.person_id or None,
+        clear_person=body.person_id == 0,
     )
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
@@ -138,5 +148,6 @@ async def delete_device(device_id: int, user: dict = Depends(require_admin)) -> 
     await metrics.delete_for_device(device_id)
     await jobs.delete_for_device(device_id)
     await patches.delete_for_device(device_id)
+    await credentials.delete_for_device(device_id)
     await audit_record("devices.deleted", user=user["username"], device_id=device_id)
     return {"ok": True}

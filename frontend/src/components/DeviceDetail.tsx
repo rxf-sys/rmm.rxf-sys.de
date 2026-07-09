@@ -3,12 +3,14 @@ import { api, apiErrorMessage } from '../api/client';
 import { formatBytes, formatRelative, osLabel } from '../format';
 import { useJobStream } from '../hooks/useJobStream';
 import type {
+  Credential,
   Device,
   DeviceDetail as DeviceDetailData,
   Job,
   JobStatus,
   MetricSample,
   Patch,
+  Person,
   RemoteConfig,
   Script,
   Severity,
@@ -27,13 +29,14 @@ interface Props {
   onLogout: () => void;
 }
 
-type TabId = 'overview' | 'history' | 'inventory' | 'remote' | 'patches' | 'jobs';
-const TABS: { id: TabId; label: string }[] = [
+type TabId = 'overview' | 'history' | 'inventory' | 'remote' | 'patches' | 'passwords' | 'jobs';
+const TABS: { id: TabId; label: string; adminOnly?: boolean }[] = [
   { id: 'overview', label: 'Übersicht' },
   { id: 'history', label: 'Verlauf' },
   { id: 'inventory', label: 'Inventar' },
   { id: 'remote', label: 'Remote' },
   { id: 'patches', label: 'Updates' },
+  { id: 'passwords', label: 'Passwörter', adminOnly: true },
   { id: 'jobs', label: 'Aktivität' },
 ];
 
@@ -184,7 +187,7 @@ export function DeviceDetail({
       {error && <p className="err">{error}</p>}
 
       <div className="tabs">
-        {TABS.map((t) => (
+        {TABS.filter((t) => !t.adminOnly || isAdmin).map((t) => (
           <button key={t.id} className={tab === t.id ? 'tab active' : 'tab'} onClick={() => setTab(t.id)}>
             {t.label}
           </button>
@@ -200,6 +203,7 @@ export function DeviceDetail({
       {tab === 'inventory' && <InventoryTab detail={detail} />}
       {tab === 'remote' && <RemoteTab device={d} isAdmin={isAdmin} onSession={openRemoteSession} onChanged={() => void load()} />}
       {tab === 'patches' && <UpdatesTab deviceId={deviceId} connected={d.connected} isAdmin={isAdmin} />}
+      {tab === 'passwords' && isAdmin && <PasswordsTab deviceId={deviceId} />}
       {tab === 'jobs' && <JobsTab deviceId={deviceId} />}
     </div>
   );
@@ -211,11 +215,19 @@ export function DeviceDetail({
 function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClose: () => void; onSaved: () => void; onError: (m: string) => void }) {
   const [owner, setOwner] = useState(device.owner_label);
   const [tags, setTags] = useState(device.tags.join(', '));
+  const [personId, setPersonId] = useState<number>(device.person_id ?? 0);
+  const [persons, setPersons] = useState<Person[]>([]);
+
+  useEffect(() => {
+    api.persons().then((r) => setPersons(r.persons)).catch(() => {});
+  }, []);
+
   const save = async () => {
     try {
       await api.updateDevice(device.id, {
         owner_label: owner.trim(),
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+        person_id: personId,
       });
       onSaved();
     } catch (e) {
@@ -230,6 +242,15 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
         <input className="input" value={owner} onChange={(e) => setOwner(e.target.value)} />
       </div>
       <div className="field">
+        <span className="field-label">Zugewiesene Person</span>
+        <select className="input" value={personId} onChange={(e) => setPersonId(Number(e.target.value))}>
+          <option value={0}>— keine —</option>
+          {persons.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
         <span className="field-label">Tags (kommagetrennt)</span>
         <input className="input" value={tags} onChange={(e) => setTags(e.target.value)} />
       </div>
@@ -237,6 +258,190 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
         <button className="btn btn-primary" onClick={() => void save()}>Speichern</button>
         <button className="btn" onClick={onClose}>Abbrechen</button>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Passwords tab (admin-only; secrets fetched one at a time via reveal)
+// ---------------------------------------------------------------------------
+interface CredDraft {
+  id: number | null;
+  label: string;
+  username: string;
+  secret: string;
+  notes: string;
+}
+const EMPTY_CRED: CredDraft = { id: null, label: '', username: '', secret: '', notes: '' };
+
+function PasswordsTab({ deviceId }: { deviceId: number }) {
+  const [creds, setCreds] = useState<Credential[] | null>(null);
+  const [draft, setDraft] = useState<CredDraft | null>(null);
+  const [revealed, setRevealed] = useState<Record<number, string>>({});
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    (signal?: AbortSignal) =>
+      api
+        .credentials(deviceId, signal)
+        .then((r) => setCreds(r.credentials))
+        .catch((e) => {
+          if (!signal?.aborted) setError(apiErrorMessage(e));
+        }),
+    [deviceId],
+  );
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    void load(ctrl.signal);
+    return () => ctrl.abort();
+  }, [load]);
+
+  const save = async () => {
+    if (!draft) return;
+    setError(null);
+    try {
+      const body = {
+        label: draft.label.trim(),
+        username: draft.username.trim(),
+        notes: draft.notes.trim(),
+      };
+      if (draft.id === null) {
+        await api.createCredential(deviceId, { ...body, secret: draft.secret });
+      } else {
+        await api.updateCredential(deviceId, draft.id, {
+          ...body,
+          // Empty = keep the stored secret.
+          secret: draft.secret || undefined,
+        });
+        setRevealed((r) => {
+          const { [draft.id as number]: _drop, ...rest } = r;
+          return rest;
+        });
+      }
+      setDraft(null);
+      await load();
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    }
+  };
+
+  const reveal = async (id: number) => {
+    if (revealed[id] !== undefined) {
+      setRevealed((r) => {
+        const { [id]: _drop, ...rest } = r;
+        return rest;
+      });
+      return;
+    }
+    try {
+      const r = await api.revealCredential(deviceId, id);
+      setRevealed((prev) => ({ ...prev, [id]: r.secret }));
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    }
+  };
+
+  const copySecret = async (id: number) => {
+    try {
+      const secret = revealed[id] ?? (await api.revealCredential(deviceId, id)).secret;
+      await navigator.clipboard.writeText(secret);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1500);
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    }
+  };
+
+  const remove = async (id: number) => {
+    if (!confirm('Passwort-Eintrag wirklich löschen?')) return;
+    try {
+      await api.deleteCredential(deviceId, id);
+      await load();
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="row" style={{ gap: 8 }}>
+        <span className="card-title">Passwörter {creds ? `(${creds.length})` : ''}</span>
+        <span className="muted" style={{ fontSize: 11 }}>
+          verschlüsselt gespeichert · jedes Aufdecken landet im Audit-Log
+        </span>
+        {!draft && (
+          <button className="btn btn-primary btn-sm grow" style={{ marginLeft: 'auto' }} onClick={() => setDraft({ ...EMPTY_CRED })}>
+            + Neuer Eintrag
+          </button>
+        )}
+      </div>
+      {error && <p className="err">{error}</p>}
+
+      {draft && (
+        <div className="card card-pad" style={{ borderColor: 'var(--accLine)', display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <span className="card-title-sm">{draft.id === null ? 'Neuer Eintrag' : 'Eintrag bearbeiten'}</span>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <input className="input" style={{ flex: '1 1 150px' }} value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder="Bezeichnung, z. B. Windows-Login" autoFocus />
+            <input className="input" style={{ flex: '1 1 130px' }} value={draft.username} onChange={(e) => setDraft({ ...draft, username: e.target.value })} placeholder="Benutzername (optional)" />
+            <input
+              className="input"
+              style={{ flex: '1 1 160px' }}
+              type="password"
+              value={draft.secret}
+              onChange={(e) => setDraft({ ...draft, secret: e.target.value })}
+              placeholder={draft.id === null ? 'Passwort' : 'Neues Passwort (leer = unverändert)'}
+            />
+          </div>
+          <input className="input" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} placeholder="Notizen (optional)" />
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn btn-primary btn-sm" onClick={() => void save()} disabled={!draft.label.trim() || (draft.id === null && !draft.secret)}>
+              Speichern
+            </button>
+            <button className="btn btn-sm" onClick={() => setDraft(null)}>Abbrechen</button>
+          </div>
+        </div>
+      )}
+
+      {creds !== null && creds.length === 0 && !draft && (
+        <div className="empty">
+          <span style={{ fontSize: 22 }}>🔒</span>
+          <h2>Keine Passwörter hinterlegt</h2>
+          <p className="muted">Speichere Zugangsdaten dieses Geräts (Login, BIOS, Router-Webinterface, …).</p>
+        </div>
+      )}
+
+      {creds !== null && creds.length > 0 && (
+        <div className="card" style={{ overflow: 'hidden' }}>
+          {creds.map((c) => (
+            <div key={c.id} className="row" style={{ gap: 12, padding: '11px 16px', borderBottom: '1px solid var(--line2)', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700, fontSize: 12.5, minWidth: 140 }}>🔑 {c.label}</span>
+              <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx2)', minWidth: 110 }}>{c.username || '—'}</span>
+              <span className="mono" style={{ fontSize: 11.5, color: revealed[c.id] !== undefined ? 'var(--tx)' : 'var(--tx3)', flex: 1, minWidth: 120, wordBreak: 'break-all' }}>
+                {revealed[c.id] !== undefined ? revealed[c.id] : '••••••••'}
+              </span>
+              <span className="row" style={{ gap: 6, flex: 'none', marginLeft: 'auto' }}>
+                <button className="btn btn-sm" onClick={() => void reveal(c.id)}>
+                  {revealed[c.id] !== undefined ? 'Verbergen' : 'Aufdecken'}
+                </button>
+                <button className="btn btn-sm" onClick={() => void copySecret(c.id)}>
+                  {copiedId === c.id ? 'Kopiert ✓' : 'Kopieren'}
+                </button>
+                <button className="btn btn-sm" onClick={() => setDraft({ id: c.id, label: c.label, username: c.username, secret: '', notes: c.notes })}>
+                  Bearbeiten
+                </button>
+                <button className="btn btn-danger btn-sm" onClick={() => void remove(c.id)}>
+                  Löschen
+                </button>
+              </span>
+              {c.notes && (
+                <span className="muted" style={{ fontSize: 11, width: '100%' }}>{c.notes}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

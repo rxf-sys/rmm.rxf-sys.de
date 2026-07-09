@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
-import type { Alert, Device, PatchSummary } from '../types';
+import type { Alert, Device, PatchSummary, Person } from '../types';
 
 export interface Fleet {
   devices: Device[];
   alerts: Alert[];
   patchSummary: PatchSummary;
+  persons: Person[];
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -23,6 +24,7 @@ export function useFleet(): Fleet {
   const [devices, setDevices] = useState<Device[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [patchSummary, setPatchSummary] = useState<PatchSummary>({});
+  const [persons, setPersons] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,11 +33,13 @@ export function useFleet(): Fleet {
       api.devices(signal),
       api.alerts(signal),
       api.patchSummary(signal).catch(() => ({ summary: {} as PatchSummary })),
+      api.persons(signal).catch(() => ({ persons: [] as Person[] })),
     ])
-      .then(([d, a, p]) => {
+      .then(([d, a, p, pe]) => {
         setDevices(d.devices);
         setAlerts(a.alerts);
         setPatchSummary(p.summary);
+        setPersons(pe.persons);
         setError(null);
         setLoading(false);
       })
@@ -57,5 +61,5 @@ export function useFleet(): Fleet {
     };
   }, [load]);
 
-  return { devices, alerts, patchSummary, loading, error, refresh: () => void load() };
+  return { devices, alerts, patchSummary, persons, loading, error, refresh: () => void load() };
 }

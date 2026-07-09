@@ -28,6 +28,9 @@ async def _insert_device(
     *,
     last_seen_ago: int | None,
     disk_pct: float | None = None,
+    # The stock offline rule is scoped to the 'server' tag, so alert-engine
+    # tests default to server devices; pass tags="" for a plain client.
+    tags: str = "server",
 ) -> int:
     now = int(time.time())
     heartbeat = {}
@@ -35,13 +38,14 @@ async def _insert_device(
         heartbeat = {"disks": [{"mount": "/", "used_pct": disk_pct, "total_b": 1000}]}
     async with aiosqlite.connect(settings.storage_db_path) as db:
         cur = await db.execute(
-            "INSERT INTO devices (hostname, device_secret_hash, created_at, last_seen_at, heartbeat_json)"
-            " VALUES (?, 'x', ?, ?, ?)",
+            "INSERT INTO devices (hostname, device_secret_hash, created_at, last_seen_at,"
+            " heartbeat_json, tags) VALUES (?, 'x', ?, ?, ?, ?)",
             (
                 hostname,
                 now,
                 None if last_seen_ago is None else now - last_seen_ago,
                 json.dumps(heartbeat),
+                tags,
             ),
         )
         await db.commit()
@@ -186,3 +190,15 @@ async def test_ack_unknown_or_resolved_is_404(admin_client: AsyncClient, setting
     await _set_last_seen(settings, device_id, ago=5)
     await alerts.evaluate(settings, FakeNotifier())  # resolves the alert
     assert (await admin_client.post(f"/api/alerts/{alert['id']}/ack")).status_code == 404
+
+
+async def test_offline_rule_skips_untagged_clients(client: AsyncClient, settings: Settings):
+    """The stock offline rule is scoped to tag 'server' — a family laptop
+    being shut down must not page."""
+    await _insert_device(
+        settings, "mama-laptop", last_seen_ago=settings.offline_alert_after_s + 600, tags=""
+    )
+    notifier = FakeNotifier()
+    await alerts.evaluate(settings, notifier)
+    assert await alerts.list_recent() == []
+    assert notifier.calls == []

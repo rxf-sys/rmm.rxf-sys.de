@@ -4,11 +4,13 @@ import { deviceState, stateColor } from '../ui';
 export type PageId =
   | 'overview'
   | 'devices'
+  | 'persons'
   | 'alerts'
   | 'patches'
   | 'scripts'
   | 'automation'
-  | 'audit';
+  | 'audit'
+  | 'admin';
 
 interface NavDef {
   id: PageId;
@@ -20,11 +22,13 @@ interface NavDef {
 const NAV: NavDef[] = [
   { id: 'overview', label: 'Übersicht', icon: '◈' },
   { id: 'devices', label: 'Geräte', icon: '▤' },
+  { id: 'persons', label: 'Personen', icon: '◉' },
   { id: 'alerts', label: 'Alarme', icon: '◎' },
-  { id: 'patches', label: 'Patches', icon: '⛨' },
+  { id: 'patches', label: 'Patch-Management', icon: '⛨' },
   { id: 'scripts', label: 'Skripte', icon: '⌘' },
   { id: 'automation', label: 'Automatisierung', icon: '⟳' },
   { id: 'audit', label: 'Audit-Log', icon: '≡', adminOnly: true },
+  { id: 'admin', label: 'Administration', icon: '⚙', adminOnly: true },
 ];
 
 interface Props {
