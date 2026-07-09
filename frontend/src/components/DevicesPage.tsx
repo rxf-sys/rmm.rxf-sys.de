@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { formatRelative } from '../format';
 import { osShort } from '../ui';
-import type { Device, PatchSummary } from '../types';
+import type { Device, PatchSummary, Person } from '../types';
 import { Dot, Skeleton, deviceState, diskColor, stateColor } from '../ui';
 
 interface Props {
   devices: Device[];
   patchSummary: PatchSummary;
+  persons: Person[];
   loading: boolean;
   onOpenDevice: (id: number) => void;
 }
@@ -31,17 +32,22 @@ function Bar({ pct, color }: { pct: number; color: string }) {
   );
 }
 
-export function DevicesPage({ devices, patchSummary, loading, onOpenDevice }: Props) {
+export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDevice }: Props) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('alle');
+  const [personFilter, setPersonFilter] = useState<number | 'alle'>('alle');
+
+  const personName = (id: number | null) =>
+    id === null ? '' : (persons.find((p) => p.id === id)?.name ?? '');
 
   const shown = useMemo(() => {
     const query = q.trim().toLowerCase();
     return devices.filter((d) => {
       if (query) {
-        const hay = `${d.hostname} ${d.owner_label} ${d.tags.join(' ')}`.toLowerCase();
+        const hay = `${d.hostname} ${d.owner_label} ${personName(d.person_id)} ${d.tags.join(' ')}`.toLowerCase();
         if (!hay.includes(query)) return false;
       }
+      if (personFilter !== 'alle' && d.person_id !== personFilter) return false;
       const st = deviceState(d);
       switch (filter) {
         case 'server':
@@ -56,7 +62,8 @@ export function DevicesPage({ devices, patchSummary, loading, onOpenDevice }: Pr
           return true;
       }
     });
-  }, [devices, q, filter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devices, persons, q, filter, personFilter]);
 
   return (
     <div className="screen">
@@ -72,7 +79,7 @@ export function DevicesPage({ devices, patchSummary, loading, onOpenDevice }: Pr
         />
       </div>
 
-      <div className="row" style={{ gap: 7 }}>
+      <div className="row" style={{ gap: 7, flexWrap: 'wrap' }}>
         {FILTERS.map((f) => (
           <button
             key={f.id}
@@ -82,6 +89,21 @@ export function DevicesPage({ devices, patchSummary, loading, onOpenDevice }: Pr
             {f.label}
           </button>
         ))}
+        {persons.length > 0 && (
+          <select
+            className={personFilter === 'alle' ? 'input btn-sm' : 'input btn-sm accent-border'}
+            style={{ padding: '5px 9px', marginLeft: 4 }}
+            value={personFilter}
+            onChange={(e) => setPersonFilter(e.target.value === 'alle' ? 'alle' : Number(e.target.value))}
+          >
+            <option value="alle">◉ Alle Personen</option>
+            {persons.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="card" style={{ overflow: 'hidden' }}>
@@ -126,7 +148,9 @@ export function DevicesPage({ devices, patchSummary, loading, onOpenDevice }: Pr
                     <span className="name">{d.hostname}</span>
                     <span className="chip-mono">{osShort(d.os)}</span>
                   </span>
-                  <span style={{ color: 'var(--tx2)', fontWeight: 600 }}>{d.owner_label || '—'}</span>
+                  <span style={{ color: 'var(--tx2)', fontWeight: 600 }}>
+                    {personName(d.person_id) || d.owner_label || '—'}
+                  </span>
                   <span style={{ display: 'flex', gap: 4, overflow: 'hidden' }}>
                     {d.tags.slice(0, 2).map((t) => (
                       <span key={t} className="chip">

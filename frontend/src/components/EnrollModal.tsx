@@ -55,19 +55,47 @@ export function EnrollModal({ onClose }: Props) {
     }
   };
 
-  const installCmd = created
-    ? `rmm-agent enroll -server ${SERVER_HINT} -token ${created.token}`
+  const [platform, setPlatform] = useState<'windows' | 'linux' | 'darwin'>('windows');
+
+  // One-liners against the token-authenticated setup endpoints: download
+  // binary + enroll + service install in one paste. The token is only
+  // consumed by the enrollment itself.
+  const setupUrl = (p: string) =>
+    `${SERVER_HINT}/api/agent/setup/${p}?token=${created?.token ?? ''}${
+      created?.label ? `&label=${encodeURIComponent(created.label)}` : ''
+    }`;
+  const commands: Record<'windows' | 'linux' | 'darwin', { label: string; cmd: string; hint: string }> = {
+    windows: {
+      label: 'Windows',
+      cmd: `irm '${setupUrl('windows')}' | iex`,
+      hint: 'In einer PowerShell mit Administratorrechten ausführen.',
+    },
+    linux: {
+      label: 'Linux',
+      cmd: `curl -fsSL '${setupUrl('linux')}' | sudo bash`,
+      hint: 'Im Terminal ausführen (sudo).',
+    },
+    darwin: {
+      label: 'macOS',
+      cmd: `curl -fsSL '${setupUrl('darwin')}' | sudo bash`,
+      hint: 'Im Terminal ausführen (sudo).',
+    },
+  };
+  const installCmd = created ? commands[platform].cmd : '';
+  const downloadUrl = created
+    ? `${SERVER_HINT}/api/agent/setup/download/windows-amd64?token=${created.token}`
     : '';
 
-  const copyCmd = async () => {
+  const copyText = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(installCmd);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
       /* clipboard blocked — user can select manually */
     }
   };
+  const copyCmd = () => copyText(installCmd);
 
   return (
     <div className="overlay modal-wrap" onClick={onClose}>
@@ -107,18 +135,45 @@ export function EnrollModal({ onClose }: Props) {
         ) : (
           <>
             <span className="muted" style={{ lineHeight: 1.6 }}>
-              Token erzeugt{created.label ? ` für „${created.label}“` : ''}. Auf dem Zielgerät
-              ausführen — der Agent installiert sich anschließend als Dienst:
+              Token erzeugt{created.label ? ` für „${created.label}“` : ''}. Befehl auf dem
+              Zielgerät ausführen — er lädt den Agenten herunter, enrollt das Gerät und
+              installiert den Dienst:
             </span>
-            <pre className="pre-box">{installCmd}</pre>
-            <div className="row" style={{ gap: 8 }}>
+            <div className="row" style={{ gap: 6 }}>
+              {(Object.keys(commands) as ('windows' | 'linux' | 'darwin')[]).map((p) => (
+                <button
+                  key={p}
+                  className={platform === p ? 'btn btn-accent btn-sm' : 'btn btn-sm'}
+                  onClick={() => setPlatform(p)}
+                >
+                  {commands[p].label}
+                </button>
+              ))}
+            </div>
+            <pre className="pre-box" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{installCmd}</pre>
+            <span className="muted" style={{ fontSize: 11 }}>{commands[platform].hint}</span>
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
               <button className="btn btn-accent btn-sm" onClick={() => void copyCmd()}>
-                {copied ? 'Kopiert ✓' : 'Kopieren'}
+                {copied ? 'Kopiert ✓' : 'CLI-Befehl kopieren'}
               </button>
+              {platform === 'windows' && (
+                <>
+                  <a className="btn btn-sm" href={downloadUrl} download style={{ textDecoration: 'none' }}>
+                    ⬇ Windows-Agent herunterladen
+                  </a>
+                  <button className="btn btn-sm" onClick={() => void copyText(downloadUrl)}>
+                    Download-Link kopieren
+                  </button>
+                </>
+              )}
               <button className="btn btn-sm" onClick={() => setCreated(null)}>
                 Weiteres Token
               </button>
             </div>
+            <span className="muted" style={{ fontSize: 10.5 }}>
+              Voraussetzung: signierte Agent-Releases liegen auf dem Server (agent-releases/) —
+              sonst meldet der Download „kein Release hinterlegt".
+            </span>
             <span style={{ fontWeight: 600, fontSize: 11, color: 'var(--warn)' }}>
               ⚠ Das Token wird nur einmal angezeigt und ist {formatDateTime(created.expires_at)}{' '}
               gültig.

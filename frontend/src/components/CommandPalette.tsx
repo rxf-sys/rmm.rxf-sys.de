@@ -22,14 +22,16 @@ interface Props {
   onToggleTheme: () => void;
 }
 
-const PAGES: { id: PageId; label: string }[] = [
+const PAGES: { id: PageId; label: string; adminOnly?: boolean }[] = [
   { id: 'overview', label: 'Übersicht' },
   { id: 'devices', label: 'Geräte' },
+  { id: 'persons', label: 'Personen' },
   { id: 'alerts', label: 'Alarm-Center' },
   { id: 'patches', label: 'Patch-Management' },
   { id: 'scripts', label: 'Skript-Bibliothek' },
   { id: 'automation', label: 'Automatisierung' },
-  { id: 'audit', label: 'Audit-Log' },
+  { id: 'audit', label: 'Audit-Log', adminOnly: true },
+  { id: 'admin', label: 'Administration', adminOnly: true },
 ];
 
 export function CommandPalette({
@@ -49,6 +51,7 @@ export function CommandPalette({
     const out: Result[] = [];
 
     for (const p of PAGES) {
+      if (p.adminOnly && !isAdmin) continue;
       if (!query || p.label.toLowerCase().includes(query)) {
         out.push({
           id: `page-${p.id}`,

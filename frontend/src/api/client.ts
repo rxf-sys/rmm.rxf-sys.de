@@ -1,9 +1,10 @@
 import type {
   Account,
   Alert,
+  AlertRule,
   AuditEvent,
   AutomationConfig,
-  AutomationRules,
+  Credential,
   CreatedEnrollToken,
   Device,
   DeviceDetail,
@@ -13,6 +14,7 @@ import type {
   Patch,
   PatchSummary,
   PatchWindow,
+  Person,
   RemoteConfig,
   Script,
   Shell,
@@ -82,8 +84,45 @@ export const api = {
     get<{ samples: MetricSample[] }>(`/api/devices/${id}/history?hours=${hours}`, signal),
   alerts: (signal?: AbortSignal) => get<{ alerts: Alert[] }>('/api/alerts', signal),
   ackAlert: (id: number) => post<{ alert: Alert }>(`/api/alerts/${id}/ack`),
-  updateDevice: (id: number, body: { owner_label?: string; tags?: string[]; rustdesk_id?: string }) =>
-    patch<{ device: Device }>(`/api/devices/${id}`, body),
+  updateDevice: (
+    id: number,
+    body: { owner_label?: string; tags?: string[]; rustdesk_id?: string; person_id?: number },
+  ) => patch<{ device: Device }>(`/api/devices/${id}`, body),
+
+  // Persons
+  persons: (signal?: AbortSignal) => get<{ persons: Person[] }>('/api/persons', signal),
+  createPerson: (body: { name: string; email?: string; phone?: string; notes?: string }) =>
+    post<{ person: Person }>('/api/persons', body),
+  updatePerson: (id: number, body: { name: string; email?: string; phone?: string; notes?: string }) =>
+    send<{ person: Person }>('PUT', `/api/persons/${id}`, body),
+  deletePerson: (id: number) => del<{ ok: boolean }>(`/api/persons/${id}`),
+
+  // Credentials (admin-only; secrets only via reveal)
+  credentials: (deviceId: number, signal?: AbortSignal) =>
+    get<{ credentials: Credential[] }>(`/api/devices/${deviceId}/credentials`, signal),
+  createCredential: (
+    deviceId: number,
+    body: { label: string; username?: string; secret: string; notes?: string },
+  ) => post<{ credential: Credential }>(`/api/devices/${deviceId}/credentials`, body),
+  updateCredential: (
+    deviceId: number,
+    credId: number,
+    body: { label: string; username?: string; secret?: string; notes?: string },
+  ) => send<{ credential: Credential }>('PUT', `/api/devices/${deviceId}/credentials/${credId}`, body),
+  revealCredential: (deviceId: number, credId: number) =>
+    post<{ secret: string }>(`/api/devices/${deviceId}/credentials/${credId}/reveal`),
+  deleteCredential: (deviceId: number, credId: number) =>
+    del<{ ok: boolean }>(`/api/devices/${deviceId}/credentials/${credId}`),
+
+  // Accounts (admin panel)
+  accounts: (signal?: AbortSignal) => get<{ accounts: Account[] }>('/api/accounts', signal),
+  createAccount: (body: { username: string; password: string; role: string; email?: string }) =>
+    post<{ account: Account }>('/api/accounts', body),
+  updateAccount: (
+    id: number,
+    body: { role?: string; disabled?: boolean; password?: string; email?: string },
+  ) => patch<{ account: Account }>(`/api/accounts/${id}`, body),
+  deleteAccount: (id: number) => del<{ ok: boolean }>(`/api/accounts/${id}`),
   deleteDevice: (id: number) => del<{ ok: boolean }>(`/api/devices/${id}`),
 
   enrollTokens: (signal?: AbortSignal) =>
@@ -127,8 +166,26 @@ export const api = {
 
   // Automation
   automation: (signal?: AbortSignal) => get<AutomationConfig>('/api/automation', signal),
-  updateAutomation: (body: { rules: AutomationRules; patch_window: PatchWindow }) =>
+  updateAutomation: (body: { patch_window: PatchWindow }) =>
     send<AutomationConfig>('PUT', '/api/automation', body),
+  createRule: (body: {
+    type: string;
+    enabled?: boolean;
+    threshold?: number | null;
+    scope_kind?: string;
+    scope_value?: string;
+  }) => post<{ rule: AlertRule }>('/api/automation/rules', body),
+  updateRule: (
+    id: number,
+    body: {
+      type: string;
+      enabled: boolean;
+      threshold: number | null;
+      scope_kind: string;
+      scope_value: string;
+    },
+  ) => send<{ rule: AlertRule }>('PUT', `/api/automation/rules/${id}`, body),
+  deleteRule: (id: number) => del<{ ok: boolean }>(`/api/automation/rules/${id}`),
 
   // Remote desktop
   remoteConfig: (signal?: AbortSignal) => get<RemoteConfig>('/api/remote/config', signal),

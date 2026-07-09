@@ -218,6 +218,56 @@ async def set_password(user_id: int, new_password: str) -> None:
         await db.commit()
 
 
+async def update_user(
+    user_id: int,
+    *,
+    role: str | None = None,
+    disabled: bool | None = None,
+    email: str | None = None,
+) -> dict[str, Any] | None:
+    """Update role/disabled/email. Disabling also revokes every session of
+    the account, so an open browser tab is logged out on its next request."""
+    if role is not None and role not in ROLES:
+        raise AccountError(f"Ungültige Rolle: {role}")
+    sets: list[str] = []
+    params: list[Any] = []
+    if role is not None:
+        sets.append("role = ?")
+        params.append(role)
+    if disabled is not None:
+        sets.append("disabled = ?")
+        params.append(int(disabled))
+    if email is not None:
+        sets.append("email = ?")
+        params.append(email.strip() or None)
+    if sets:
+        params.append(user_id)
+        async with _connect() as db:
+            await db.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = ?", params)
+            if disabled:
+                await db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            await db.commit()
+    return await get_user_by_id(user_id)
+
+
+async def delete_user(user_id: int) -> bool:
+    """Hard-delete an account (sessions cascade). Audit rows keep the
+    username as text, so history stays readable."""
+    async with _connect() as db:
+        cur = await db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        await db.commit()
+        return (cur.rowcount or 0) > 0
+
+
+async def count_active_admins() -> int:
+    async with _connect() as db:
+        async with db.execute(
+            "SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled = 0"
+        ) as cur:
+            row = await cur.fetchone()
+            return int(row[0]) if row else 0
+
+
 # ---------------------------------------------------------------------------
 # Authentication + sessions
 # ---------------------------------------------------------------------------

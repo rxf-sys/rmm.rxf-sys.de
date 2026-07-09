@@ -40,6 +40,16 @@ CREATE TABLE IF NOT EXISTS automation (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS alert_rules (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    type        TEXT    NOT NULL,
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    threshold   INTEGER,
+    scope_kind  TEXT    NOT NULL DEFAULT 'all',
+    scope_value TEXT    NOT NULL DEFAULT '',
+    created_at  INTEGER NOT NULL
+);
 """
 
 _CONFIG_KEY = "config"
@@ -47,7 +57,6 @@ _LAST_RUN_KEY = "patch_window_last_run"
 
 # Weekday follows Python's time.localtime().tm_wday: 0 = Montag … 6 = Sonntag.
 DEFAULT_CONFIG: dict[str, Any] = {
-    "rules": {"offline": True, "disk": True, "patch_age": True},
     "patch_window": {
         "enabled": False,
         "weekday": 5,  # Samstag
@@ -56,6 +65,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "tag": "familie",
     },
 }
+
+RULE_TYPES = ("offline", "disk", "patch_age")
+SCOPE_KINDS = ("all", "tag", "person")
+
+# Higher wins when multiple rules of one type match a device.
+_SPECIFICITY = {"all": 1, "tag": 2, "person": 3}
 
 _db_path: str = ""
 
@@ -69,7 +84,42 @@ async def ensure_schema(settings: Settings) -> None:
     async with aiosqlite.connect(_db_path) as db:
         await db.executescript(_SCHEMA)
         await db.commit()
+    await _seed_default_rules()
     log.info("automation.ready", db=_db_path)
+
+
+async def _seed_default_rules() -> None:
+    """First start (or upgrade from the toggle-based config): create the
+    stock rule set. Offline pages only for devices tagged ``server`` —
+    a family laptop being shut down is normal life, not an incident.
+    Enabled flags from the legacy config are carried over."""
+    async with _connect() as db:
+        async with db.execute("SELECT COUNT(*) FROM alert_rules") as cur:
+            row = await cur.fetchone()
+    if row and int(row[0]) > 0:
+        return
+    legacy: dict[str, Any] = {}
+    raw = await _get_raw(_CONFIG_KEY)
+    if raw:
+        try:
+            legacy = json.loads(raw).get("rules") or {}
+        except (ValueError, TypeError, AttributeError):
+            legacy = {}
+    now = int(time.time())
+    seeds = [
+        ("offline", bool(legacy.get("offline", True)), "tag", "server"),
+        ("disk", bool(legacy.get("disk", True)), "all", ""),
+        ("patch_age", bool(legacy.get("patch_age", True)), "all", ""),
+    ]
+    async with _connect() as db:
+        for rule_type, enabled, scope_kind, scope_value in seeds:
+            await db.execute(
+                "INSERT INTO alert_rules (type, enabled, scope_kind, scope_value, created_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (rule_type, int(enabled), scope_kind, scope_value, now),
+            )
+        await db.commit()
+    log.info("automation.rules_seeded")
 
 
 @asynccontextmanager
@@ -99,9 +149,6 @@ def _merge_defaults(stored: dict[str, Any]) -> dict[str, Any]:
     """Overlay stored values onto the defaults so missing/new keys always
     resolve and stale keys disappear."""
     cfg = copy.deepcopy(DEFAULT_CONFIG)
-    for rule, on in (stored.get("rules") or {}).items():
-        if rule in cfg["rules"]:
-            cfg["rules"][rule] = bool(on)
     pw = stored.get("patch_window") or {}
     for key in cfg["patch_window"]:
         if key in pw:
@@ -129,6 +176,110 @@ async def set_config(cfg: dict[str, Any]) -> dict[str, Any]:
 async def patch_window_last_run() -> int | None:
     raw = await _get_raw(_LAST_RUN_KEY)
     return int(raw) if raw else None
+
+
+# ---------------------------------------------------------------------------
+# Alert rules (CRUD + scope matching)
+# ---------------------------------------------------------------------------
+
+
+def _row_to_rule(row: aiosqlite.Row) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "type": row["type"],
+        "enabled": bool(row["enabled"]),
+        "threshold": int(row["threshold"]) if row["threshold"] is not None else None,
+        "scope_kind": row["scope_kind"],
+        "scope_value": row["scope_value"],
+        "created_at": int(row["created_at"]),
+    }
+
+
+async def list_rules() -> list[dict[str, Any]]:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM alert_rules ORDER BY type, id") as cur:
+            return [_row_to_rule(r) for r in await cur.fetchall()]
+
+
+async def create_rule(
+    rule_type: str,
+    *,
+    enabled: bool = True,
+    threshold: int | None = None,
+    scope_kind: str = "all",
+    scope_value: str = "",
+) -> dict[str, Any]:
+    async with _connect() as db:
+        cur = await db.execute(
+            "INSERT INTO alert_rules (type, enabled, threshold, scope_kind, scope_value,"
+            " created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (rule_type, int(enabled), threshold, scope_kind, scope_value, int(time.time())),
+        )
+        await db.commit()
+        rule_id = int(cur.lastrowid or 0)
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM alert_rules WHERE id = ?", (rule_id,)) as sel:
+            row = await sel.fetchone()
+    assert row is not None
+    return _row_to_rule(row)
+
+
+async def update_rule(
+    rule_id: int,
+    *,
+    enabled: bool,
+    threshold: int | None,
+    scope_kind: str,
+    scope_value: str,
+) -> dict[str, Any] | None:
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE alert_rules SET enabled = ?, threshold = ?, scope_kind = ?, scope_value = ?"
+            " WHERE id = ?",
+            (int(enabled), threshold, scope_kind, scope_value, rule_id),
+        )
+        await db.commit()
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM alert_rules WHERE id = ?", (rule_id,)) as sel:
+            row = await sel.fetchone()
+    return _row_to_rule(row) if row else None
+
+
+async def delete_rule(rule_id: int) -> bool:
+    async with _connect() as db:
+        cur = await db.execute("DELETE FROM alert_rules WHERE id = ?", (rule_id,))
+        await db.commit()
+        return (cur.rowcount or 0) > 0
+
+
+def _rule_matches(rule: dict[str, Any], device: dict[str, Any]) -> bool:
+    kind = rule["scope_kind"]
+    if kind == "all":
+        return True
+    if kind == "tag":
+        return rule["scope_value"] in (device.get("tags") or [])
+    if kind == "person":
+        person_id = device.get("person_id")
+        return person_id is not None and str(person_id) == str(rule["scope_value"])
+    return False
+
+
+def effective_rule(
+    rules: list[dict[str, Any]], device: dict[str, Any], rule_type: str
+) -> dict[str, Any] | None:
+    """The rule that governs this device for a type, or None when no rule
+    matches (= rule removed for this device). The most specific scope wins
+    (person > tag > all); among equals the oldest rule. A disabled winner
+    still wins — that's how "keine Offline-Alarme für Mamas Laptop" works
+    even when a broader enabled rule exists."""
+    candidates = [
+        r for r in rules if r["type"] == rule_type and _rule_matches(r, device)
+    ]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda r: (-_SPECIFICITY.get(r["scope_kind"], 0), r["id"]))
+    return candidates[0]
 
 
 # ---------------------------------------------------------------------------

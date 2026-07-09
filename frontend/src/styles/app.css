@@ -1142,3 +1142,9 @@ textarea.input {
     display: none;
   }
 }
+
+/* Active filter chip (selects doubling as filter chips) */
+.accent-border {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}

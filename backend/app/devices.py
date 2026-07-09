@@ -97,6 +97,9 @@ async def _migrate_devices(db: aiosqlite.Connection) -> None:
     if "rustdesk_id" not in cols:
         await db.execute("ALTER TABLE devices ADD COLUMN rustdesk_id TEXT NOT NULL DEFAULT ''")
         log.info("devices.migrated", column="rustdesk_id")
+    if "person_id" not in cols:
+        await db.execute("ALTER TABLE devices ADD COLUMN person_id INTEGER")
+        log.info("devices.migrated", column="person_id")
 
 
 @asynccontextmanager
@@ -131,6 +134,11 @@ def _row_to_device(row: aiosqlite.Row, offline_after_s: int) -> dict[str, Any]:
         "tags": [t for t in str(row["tags"]).split(",") if t],
         "heartbeat": heartbeat if isinstance(heartbeat, dict) else {},
         "rustdesk_id": row["rustdesk_id"] if "rustdesk_id" in row.keys() else "",
+        "person_id": (
+            int(row["person_id"])
+            if "person_id" in row.keys() and row["person_id"] is not None
+            else None
+        ),
         "created_at": int(row["created_at"]),
         "last_seen_at": last_seen,
         "online": online,
@@ -203,6 +211,20 @@ async def cleanup_expired_enrollment_tokens() -> int:
 # ---------------------------------------------------------------------------
 # Enrollment + device auth
 # ---------------------------------------------------------------------------
+
+
+async def enrollment_token_valid(token: str) -> bool:
+    """True when the token exists, is unused and unexpired — WITHOUT
+    consuming it. Used by the setup-script endpoints, which are fetched
+    before the actual enrollment burns the token."""
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT expires_at, used_at FROM enrollment_tokens WHERE token_hash = ?",
+            (_hash_token(token),),
+        ) as cur:
+            row = await cur.fetchone()
+    return row is not None and row["used_at"] is None and int(row["expires_at"]) >= time.time()
 
 
 async def enroll_device(
@@ -370,6 +392,8 @@ async def update_device(
     owner_label: str | None = None,
     tags: list[str] | None = None,
     rustdesk_id: str | None = None,
+    person_id: int | None = None,
+    clear_person: bool = False,
 ) -> dict[str, Any] | None:
     sets: list[str] = []
     params: list[Any] = []
@@ -383,6 +407,11 @@ async def update_device(
     if rustdesk_id is not None:
         sets.append("rustdesk_id = ?")
         params.append(rustdesk_id.strip()[:40])
+    if clear_person:
+        sets.append("person_id = NULL")
+    elif person_id is not None:
+        sets.append("person_id = ?")
+        params.append(person_id)
     if sets:
         params.append(device_id)
         async with _connect() as db:

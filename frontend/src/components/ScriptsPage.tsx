@@ -18,12 +18,15 @@ interface Draft {
 
 const EMPTY: Draft = { id: null, name: '', shell: 'bash', content: '' };
 
-/** One script card with a "run on device" picker. Running creates a job and
- * jumps to that device's detail so the operator sees the live output. */
-function ScriptCard({
+/** One script list row, expandable to show the content + a "run on device"
+ * picker. Running creates a job and jumps to that device's detail so the
+ * operator sees the live output. */
+function ScriptRow({
   s,
   isAdmin,
   onlineDevices,
+  expanded,
+  onToggle,
   onEdit,
   onDelete,
   onOpenDevice,
@@ -32,6 +35,8 @@ function ScriptCard({
   s: Script;
   isAdmin: boolean;
   onlineDevices: Device[];
+  expanded: boolean;
+  onToggle: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onOpenDevice: (id: number) => void;
@@ -54,55 +59,73 @@ function ScriptCard({
   };
 
   return (
-    <div className="card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      <div className="row" style={{ gap: 9, padding: '12px 16px' }}>
-        <span className="card-title-sm">{s.name}</span>
+    <div style={{ borderBottom: '1px solid var(--line2)' }}>
+      <button
+        className="row"
+        style={{
+          gap: 10,
+          padding: '10px 16px',
+          width: '100%',
+          background: expanded ? 'var(--hover)' : 'none',
+          border: 'none',
+          cursor: 'pointer',
+          color: 'var(--tx)',
+          textAlign: 'left',
+        }}
+        onClick={onToggle}
+      >
+        <span style={{ color: 'var(--tx3)', fontSize: 10, width: 12 }}>{expanded ? '▾' : '▸'}</span>
+        <span style={{ fontWeight: 700, fontSize: 12.5 }}>{s.name}</span>
         <span className="badge badge-accent mono" style={{ fontSize: 9.5 }}>
           {s.shell}
         </span>
-        <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 10.5 }}>
+        <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 10.5, flex: 'none' }}>
           {s.updated_by} · {formatRelative(s.updated_at)}
         </span>
-      </div>
-      <pre
-        style={{
-          margin: 0,
-          padding: '11px 16px',
-          background: 'var(--console)',
-          color: '#8b95a5',
-          font: '400 11px var(--mono)',
-          maxHeight: 96,
-          overflow: 'hidden',
-          borderTop: '1px solid var(--consoleLine)',
-        }}
-      >
-        {s.content}
-      </pre>
-      {isAdmin && (
-        <div className="row" style={{ gap: 7, padding: '10px 16px', borderTop: '1px solid var(--line2)' }}>
-          <select
-            className="input btn-sm"
-            style={{ padding: '5px 8px' }}
-            value={target}
-            onChange={(e) => setTarget(e.target.value ? Number(e.target.value) : '')}
+      </button>
+      {expanded && (
+        <>
+          <pre
+            style={{
+              margin: 0,
+              padding: '11px 16px',
+              background: 'var(--console)',
+              color: '#8b95a5',
+              font: '400 11px var(--mono)',
+              maxHeight: 260,
+              overflow: 'auto',
+              borderTop: '1px solid var(--consoleLine)',
+            }}
           >
-            {onlineDevices.length === 0 && <option value="">kein Gerät online</option>}
-            {onlineDevices.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.hostname}
-              </option>
-            ))}
-          </select>
-          <button className="btn btn-accent btn-sm" onClick={() => void run()} disabled={busy || target === ''}>
-            ▶ Ausführen
-          </button>
-          <button className="btn btn-sm" onClick={onEdit}>
-            Bearbeiten
-          </button>
-          <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={onDelete}>
-            Löschen
-          </button>
-        </div>
+            {s.content}
+          </pre>
+          {isAdmin && (
+            <div className="row" style={{ gap: 7, padding: '10px 16px', borderTop: '1px solid var(--line2)' }}>
+              <select
+                className="input btn-sm"
+                style={{ padding: '5px 8px' }}
+                value={target}
+                onChange={(e) => setTarget(e.target.value ? Number(e.target.value) : '')}
+              >
+                {onlineDevices.length === 0 && <option value="">kein Gerät online</option>}
+                {onlineDevices.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.hostname}
+                  </option>
+                ))}
+              </select>
+              <button className="btn btn-accent btn-sm" onClick={() => void run()} disabled={busy || target === ''}>
+                ▶ Ausführen
+              </button>
+              <button className="btn btn-sm" onClick={onEdit}>
+                Bearbeiten
+              </button>
+              <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={onDelete}>
+                Löschen
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -112,6 +135,8 @@ export function ScriptsPage({ isAdmin, devices, onOpenDevice }: Props) {
   const [scripts, setScripts] = useState<Script[] | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [q, setQ] = useState('');
 
   const load = () =>
     api
@@ -154,6 +179,15 @@ export function ScriptsPage({ isAdmin, devices, onOpenDevice }: Props) {
       <div className="page-head center">
         <h1 className="page-title">Skript-Bibliothek</h1>
         <span className="muted">{scripts?.length ?? ''}</span>
+        {(scripts?.length ?? 0) > 5 && (
+          <input
+            className="input"
+            style={{ marginLeft: 12, width: 200, flex: 'none' }}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="⌕ Skript suchen…"
+          />
+        )}
         {isAdmin && !draft && (
           <button className="btn btn-primary grow" style={{ marginLeft: 'auto' }} onClick={() => setDraft({ ...EMPTY })}>
             + Neues Skript
@@ -213,19 +247,23 @@ export function ScriptsPage({ isAdmin, devices, onOpenDevice }: Props) {
       )}
 
       {scripts !== null && scripts.length > 0 && (
-        <div className="grid-2">
-          {scripts.map((s) => (
-            <ScriptCard
-              key={s.id}
-              s={s}
-              isAdmin={isAdmin}
-              onlineDevices={online}
-              onEdit={() => setDraft({ ...s })}
-              onDelete={() => void remove(s.id)}
-              onOpenDevice={onOpenDevice}
-              onError={setError}
-            />
-          ))}
+        <div className="card" style={{ overflow: 'hidden' }}>
+          {scripts
+            .filter((s) => !q.trim() || s.name.toLowerCase().includes(q.trim().toLowerCase()))
+            .map((s) => (
+              <ScriptRow
+                key={s.id}
+                s={s}
+                isAdmin={isAdmin}
+                onlineDevices={online}
+                expanded={expandedId === s.id}
+                onToggle={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                onEdit={() => setDraft({ ...s })}
+                onDelete={() => void remove(s.id)}
+                onOpenDevice={onOpenDevice}
+                onError={setError}
+              />
+            ))}
         </div>
       )}
     </div>

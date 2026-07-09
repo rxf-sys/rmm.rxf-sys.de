@@ -29,11 +29,32 @@ export interface Device {
   tags: string[];
   heartbeat: Heartbeat;
   rustdesk_id: string;
+  person_id: number | null;
   created_at: number;
   last_seen_at: number | null;
   online: boolean;
   /** Live WebSocket open right now (raw signal behind `online`). */
   connected: boolean;
+}
+
+export interface Person {
+  id: number;
+  name: string;
+  email: string;
+  phone: string;
+  notes: string;
+  created_at: number;
+  device_count: number;
+}
+
+export interface Credential {
+  id: number;
+  device_id: number;
+  label: string;
+  username: string;
+  notes: string;
+  updated_by: string;
+  updated_at: number;
 }
 
 export interface RemoteConfig {
@@ -75,10 +96,18 @@ export interface Alert {
   acked_by: string;
 }
 
-export interface AutomationRules {
-  offline: boolean;
-  disk: boolean;
-  patch_age: boolean;
+export type RuleType = 'offline' | 'disk' | 'patch_age';
+export type ScopeKind = 'all' | 'tag' | 'person';
+
+export interface AlertRule {
+  id: number;
+  type: RuleType;
+  enabled: boolean;
+  /** null = server default (offline: Sekunden, disk: %, patch_age: Tage). */
+  threshold: number | null;
+  scope_kind: ScopeKind;
+  scope_value: string;
+  created_at: number;
 }
 
 export interface PatchWindow {
@@ -92,7 +121,7 @@ export interface PatchWindow {
 }
 
 export interface AutomationConfig {
-  rules: AutomationRules;
+  rules: AlertRule[];
   patch_window: PatchWindow;
   patch_window_last_run: number | null;
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AdminPage } from './components/AdminPage';
 import { AlertsPage } from './components/AlertsPage';
 import { AuditPage } from './components/AuditPage';
 import { AutomationPage } from './components/AutomationPage';
@@ -10,6 +11,7 @@ import { Header } from './components/Header';
 import { LoginPage } from './components/LoginPage';
 import { OverviewPage } from './components/OverviewPage';
 import { PatchesPage } from './components/PatchesPage';
+import { PersonsPage } from './components/PersonsPage';
 import { ScriptsPage } from './components/ScriptsPage';
 import { Sidebar, type PageId } from './components/Sidebar';
 import { useAuth } from './hooks/useAuth';
@@ -19,11 +21,13 @@ import { useTheme } from './hooks/useTheme';
 const PAGE_LABEL: Record<PageId, string> = {
   overview: 'Übersicht',
   devices: 'Geräte',
+  persons: 'Personen',
   alerts: 'Alarm-Center',
-  patches: 'Patches',
+  patches: 'Patch-Management',
   scripts: 'Skripte',
   automation: 'Automatisierung',
   audit: 'Audit-Log',
+  admin: 'Administration',
 };
 
 const FAV_KEY = 'vektor-favorites';
@@ -146,8 +150,17 @@ export default function App() {
             <DevicesPage
               devices={fleet.devices}
               patchSummary={fleet.patchSummary}
+              persons={fleet.persons}
               loading={fleet.loading}
               onOpenDevice={openDevice}
+            />
+          ) : page === 'persons' ? (
+            <PersonsPage
+              persons={fleet.persons}
+              devices={fleet.devices}
+              isAdmin={isAdmin}
+              onOpenDevice={openDevice}
+              onRefresh={fleet.refresh}
             />
           ) : page === 'alerts' ? (
             <AlertsPage
@@ -160,12 +173,15 @@ export default function App() {
             <PatchesPage
               devices={fleet.devices}
               patchSummary={fleet.patchSummary}
+              persons={fleet.persons}
               onOpenDevice={openDevice}
             />
           ) : page === 'scripts' ? (
             <ScriptsPage isAdmin={isAdmin} devices={fleet.devices} onOpenDevice={openDevice} />
           ) : page === 'automation' ? (
-            <AutomationPage devices={fleet.devices} isAdmin={isAdmin} />
+            <AutomationPage devices={fleet.devices} persons={fleet.persons} isAdmin={isAdmin} />
+          ) : page === 'admin' ? (
+            <AdminPage currentUser={user} />
           ) : (
             <AuditPage />
           )}

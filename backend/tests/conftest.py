@@ -9,10 +9,12 @@ from app import (
     alerts,
     audit,
     automation,
+    credentials,
     devices,
     jobs,
     metrics,
     patches,
+    persons,
     releases,
     scripts,
 )
@@ -51,6 +53,8 @@ async def client(settings: Settings):
     await scripts.ensure_schema(settings)
     await patches.ensure_schema(settings)
     await automation.ensure_schema(settings)
+    await persons.ensure_schema(settings)
+    await credentials.ensure_schema(settings)
     await audit.clear()
     jobs.hub.reset_for_tests()
     releases.reset_for_tests(None, "")
