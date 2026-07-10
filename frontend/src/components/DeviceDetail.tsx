@@ -22,6 +22,7 @@ import { Dot, deviceState, diskColor, stateColor } from '../ui';
 interface Props {
   deviceId: number;
   isAdmin: boolean;
+  isOperator: boolean;
   favorite: boolean;
   onToggleFavorite: () => void;
   onBack: () => void;
@@ -72,6 +73,7 @@ function sevBadge(s: Severity): string {
 export function DeviceDetail({
   deviceId,
   isAdmin,
+  isOperator,
   favorite,
   onToggleFavorite,
   onBack,
@@ -169,12 +171,12 @@ export function DeviceDetail({
               <button className="palette-item" onClick={() => { onToggleFavorite(); setMenuOpen(false); }}>
                 {favorite ? '★ Favorit entfernen' : '☆ Zu Favoriten'}
               </button>
-              {isAdmin && (
+              {isOperator && (
                 <button className="palette-item" onClick={() => { setEditing(true); setMenuOpen(false); }}>
                   Bearbeiten
                 </button>
               )}
-              {isAdmin && (
+              {isOperator && (
                 <button className="palette-item" style={{ color: 'var(--danger)' }} onClick={() => { setMenuOpen(false); void remove(); }}>
                   Entfernen
                 </button>
@@ -194,15 +196,15 @@ export function DeviceDetail({
         ))}
       </div>
 
-      {editing && isAdmin && (
+      {editing && isOperator && (
         <EditCard device={d} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void load(); }} onError={setError} />
       )}
 
       {tab === 'overview' && <OverviewTab detail={detail} onGoTab={setTab} />}
       {tab === 'history' && <HistoryTab deviceId={deviceId} />}
       {tab === 'inventory' && <InventoryTab detail={detail} />}
-      {tab === 'remote' && <RemoteTab device={d} isAdmin={isAdmin} onSession={openRemoteSession} onChanged={() => void load()} />}
-      {tab === 'patches' && <UpdatesTab deviceId={deviceId} connected={d.connected} isAdmin={isAdmin} />}
+      {tab === 'remote' && <RemoteTab device={d} isOperator={isOperator} onSession={openRemoteSession} onChanged={() => void load()} />}
+      {tab === 'patches' && <UpdatesTab deviceId={deviceId} connected={d.connected} isOperator={isOperator} />}
       {tab === 'passwords' && isAdmin && <PasswordsTab deviceId={deviceId} />}
       {tab === 'jobs' && <JobsTab deviceId={deviceId} />}
     </div>
@@ -676,7 +678,7 @@ function InventoryTab({ detail }: { detail: DeviceDetailData }) {
 // ---------------------------------------------------------------------------
 // Remote tab (terminal + scripts)
 // ---------------------------------------------------------------------------
-function RemoteTab({ device, isAdmin, onSession, onChanged }: { device: Device; isAdmin: boolean; onSession: () => void; onChanged: () => void }) {
+function RemoteTab({ device, isOperator, onSession, onChanged }: { device: Device; isOperator: boolean; onSession: () => void; onChanged: () => void }) {
   const [scripts, setScripts] = useState<Script[]>([]);
   const [command, setCommand] = useState('');
   const [shell, setShell] = useState<Shell>(device.os === 'windows' ? 'powershell' : 'bash');
@@ -711,7 +713,7 @@ function RemoteTab({ device, isAdmin, onSession, onChanged }: { device: Device; 
     }
   };
 
-  if (!isAdmin) return <div className="card card-pad muted">Remote-Aktionen sind Administratoren vorbehalten.</div>;
+  if (!isOperator) return <div className="card card-pad muted">Remote-Aktionen sind Administratoren und Technikern vorbehalten.</div>;
 
   const connBadge = device.connected ? { label: 'verbunden', cls: 'badge-ok' } : { label: 'getrennt', cls: 'badge-danger' };
 
@@ -828,7 +830,7 @@ function RemoteSetup({ device, onChanged }: { device: Device; onChanged: () => v
 // ---------------------------------------------------------------------------
 // Updates tab (patches)
 // ---------------------------------------------------------------------------
-function UpdatesTab({ deviceId, connected, isAdmin }: { deviceId: number; connected: boolean; isAdmin: boolean }) {
+function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; connected: boolean; isOperator: boolean }) {
   const [patches, setPatches] = useState<Patch[] | null>(null);
   const [installingJob, setInstallingJob] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -880,7 +882,7 @@ function UpdatesTab({ deviceId, connected, isAdmin }: { deviceId: number; connec
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="row" style={{ gap: 8 }}>
         <span className="card-title">Updates {patches ? `(${patches.length})` : ''}</span>
-        {isAdmin && (
+        {isOperator && (
           <div className="row grow" style={{ marginLeft: 'auto', gap: 8 }}>
             <button className="btn btn-sm" onClick={() => void scan()} disabled={busy || !connected}>⟳ Scannen</button>
             {security > 0 && <button className="btn btn-warn btn-sm" onClick={() => void install(true)} disabled={busy || running || !connected}>Nur Sicherheit ({security})</button>}

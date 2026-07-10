@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from .. import devices
 from ..audit import record as audit_record
-from ..auth import require_admin, verify_session
+from ..auth import require_operator, verify_session
 from ..config import Settings, get_settings
 
 router = APIRouter(prefix="/api/remote", tags=["remote"])
@@ -60,7 +60,7 @@ async def remote_config(
 @router.get("/devices/{device_id}/session")
 async def remote_session(
     device_id: int,
-    user: dict = Depends(require_admin),
+    user: dict = Depends(require_operator),
     settings: Settings = Depends(get_settings),
 ) -> dict:
     if not settings.rustdesk_relay_host:

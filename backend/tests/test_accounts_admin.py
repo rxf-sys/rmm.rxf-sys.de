@@ -123,3 +123,35 @@ async def test_disable_revokes_sessions(admin_client: AsyncClient, client: Async
 
     await accounts.update_user(account["id"], disabled=True)
     assert (await client.get("/api/auth/me")).status_code == 401
+
+
+async def test_techniker_role_rights(admin_client: AsyncClient):
+    """Techniker: hands-on device work yes, system administration no."""
+    r = await admin_client.post(
+        "/api/accounts",
+        json={"username": "tech", "password": "techniker-pw", "role": "techniker"},
+    )
+    assert r.status_code == 200 and r.json()["account"]["role"] == "techniker"
+
+    await admin_client.post(
+        "/api/auth/login", json={"username": "tech", "password": "techniker-pw"}
+    )
+
+    # Allowed: enrollment tokens, scripts, device edits.
+    assert (
+        await admin_client.post("/api/devices/enroll-tokens", json={"label": "t"})
+    ).status_code == 200
+    assert (
+        await admin_client.post(
+            "/api/scripts", json={"name": "s", "shell": "bash", "content": "true"}
+        )
+    ).status_code == 200
+
+    # Forbidden: accounts, audit, automation writes, persons writes, credentials.
+    assert (await admin_client.get("/api/accounts")).status_code == 403
+    assert (await admin_client.get("/api/audit")).status_code == 403
+    assert (
+        await admin_client.post("/api/automation/rules", json={"type": "disk"})
+    ).status_code == 403
+    assert (await admin_client.post("/api/persons", json={"name": "X"})).status_code == 403
+    assert (await admin_client.get("/api/devices/1/credentials")).status_code == 403

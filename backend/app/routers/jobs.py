@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from .. import accounts, devices, jobs, scripts
 from ..agents_ws import manager
 from ..audit import record as audit_record
-from ..auth import require_admin, verify_session
+from ..auth import require_operator, verify_session
 from ..config import Settings, get_settings
 
 log = structlog.get_logger("jobs_api")
@@ -48,7 +48,7 @@ async def _dispatch(job: dict) -> dict:
 async def create_job(
     device_id: int,
     body: CreateJobRequest,
-    user: dict = Depends(require_admin),
+    user: dict = Depends(require_operator),
     settings: Settings = Depends(get_settings),
 ) -> dict:
     if await devices.get_device(device_id, settings.offline_after_s) is None:

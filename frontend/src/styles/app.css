@@ -734,6 +734,16 @@ h1.page-title {
 }
 select.input {
   cursor: pointer;
+  /* Solid background: the translucent --input token washes out over the
+     native popup, and some browsers paint the option list with the page's
+     text color on an OS-default (light) background. */
+  background-color: var(--panel);
+}
+select.input option,
+select.input optgroup {
+  background-color: var(--panel);
+  color: var(--tx);
+  font-weight: 600;
 }
 .field {
   display: flex;

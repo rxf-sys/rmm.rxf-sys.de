@@ -88,6 +88,8 @@ export default function App() {
   if (status === 'anon' || !user) return <LoginPage onLogin={login} />;
 
   const isAdmin = user.role === 'admin';
+  // Techniker: hands-on device work (jobs, scripts, patches, remote, enrollment).
+  const isOperator = isAdmin || user.role === 'techniker';
   const goPage = (p: PageId) => {
     setPage(p);
     setDetailId(null);
@@ -119,13 +121,14 @@ export default function App() {
         onOpenDevice={openDevice}
         theme={theme}
         onToggleTheme={toggleTheme}
+        onLogout={() => void logout()}
       />
       <div className="main">
         <Header
           crumbPre={crumbPre}
           crumbCur={crumbCur}
           openAlerts={openAlerts}
-          isAdmin={isAdmin}
+          canEnroll={isOperator}
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenAlerts={() => goPage('alerts')}
           onOpenEnroll={() => setEnrollOpen(true)}
@@ -135,6 +138,7 @@ export default function App() {
             <DeviceDetail
               deviceId={detailId}
               isAdmin={isAdmin}
+              isOperator={isOperator}
               favorite={favorites.includes(detailId)}
               onToggleFavorite={() => toggleFavorite(detailId)}
               onBack={() => setDetailId(null)}
@@ -177,7 +181,7 @@ export default function App() {
               onOpenDevice={openDevice}
             />
           ) : page === 'scripts' ? (
-            <ScriptsPage isAdmin={isAdmin} devices={fleet.devices} onOpenDevice={openDevice} />
+            <ScriptsPage canManage={isOperator} devices={fleet.devices} onOpenDevice={openDevice} />
           ) : page === 'automation' ? (
             <AutomationPage devices={fleet.devices} persons={fleet.persons} isAdmin={isAdmin} />
           ) : page === 'admin' ? (
@@ -192,6 +196,7 @@ export default function App() {
         <CommandPalette
           devices={fleet.devices}
           isAdmin={isAdmin}
+          canEnroll={isOperator}
           onClose={() => setPaletteOpen(false)}
           onNavigate={goPage}
           onOpenDevice={openDevice}

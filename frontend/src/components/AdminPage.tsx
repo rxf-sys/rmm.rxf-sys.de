@@ -10,7 +10,7 @@ interface Props {
 interface Draft {
   username: string;
   password: string;
-  role: 'admin' | 'viewer';
+  role: 'admin' | 'techniker' | 'viewer';
   email: string;
 }
 
@@ -108,9 +108,10 @@ export function AdminPage({ currentUser }: Props) {
             <select
               className="input"
               value={draft.role}
-              onChange={(e) => setDraft({ ...draft, role: e.target.value as 'admin' | 'viewer' })}
+              onChange={(e) => setDraft({ ...draft, role: e.target.value as 'admin' | 'techniker' | 'viewer' })}
             >
               <option value="viewer">Betrachter</option>
+              <option value="techniker">Techniker</option>
               <option value="admin">Administrator</option>
             </select>
             <input
@@ -178,6 +179,7 @@ export function AdminPage({ currentUser }: Props) {
                       onChange={(e) => void run(() => api.updateAccount(a.id, { role: e.target.value }))}
                     >
                       <option value="viewer">Betrachter</option>
+                      <option value="techniker">Techniker</option>
                       <option value="admin">Admin</option>
                     </select>
                   </span>

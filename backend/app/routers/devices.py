@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from .. import credentials, devices, jobs, metrics, patches, persons
 from ..agents_ws import manager
 from ..audit import record as audit_record
-from ..auth import require_admin, verify_session
+from ..auth import require_operator, verify_session
 from ..config import Settings, get_settings
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
@@ -50,7 +50,7 @@ class CreateTokenRequest(BaseModel):
 @router.post("/enroll-tokens")
 async def create_enroll_token(
     body: CreateTokenRequest,
-    user: dict = Depends(require_admin),
+    user: dict = Depends(require_operator),
     settings: Settings = Depends(get_settings),
 ) -> dict:
     ttl = body.ttl_hours or settings.enrollment_token_ttl_hours
@@ -61,12 +61,12 @@ async def create_enroll_token(
 
 
 @router.get("/enroll-tokens")
-async def list_enroll_tokens(user: dict = Depends(require_admin)) -> dict:
+async def list_enroll_tokens(user: dict = Depends(require_operator)) -> dict:
     return {"tokens": await devices.list_open_enrollment_tokens()}
 
 
 @router.delete("/enroll-tokens/{token_id}")
-async def delete_enroll_token(token_id: int, user: dict = Depends(require_admin)) -> dict:
+async def delete_enroll_token(token_id: int, user: dict = Depends(require_operator)) -> dict:
     if not await devices.delete_enrollment_token(token_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token nicht gefunden")
     await audit_record("devices.token_deleted", user=user["username"], token_id=token_id)
@@ -116,7 +116,7 @@ class UpdateDeviceRequest(BaseModel):
 async def update_device(
     device_id: int,
     body: UpdateDeviceRequest,
-    user: dict = Depends(require_admin),
+    user: dict = Depends(require_operator),
     settings: Settings = Depends(get_settings),
 ) -> dict:
     if body.person_id:
@@ -139,7 +139,7 @@ async def update_device(
 
 
 @router.delete("/{device_id}")
-async def delete_device(device_id: int, user: dict = Depends(require_admin)) -> dict:
+async def delete_device(device_id: int, user: dict = Depends(require_operator)) -> dict:
     # Kill the live socket first so a connected agent can't keep reporting
     # into a row that's about to disappear; its reconnect then fails auth.
     await manager.disconnect(device_id)
