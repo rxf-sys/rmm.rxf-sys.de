@@ -33,6 +33,8 @@ class UpdateAccountRequest(BaseModel):
     # Set to reset the password; omit to leave it unchanged.
     password: str | None = Field(default=None, min_length=MIN_PASSWORD_LEN, max_length=256)
     email: str | None = Field(default=None, max_length=200)
+    # True removes the user's second factor + backup codes (lost phone).
+    reset_totp: bool = False
 
 
 async def _target_or_404(user_id: int) -> dict:
@@ -96,6 +98,12 @@ async def update_account(
         await accounts.set_password(user_id, body.password)
         await audit_record(
             "account.password_reset", user=user["username"], username=target["username"]
+        )
+    if body.reset_totp:
+        await accounts.clear_totp(user_id)
+        updated = await accounts.get_user_by_id(user_id)
+        await audit_record(
+            "account.totp_reset", user=user["username"], username=target["username"]
         )
     await audit_record(
         "account.updated",

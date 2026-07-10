@@ -223,3 +223,42 @@ async def test_device_alert_history(admin_client: AsyncClient, settings: Setting
     body = r.json()
     assert len(body["alerts"]) == 1
     assert body["stats"]["total"] == 1 and body["stats"]["open"] == 1
+
+
+async def test_backup_codes_and_admin_reset(admin_client: AsyncClient, client: AsyncClient):
+    from app import accounts
+
+    # Enable 2FA → backup codes come back exactly once.
+    setup = (await admin_client.post("/api/auth/totp/setup")).json()
+    code = pyotp.TOTP(setup["secret"]).now()
+    r = await admin_client.post(
+        "/api/auth/totp/confirm", json={"secret": setup["secret"], "code": code}
+    )
+    assert r.status_code == 200
+    codes = r.json()["backup_codes"]
+    assert len(codes) == accounts.BACKUP_CODE_COUNT
+
+    # Login with a backup code instead of the TOTP works — once.
+    r = await client.post(
+        "/api/auth/login",
+        json={"username": "boss", "password": "super-secret-pw", "totp_code": codes[0]},
+    )
+    assert r.status_code == 200
+    r = await client.post(
+        "/api/auth/login",
+        json={"username": "boss", "password": "super-secret-pw", "totp_code": codes[0]},
+    )
+    assert r.status_code == 401  # burned
+
+    # Admin resets another user's 2FA (lost phone).
+    other = (
+        await admin_client.post(
+            "/api/accounts",
+            json={"username": "mama", "password": "familie-pw-1", "role": "viewer"},
+        )
+    ).json()["account"]
+    await accounts.set_totp_secret(other["id"], setup["secret"])
+    assert (await accounts.get_totp_secret(other["id"])) is not None
+    r = await admin_client.patch(f"/api/accounts/{other['id']}", json={"reset_totp": True})
+    assert r.status_code == 200 and r.json()["account"]["totp_enabled"] is False
+    assert await accounts.get_totp_secret(other["id"]) is None

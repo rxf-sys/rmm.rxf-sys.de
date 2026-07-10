@@ -196,6 +196,19 @@ export function AdminPage({ currentUser }: Props) {
                     <button className="btn btn-sm" onClick={() => { setResetFor(a.id); setResetPw(''); }}>
                       Passwort
                     </button>
+                    {a.totp_enabled && (
+                      <button
+                        className="btn btn-sm"
+                        title="Zweitfaktor + Backup-Codes entfernen (verlorenes Handy)"
+                        onClick={() => {
+                          if (confirm(`2FA für „${a.username}" wirklich zurücksetzen?`)) {
+                            void run(() => api.updateAccount(a.id, { reset_totp: true }));
+                          }
+                        }}
+                      >
+                        2FA zurücksetzen
+                      </button>
+                    )}
                     {!self && (
                       <>
                         <button

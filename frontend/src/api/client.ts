@@ -89,7 +89,7 @@ export const api = {
   // Two-factor (TOTP)
   totpSetup: () => post<{ secret: string; otpauth_uri: string }>('/api/auth/totp/setup'),
   totpConfirm: (secret: string, code: string) =>
-    post<{ ok: boolean }>('/api/auth/totp/confirm', { secret, code }),
+    post<{ ok: boolean; backup_codes: string[] }>('/api/auth/totp/confirm', { secret, code }),
   totpDisable: (code: string) => post<{ ok: boolean }>('/api/auth/totp/disable', { code }),
 
   // Sessions
@@ -157,7 +157,7 @@ export const api = {
     post<{ account: Account }>('/api/accounts', body),
   updateAccount: (
     id: number,
-    body: { role?: string; disabled?: boolean; password?: string; email?: string },
+    body: { role?: string; disabled?: boolean; password?: string; email?: string; reset_totp?: boolean },
   ) => patch<{ account: Account }>(`/api/accounts/${id}`, body),
   deleteAccount: (id: number) => del<{ ok: boolean }>(`/api/accounts/${id}`),
   deleteDevice: (id: number) => del<{ ok: boolean }>(`/api/devices/${id}`),

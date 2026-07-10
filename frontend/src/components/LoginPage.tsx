@@ -73,11 +73,11 @@ export function LoginPage({ onLogin }: Props) {
         </div>
         {needTotp && (
           <div className="field">
-            <span className="field-label">2FA-Code (aus deiner Authenticator-App)</span>
+            <span className="field-label">2FA-Code (Authenticator-App oder Backup-Code)</span>
             <input
               className="input mono"
               value={totpCode}
-              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onChange={(e) => setTotpCode(e.target.value.slice(0, 12))}
               inputMode="numeric"
               placeholder="123456"
               autoFocus
