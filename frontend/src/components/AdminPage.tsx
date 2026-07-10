@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { formatRelative } from '../format';
 import type { Account } from '../types';
+import { AdminExtras } from './AdminExtras';
 
 interface Props {
   currentUser: Account;
@@ -68,7 +69,7 @@ export function AdminPage({ currentUser }: Props) {
     <div className="screen">
       <div className="page-head center">
         <h1 className="page-title">Administration</h1>
-        <span className="muted">Benutzerverwaltung</span>
+        <span className="muted">Benutzer, Sicherheit &amp; Benachrichtigungen</span>
         {!draft && (
           <button
             className="btn btn-primary grow"
@@ -222,6 +223,8 @@ export function AdminPage({ currentUser }: Props) {
           )}
         </div>
       </div>
+
+      <AdminExtras currentUser={currentUser} />
 
       {resetFor !== null && (
         <div className="overlay modal-wrap" onClick={() => setResetFor(null)}>

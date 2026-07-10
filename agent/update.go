@@ -26,9 +26,9 @@ var updatePublicKey = "REPLACE_WITH_YOUR_ED25519_PUBLIC_KEY_BASE64"
 // updateSpec is the payload the server sends when a newer agent is available.
 type updateSpec struct {
 	Version string `json:"version"`
-	URL     string `json:"url"`     // relative to the server base, device-authenticated
-	SHA256  string `json:"sha256"`  // hex, integrity check before signature
-	Sig     string `json:"sig"`     // base64 ed25519 signature over the raw binary
+	URL     string `json:"url"`    // relative to the server base, device-authenticated
+	SHA256  string `json:"sha256"` // hex, integrity check before signature
+	Sig     string `json:"sig"`    // base64 ed25519 signature over the raw binary
 }
 
 // verifyPayload checks a downloaded binary against its expected sha256 and

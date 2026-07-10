@@ -6,6 +6,7 @@ interface Props {
   onOpenPalette: () => void;
   onOpenAlerts: () => void;
   onOpenEnroll: () => void;
+  onToggleNav: () => void;
 }
 
 export function Header({
@@ -16,9 +17,13 @@ export function Header({
   onOpenPalette,
   onOpenAlerts,
   onOpenEnroll,
+  onToggleNav,
 }: Props) {
   return (
     <div className="header">
+      <button className="btn-icon burger" title="Menü" aria-label="Menü" onClick={onToggleNav}>
+        ☰
+      </button>
       <span className="crumb">
         {crumbPre}
         <span className="cur">{crumbCur}</span>

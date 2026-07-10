@@ -8,6 +8,7 @@ export interface Account {
   disabled: boolean;
   created_at: number;
   last_login_at: number | null;
+  totp_enabled?: boolean;
 }
 
 export interface Heartbeat {
@@ -30,6 +31,8 @@ export interface Device {
   heartbeat: Heartbeat;
   rustdesk_id: string;
   person_id: number | null;
+  /** Unix ts while an alert-suppression window is open, else null. */
+  maintenance_until: number | null;
   created_at: number;
   last_seen_at: number | null;
   online: boolean;
@@ -120,10 +123,53 @@ export interface PatchWindow {
   tag: string;
 }
 
+export interface ScriptSchedule {
+  id: number;
+  script_id: number;
+  enabled: boolean;
+  /** 0-6, or null = every day. */
+  weekday: number | null;
+  hour: number;
+  scope_kind: ScopeKind;
+  scope_value: string;
+  last_run: number | null;
+  created_at: number;
+}
+
 export interface AutomationConfig {
   rules: AlertRule[];
+  schedules: ScriptSchedule[];
   patch_window: PatchWindow;
   patch_window_last_run: number | null;
+}
+
+export interface NtfyConfig {
+  base: string;
+  topic: string;
+  has_token: boolean;
+  source: 'ui' | 'env' | 'none';
+}
+
+export interface SessionInfo {
+  token_prefix: string;
+  created_at: number;
+  expires_at: number;
+  last_seen_at: number;
+  current: boolean;
+}
+
+export interface AlertStats {
+  days: number;
+  by_rule: Record<string, number>;
+  total: number;
+  open: number;
+}
+
+export interface InventoryMatch {
+  device_id: number;
+  hostname: string;
+  name: string;
+  version: string;
 }
 
 export interface EnrollToken {

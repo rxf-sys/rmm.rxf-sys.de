@@ -95,6 +95,21 @@ ln -sf /opt/rxf-rmm/infrastructure/backup.sh /etc/cron.daily/backup-rxf-rmm
 Tägliches konsistentes SQLite-Backup nach `/opt/backups/rxf-rmm`, 14 Tage
 Rotation, RustDesk-Schlüssel inklusive.
 
+**Restore** (mit `restore.sh` — bitte einmal proben, ein ungetestetes Backup
+ist kein Backup):
+
+```bash
+# Backend stoppen, DB aus Backup einspielen (alte DB → rmm.db.pre-restore),
+# Backend neu starten. Prüft vorher die SQLite-Integrität des Backups.
+bash /opt/rxf-rmm/infrastructure/restore.sh /opt/backups/rxf-rmm/rmm-JJJJMMTT-HHMMSS.db
+# optional RustDesk-Schlüssel mit-wiederherstellen:
+bash restore.sh /opt/backups/.../rmm-….db /opt/backups/.../rustdesk-…
+```
+
+Empfehlung: nach dem Aufsetzen einmal ein Backup ziehen, `restore.sh` damit
+laufen lassen und sich am Dashboard anmelden — dann weißt du, dass der Weg
+funktioniert, bevor du ihn im Ernstfall brauchst.
+
 ## 8. Agent-Auto-Update scharfstellen [manuell, Build-Maschine]
 
 Einmalig Schlüssel erzeugen, Public Key in `agent/update.go` pinnen (siehe

@@ -92,6 +92,9 @@ async def _fire(device_id: int, rule: str, message: str) -> int:
         await db.commit()
         alert_id = int(cur.lastrowid or 0)
     await audit_record("alert.fired", device_id=device_id, rule=rule, message=message)
+    from .fleet_ws import hub as fleet_hub
+
+    fleet_hub.broadcast("alert")
     return alert_id
 
 
@@ -152,6 +155,10 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
     now = time.time()
     rules = await automation.list_rules()
     devices_by_id = {d["id"]: d for d in fleet}
+    # Devices in a maintenance window are skipped entirely: no new alerts, and
+    # their open ones are left as-is (they resolve normally once maintenance
+    # ends and the next tick sees the real state).
+    maintenance = await devices.in_maintenance_ids()
 
     # A device whose governing rule is gone or disabled must not keep a
     # frozen open alert around — close those quietly (no recovery push for
@@ -164,6 +171,8 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
             del open_alerts[(device_id, rule_type)]
 
     for d in fleet:
+        if d["id"] in maintenance:
+            continue
         name = _device_name(d)
 
         # --- offline rule -------------------------------------------------
@@ -263,6 +272,39 @@ async def list_recent(limit: int = 50) -> list[dict[str, Any]]:
         ) as cur:
             rows = await cur.fetchall()
     return [_row_to_dict(r) for r in rows]
+
+
+async def for_device(device_id: int, limit: int = 30) -> list[dict[str, Any]]:
+    """A device's alert history, newest first."""
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM alerts WHERE device_id = ? ORDER BY fired_at DESC LIMIT ?",
+            (device_id, limit),
+        ) as cur:
+            rows = await cur.fetchall()
+    return [_row_to_dict(r) for r in rows]
+
+
+async def stats_for_device(device_id: int, days: int = 30) -> dict[str, Any]:
+    """Counts for the device trend section: fired in the window, and current
+    open count. Cheap aggregate for 'war diesen Monat 4× offline'."""
+    since = int(time.time()) - days * 86400
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT rule, COUNT(*) AS n FROM alerts WHERE device_id = ? AND fired_at >= ?"
+            " GROUP BY rule",
+            (device_id, since),
+        ) as cur:
+            by_rule = {r["rule"]: int(r["n"]) for r in await cur.fetchall()}
+        async with db.execute(
+            "SELECT COUNT(*) FROM alerts WHERE device_id = ? AND resolved_at IS NULL",
+            (device_id,),
+        ) as cur:
+            row = await cur.fetchone()
+            open_now = int(row[0]) if row else 0
+    return {"days": days, "by_rule": by_rule, "total": sum(by_rule.values()), "open": open_now}
 
 
 def reset_for_tests(db_path: str) -> None:

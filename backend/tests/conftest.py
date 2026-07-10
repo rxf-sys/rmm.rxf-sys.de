@@ -57,6 +57,11 @@ async def client(settings: Settings):
     await credentials.ensure_schema(settings)
     await audit.clear()
     jobs.hub.reset_for_tests()
+    from app.agents_ws import manager as _agent_manager
+    from app.fleet_ws import hub as _fleet_hub
+
+    _agent_manager.reset_for_tests()
+    _fleet_hub.reset_for_tests()
     releases.reset_for_tests(None, "")
     auth_router.reset_rate_limiter_for_tests()
     app.dependency_overrides[get_settings] = lambda: settings

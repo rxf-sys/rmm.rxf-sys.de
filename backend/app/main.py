@@ -34,10 +34,13 @@ from .routers import automation as automation_router
 from .routers import credentials as credentials_router
 from .routers import persons as persons_router
 from .routers import devices as devices_router
+from .routers import fleet as fleet_router
+from .routers import inventory as inventory_router
 from .routers import jobs as jobs_router
 from .routers import patches as patches_router
 from .routers import remote as remote_router
 from .routers import scripts as scripts_router
+from .routers import settings as settings_router
 
 _settings = get_settings()
 logging.basicConfig(
@@ -91,6 +94,7 @@ async def _alert_loop() -> None:
             await asyncio.sleep(_settings.alert_interval_s)
             await alerts.evaluate(_settings, _ntfy)
             await automation.run_patch_window(_settings)
+            await automation.run_script_schedules(_settings)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 - never let the loop die
@@ -179,4 +183,7 @@ app.include_router(automation_router.router)
 app.include_router(persons_router.router)
 app.include_router(credentials_router.router)
 app.include_router(accounts_admin_router.router)
+app.include_router(settings_router.router)
+app.include_router(inventory_router.router)
+app.include_router(fleet_router.router)
 app.include_router(remote_router.router)

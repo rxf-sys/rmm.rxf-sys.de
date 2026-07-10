@@ -12,6 +12,8 @@ interface Props {
   user: Account;
   onOpenDevice: (id: number) => void;
   onNavigate: (p: PageId) => void;
+  onOpenEnroll: () => void;
+  canEnroll: boolean;
 }
 
 /** Circular gauge (SVG ring) used by the hero cards. */
@@ -90,7 +92,7 @@ function DeviceCard({ d, onOpen }: { d: Device; onOpen: () => void }) {
   );
 }
 
-export function OverviewPage({ fleet, user, onOpenDevice, onNavigate }: Props) {
+export function OverviewPage({ fleet, user, onOpenDevice, onNavigate, onOpenEnroll, canEnroll }: Props) {
   const { devices, alerts, patchSummary, loading } = fleet;
   const [activity, setActivity] = useState<AuditEvent[] | null>(null);
 
@@ -212,7 +214,12 @@ export function OverviewPage({ fleet, user, onOpenDevice, onNavigate }: Props) {
       {devices.length === 0 ? (
         <div className="empty">
           <h2>Noch keine Geräte</h2>
-          <p className="muted">Füge über „+ Gerät" dein erstes Gerät hinzu.</p>
+          <p className="muted">Installiere den Agenten auf deinem ersten Gerät, um Monitoring zu starten.</p>
+          {canEnroll && (
+            <button className="btn btn-primary" style={{ marginTop: 4 }} onClick={onOpenEnroll}>
+              + Gerät hinzufügen
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid-4">

@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { api, apiErrorMessage } from '../api/client';
 import { formatRelative } from '../format';
 import { osShort } from '../ui';
-import type { Device, PatchSummary, Person } from '../types';
+import type { Device, InventoryMatch, PatchSummary, Person } from '../types';
 import { Dot, Skeleton, deviceState, diskColor, stateColor } from '../ui';
 
 interface Props {
@@ -10,6 +11,71 @@ interface Props {
   persons: Person[];
   loading: boolean;
   onOpenDevice: (id: number) => void;
+}
+
+/** Fleet-wide software search: 'auf welchen Geräten ist Java?'. Debounced,
+ * hits /api/inventory/search. */
+function SoftwareSearch({ onOpenDevice }: { onOpenDevice: (id: number) => void }) {
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState<InventoryMatch[] | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const query = q.trim();
+    if (query.length < 2) {
+      setResults(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      api
+        .searchInventory(query, ctrl.signal)
+        .then((r) => setResults(r.results))
+        .catch((e) => {
+          if (!ctrl.signal.aborted) setError(apiErrorMessage(e));
+        });
+    }, 300);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [q]);
+
+  return (
+    <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="row" style={{ gap: 10 }}>
+        <span className="card-title-sm">Software-Suche über alle Geräte</span>
+        <input
+          className="input btn-sm grow"
+          style={{ marginLeft: 'auto', width: 260, flex: 'none' }}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="⌕ Paketname, z. B. java, openssl, firefox…"
+        />
+      </div>
+      {error && <p className="err">{error}</p>}
+      {results !== null && (
+        results.length === 0 ? (
+          <span className="muted" style={{ fontSize: 11.5 }}>Keine Treffer in den Inventaren.</span>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 240, overflowY: 'auto' }}>
+            {results.map((r, i) => (
+              <button
+                key={`${r.device_id}-${r.name}-${i}`}
+                className="row"
+                style={{ gap: 10, padding: '6px 8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tx)', textAlign: 'left', fontSize: 12 }}
+                onClick={() => onOpenDevice(r.device_id)}
+              >
+                <span style={{ fontWeight: 700, minWidth: 130 }}>{r.hostname}</span>
+                <span style={{ flex: 1 }}>{r.name}</span>
+                <span className="mono" style={{ fontSize: 10.5, color: 'var(--tx3)' }}>{r.version}</span>
+              </button>
+            ))}
+          </div>
+        )
+      )}
+    </div>
+  );
 }
 
 type Filter = 'alle' | 'server' | 'familie' | 'probleme' | 'offline';
@@ -200,6 +266,8 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
           )}
         </div>
       </div>
+
+      {devices.length > 0 && <SoftwareSearch onOpenDevice={onOpenDevice} />}
     </div>
   );
 }

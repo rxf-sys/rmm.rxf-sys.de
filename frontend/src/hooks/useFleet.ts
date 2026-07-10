@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { api, apiErrorMessage } from '../api/client';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api, apiErrorMessage, openFleetSocket } from '../api/client';
 import type { Alert, Device, PatchSummary, Person } from '../types';
 
 export interface Fleet {
@@ -51,12 +51,50 @@ export function useFleet(): Fleet {
       });
   }, []);
 
+  // Live fleet events (device online/offline, alert, patches) trigger an
+  // immediate refetch; the interval is the fallback when the socket is down.
+  const wsRef = useRef<WebSocket | null>(null);
   useEffect(() => {
     const ctrl = new AbortController();
     void load(ctrl.signal);
     const timer = setInterval(() => void load(ctrl.signal), REFRESH_MS);
+
+    let closed = false;
+    let debounce: ReturnType<typeof setTimeout> | undefined;
+    const connect = () => {
+      if (closed) return;
+      let ws: WebSocket;
+      try {
+        ws = openFleetSocket();
+      } catch {
+        return;
+      }
+      wsRef.current = ws;
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === 'refresh') {
+            // Coalesce bursts (e.g. many agents reconnecting after a restart).
+            clearTimeout(debounce);
+            debounce = setTimeout(() => void load(), 300);
+          }
+        } catch {
+          /* ignore */
+        }
+      };
+      ws.onclose = () => {
+        wsRef.current = null;
+        if (!closed) setTimeout(connect, 5000); // reconnect with a small delay
+      };
+      ws.onerror = () => ws.close();
+    };
+    connect();
+
     return () => {
+      closed = true;
       clearInterval(timer);
+      clearTimeout(debounce);
+      wsRef.current?.close();
       ctrl.abort();
     };
   }, [load]);

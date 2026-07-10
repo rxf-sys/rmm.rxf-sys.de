@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     # Fire when a pending security patch has been outstanding this long.
     patch_alert_age_days: int = 30
 
+    # ---- Wake-on-LAN ----
+    # Broadcast address for magic packets. The default hits the whole local
+    # segment; set it to the subnet broadcast (e.g. 192.168.2.255) if the
+    # LXC has interfaces on multiple networks.
+    wol_broadcast: str = "255.255.255.255"
+
     # ---- Remote desktop (self-hosted RustDesk) ----
     # Empty relay host disables the remote-session UI. The relay host is the
     # DNS-only record pointing at the LXC's public IP (rd.rxf-sys.de); the

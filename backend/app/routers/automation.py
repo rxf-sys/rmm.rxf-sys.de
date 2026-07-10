@@ -15,7 +15,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
-from .. import automation, persons
+from .. import automation, persons, scripts
 from ..audit import record as audit_record
 from ..auth import require_admin, verify_session
 
@@ -70,8 +70,35 @@ async def _validate_scope(body: RuleRequest) -> None:
 async def _full_state() -> dict:
     cfg = await automation.get_config()
     cfg["rules"] = await automation.list_rules()
+    cfg["schedules"] = await automation.list_schedules()
     cfg["patch_window_last_run"] = await automation.patch_window_last_run()
     return cfg
+
+
+class ScheduleRequest(BaseModel):
+    script_id: int
+    enabled: bool = True
+    weekday: int | None = Field(default=None, ge=0, le=6)  # None = jeden Tag
+    hour: int = Field(default=3, ge=0, le=23)
+    scope_kind: str = "all"
+    scope_value: str = Field(default="", max_length=64)
+
+    @field_validator("scope_kind")
+    @classmethod
+    def _known_scope(cls, v: str) -> str:
+        if v not in automation.SCOPE_KINDS:
+            raise ValueError(f"unbekannter Geltungsbereich: {v}")
+        return v
+
+
+async def _validate_schedule(body: ScheduleRequest) -> None:
+    if await scripts.get(body.script_id) is None:
+        raise HTTPException(status_code=422, detail="Skript nicht gefunden")
+    if body.scope_kind == "tag" and not body.scope_value.strip():
+        raise HTTPException(status_code=422, detail="Tag darf nicht leer sein")
+    if body.scope_kind == "person":
+        if not body.scope_value.isdigit() or await persons.get_person(int(body.scope_value)) is None:
+            raise HTTPException(status_code=422, detail="Person nicht gefunden")
 
 
 @router.get("")
@@ -127,6 +154,48 @@ async def delete_rule(rule_id: int, user: dict = Depends(require_admin)) -> dict
     if not await automation.delete_rule(rule_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Regel nicht gefunden")
     await audit_record("automation.rule_deleted", user=user["username"], rule_id=rule_id)
+    return {"ok": True}
+
+
+@router.post("/schedules")
+async def create_schedule(body: ScheduleRequest, user: dict = Depends(require_admin)) -> dict:
+    await _validate_schedule(body)
+    sched = await automation.create_schedule(
+        body.script_id,
+        hour=body.hour,
+        weekday=body.weekday,
+        enabled=body.enabled,
+        scope_kind=body.scope_kind,
+        scope_value=body.scope_value.strip(),
+    )
+    await audit_record("automation.schedule_created", user=user["username"], script_id=body.script_id)
+    return {"schedule": sched}
+
+
+@router.put("/schedules/{sched_id}")
+async def update_schedule(
+    sched_id: int, body: ScheduleRequest, user: dict = Depends(require_admin)
+) -> dict:
+    await _validate_schedule(body)
+    sched = await automation.update_schedule(
+        sched_id,
+        hour=body.hour,
+        weekday=body.weekday,
+        enabled=body.enabled,
+        scope_kind=body.scope_kind,
+        scope_value=body.scope_value.strip(),
+    )
+    if sched is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zeitplan nicht gefunden")
+    await audit_record("automation.schedule_updated", user=user["username"], sched_id=sched_id)
+    return {"schedule": sched}
+
+
+@router.delete("/schedules/{sched_id}")
+async def delete_schedule(sched_id: int, user: dict = Depends(require_admin)) -> dict:
+    if not await automation.delete_schedule(sched_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zeitplan nicht gefunden")
+    await audit_record("automation.schedule_deleted", user=user["username"], sched_id=sched_id)
     return {"ok": True}
 
 

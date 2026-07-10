@@ -1134,22 +1134,51 @@ textarea.input {
     grid-template-columns: 1fr;
   }
 }
+.burger {
+  display: none;
+}
+.nav-backdrop {
+  display: none;
+}
 @media (max-width: 760px) {
+  /* Sidebar becomes an off-canvas drawer toggled by the header burger. */
   .app-shell {
-    grid-template-columns: 56px 1fr;
-  }
-  .grid-4,
-  .grid-2 {
     grid-template-columns: 1fr;
   }
-  .brand-name,
-  .brand-sub,
-  .nav-item span:not(.nav-ico):not(.nav-badge):not(.nav-count),
-  .sidebar-label,
-  .fav-item,
-  .rollout-card,
-  .search-pill {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 250px;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: 2px 0 24px rgba(0, 0, 0, 0.4);
+  }
+  .app-shell.nav-open .sidebar {
+    transform: translateX(0);
+  }
+  .app-shell.nav-open .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(0, 0, 0, 0.5);
+  }
+  .burger {
+    display: inline-flex;
+  }
+  .grid-4,
+  .grid-2,
+  .grid-detail {
+    grid-template-columns: 1fr;
+  }
+  .header .search-pill {
     display: none;
+  }
+  .crumb {
+    font-size: 12px;
   }
 }
 
@@ -1157,4 +1186,14 @@ textarea.input {
 .accent-border {
   border-color: var(--accent) !important;
   color: var(--accent) !important;
+}
+
+/* Section separator inside the device ⋯ menu */
+.palette-sep {
+  font-weight: 700;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tx3);
+  padding: 8px 10px 3px;
 }
