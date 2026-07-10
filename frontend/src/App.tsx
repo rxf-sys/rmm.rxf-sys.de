@@ -30,7 +30,7 @@ const PAGE_LABEL: Record<PageId, string> = {
   admin: 'Administration',
 };
 
-const FAV_KEY = 'vektor-favorites';
+const FAV_KEY = 'ryntra-favorites';
 
 function loadFavorites(): number[] {
   try {
@@ -109,7 +109,7 @@ export default function App() {
 
   const detailDevice = detailId !== null ? fleet.devices.find((d) => d.id === detailId) : undefined;
   const crumbCur = detailId !== null ? (detailDevice?.hostname ?? `Gerät ${detailId}`) : PAGE_LABEL[page];
-  const crumbPre = detailId !== null ? 'Vektor / Geräte / ' : 'Vektor / ';
+  const crumbPre = detailId !== null ? 'Ryntra / Geräte / ' : 'Ryntra / ';
 
   return (
     <div className={navOpen ? 'app-shell nav-open' : 'app-shell'}>

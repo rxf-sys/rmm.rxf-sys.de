@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Device } from '../types';
+import { IconSearch } from '../icons';
 import { deviceState, osShort, stateColor } from '../ui';
 import type { PageId } from './Sidebar';
 
@@ -118,7 +119,7 @@ export function CommandPalette({
     <div className="overlay palette-wrap" onClick={onClose}>
       <div className="palette" onClick={(e) => e.stopPropagation()}>
         <div className="palette-input-row">
-          <span style={{ color: 'var(--tx3)' }}>⌕</span>
+          <span style={{ color: 'var(--tx3)', display: 'inline-flex' }}><IconSearch size={14} /></span>
           <input
             className="palette-input"
             value={q}

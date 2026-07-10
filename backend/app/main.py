@@ -148,8 +148,8 @@ async def lifespan(app: FastAPI):
 _DOCS_ENABLED = _settings.app_env != "production"
 
 app = FastAPI(
-    title="rxf-sys RMM",
-    description="Backend API for the rxf-sys RMM server.",
+    title="Ryntra RMM",
+    description="Backend API for the Ryntra RMM server (rmm.rxf-sys.de).",
     version="0.1.0",
     docs_url="/api/docs" if _DOCS_ENABLED else None,
     redoc_url=None,

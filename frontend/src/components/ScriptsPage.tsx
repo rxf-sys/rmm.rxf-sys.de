@@ -185,7 +185,7 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
             style={{ marginLeft: 12, width: 200, flex: 'none' }}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="⌕ Skript suchen…"
+            placeholder="Skript suchen…"
           />
         )}
         {canManage && !draft && (

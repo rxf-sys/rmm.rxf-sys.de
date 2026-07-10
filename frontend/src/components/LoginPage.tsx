@@ -39,11 +39,11 @@ export function LoginPage({ onLogin }: Props) {
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
         <div className="brand" style={{ padding: 0 }}>
-          <span className="brand-mark" style={{ width: 34, height: 34, fontSize: 16 }}>
-            V
+          <span className="brand-mark" style={{ width: 34, height: 34 }}>
+            <img src="/logo.png" alt="Ryntra" />
           </span>
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-            <span style={{ fontWeight: 800, fontSize: 18 }}>Vektor</span>
+            <span style={{ fontWeight: 800, fontSize: 18 }}>Ryntra</span>
             <span className="brand-sub">Remote Monitoring &amp; Management</span>
           </div>
         </div>

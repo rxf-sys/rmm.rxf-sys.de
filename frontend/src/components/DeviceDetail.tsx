@@ -19,6 +19,7 @@ import type {
   Shell,
 } from '../types';
 import { Dot, deviceState, diskColor, stateColor } from '../ui';
+import { IconKey, IconPower, IconTerminal, IconWrench, OsIcon } from '../icons';
 // (osShort available via ../format if needed by future tab work)
 
 interface Props {
@@ -174,7 +175,9 @@ export function DeviceDetail({
         </button>
         <Dot color={stateColor(st)} lg />
         <h1 className="page-title">{d.hostname}</h1>
-        <span className="chip chip-os">{d.os_version || osLabel(d.os)}</span>
+        <span className="chip chip-os" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <OsIcon os={d.os} size={12} /> {d.os_version || osLabel(d.os)}
+        </span>
         <span className="row" style={{ gap: 5 }}>
           {d.tags.map((t) => (
             <span key={t} className="chip">
@@ -183,18 +186,18 @@ export function DeviceDetail({
           ))}
         </span>
         {d.maintenance_until && (
-          <span className="badge badge-warn" title="Alarme unterdrückt">
-            🛠 Wartung bis {new Date(d.maintenance_until * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+          <span className="badge badge-warn" title="Alarme unterdrückt" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <IconWrench size={11} /> Wartung bis {new Date(d.maintenance_until * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
           </span>
         )}
         <div className="row grow" style={{ marginLeft: 'auto', gap: 8, position: 'relative' }}>
           {isOperator && !d.online && (
-            <button className="btn" onClick={() => void wake()} title="Wake-on-LAN">
-              ⏻ Aufwecken
+            <button className="btn" onClick={() => void wake()} title="Wake-on-LAN" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <IconPower size={13} /> Aufwecken
             </button>
           )}
-          <button className="btn" onClick={() => setTab('remote')}>
-            ⌘ Terminal
+          <button className="btn" onClick={() => setTab('remote')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <IconTerminal size={13} /> Terminal
           </button>
           {d.rustdesk_id && (
             <button className="btn btn-primary" onClick={() => void openRemoteSession()}>
@@ -216,9 +219,9 @@ export function DeviceDetail({
               {isOperator && (
                 <>
                   <div className="palette-sep">Wartung (Alarme aus)</div>
-                  <button className="palette-item" onClick={() => void setMaintenance(60)}>🛠 1 Stunde</button>
-                  <button className="palette-item" onClick={() => void setMaintenance(240)}>🛠 4 Stunden</button>
-                  <button className="palette-item" onClick={() => void setMaintenance(720)}>🛠 12 Stunden</button>
+                  <button className="palette-item" onClick={() => void setMaintenance(60)}><IconWrench size={12} /> 1 Stunde</button>
+                  <button className="palette-item" onClick={() => void setMaintenance(240)}><IconWrench size={12} /> 4 Stunden</button>
+                  <button className="palette-item" onClick={() => void setMaintenance(720)}><IconWrench size={12} /> 12 Stunden</button>
                   {d.maintenance_until && (
                     <button className="palette-item" onClick={() => void setMaintenance(0)}>✓ Wartung beenden</button>
                   )}
@@ -462,7 +465,7 @@ function PasswordsTab({ deviceId }: { deviceId: number }) {
 
       {creds !== null && creds.length === 0 && !draft && (
         <div className="empty">
-          <span style={{ fontSize: 22 }}>🔒</span>
+          <span style={{ fontSize: 22, color: 'var(--tx3)' }}><IconKey size={26} /></span>
           <h2>Keine Passwörter hinterlegt</h2>
           <p className="muted">Speichere Zugangsdaten dieses Geräts (Login, BIOS, Router-Webinterface, …).</p>
         </div>
@@ -472,7 +475,9 @@ function PasswordsTab({ deviceId }: { deviceId: number }) {
         <div className="card" style={{ overflow: 'hidden' }}>
           {creds.map((c) => (
             <div key={c.id} className="row" style={{ gap: 12, padding: '11px 16px', borderBottom: '1px solid var(--line2)', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 700, fontSize: 12.5, minWidth: 140 }}>🔑 {c.label}</span>
+              <span style={{ fontWeight: 700, fontSize: 12.5, minWidth: 140, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <IconKey size={12} /> {c.label}
+              </span>
               <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx2)', minWidth: 110 }}>{c.username || '—'}</span>
               <span className="mono" style={{ fontSize: 11.5, color: revealed[c.id] !== undefined ? 'var(--tx)' : 'var(--tx3)', flex: 1, minWidth: 120, wordBreak: 'break-all' }}>
                 {revealed[c.id] !== undefined ? revealed[c.id] : '••••••••'}
@@ -819,7 +824,7 @@ function InventoryTab({ detail }: { detail: DeviceDetailData }) {
       <div className="card" style={{ overflow: 'hidden' }}>
         <div className="card-head">
           <span className="card-title-sm">Software <span className="muted" style={{ fontSize: 11 }}>{sw.length}</span></span>
-          <input className="input btn-sm grow" style={{ marginLeft: 'auto', width: 180, flex: 'none' }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="⌕ Filtern…" />
+          <input className="input btn-sm grow" style={{ marginLeft: 'auto', width: 180, flex: 'none' }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtern…" />
         </div>
         <div style={{ maxHeight: 420, overflowY: 'auto' }}>
           {shown.slice(0, 500).map((s, i) => (
@@ -1116,7 +1121,7 @@ function JobsTab({ deviceId }: { deviceId: number }) {
             <button key={j.id} className="row" style={{ gap: 12, padding: '10px 16px', width: '100%', background: openJob === j.id ? 'var(--hover)' : 'none', border: 'none', borderBottom: '1px solid var(--line2)', cursor: 'pointer', color: 'var(--tx)', textAlign: 'left' }} onClick={() => setOpenJob(j.id)}>
               <span className={`badge ${jobBadge(j.status)}`} style={{ width: 90, textAlign: 'center', flex: 'none' }}>{JOB_STATUS_LABEL[j.status]}</span>
               <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {j.kind === 'script' ? `📜 ${j.script_name}` : j.kind === 'patch_install' ? '⛨ Patch-Installation' : j.command}
+                {j.kind === 'script' ? `Skript: ${j.script_name}` : j.kind === 'patch_install' ? 'Patch-Installation' : j.command}
               </span>
               <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 11, flex: 'none' }}>{j.created_by} · {formatRelative(j.created_at)}</span>
             </button>

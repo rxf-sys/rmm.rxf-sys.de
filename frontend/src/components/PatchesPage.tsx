@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { osLabel } from '../format';
 import type { Device, PatchSummary, Person } from '../types';
 import { Dot, deviceState, stateColor } from '../ui';
+import type { ReactNode } from 'react';
+import { AppleLogo, LinuxLogo, ServerRack, WindowsLogo } from '../icons';
 
 interface Props {
   devices: Device[];
@@ -14,11 +16,11 @@ const COLS = '16fr 8fr 8fr 8fr 8fr 10fr 10fr';
 
 type OsCategory = 'win_pc' | 'win_server' | 'mac' | 'linux';
 
-const CATEGORIES: { id: OsCategory; label: string; icon: string }[] = [
-  { id: 'win_pc', label: 'Windows PC', icon: '⊞' },
-  { id: 'win_server', label: 'Windows Server', icon: '🗄' },
-  { id: 'mac', label: 'Mac', icon: '🍎' },
-  { id: 'linux', label: 'Linux', icon: '🐧' },
+const CATEGORIES: { id: OsCategory; label: string; icon: ReactNode }[] = [
+  { id: 'win_pc', label: 'Windows PC', icon: <WindowsLogo size={18} /> },
+  { id: 'win_server', label: 'Windows Server', icon: <ServerRack size={18} /> },
+  { id: 'mac', label: 'Mac', icon: <AppleLogo size={18} /> },
+  { id: 'linux', label: 'Linux', icon: <LinuxLogo size={18} /> },
 ];
 
 function categoryOf(d: Device): OsCategory {
@@ -28,7 +30,7 @@ function categoryOf(d: Device): OsCategory {
 }
 
 /** Donut ring: patched share of a category, conic-gradient based. */
-function Ring({ pct, label, icon, count }: { pct: number; label: string; icon: string; count: number }) {
+function Ring({ pct, label, icon, count }: { pct: number; label: string; icon: ReactNode; count: number }) {
   const empty = count === 0;
   const color = empty ? 'var(--line)' : pct >= 90 ? 'var(--ok)' : pct >= 60 ? 'var(--warn)' : 'var(--dangerS)';
   return (
@@ -56,8 +58,8 @@ function Ring({ pct, label, icon, count }: { pct: number; label: string; icon: s
             textAlign: 'center',
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-            <span style={{ fontSize: 15 }}>{icon}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, lineHeight: 1.2, color: 'var(--tx2)' }}>
+            <span style={{ display: 'inline-flex' }}>{icon}</span>
             <span style={{ fontWeight: 800, fontSize: 12, color: empty ? 'var(--tx3)' : color }}>
               {empty ? '—' : `${pct}%`}
             </span>
@@ -166,7 +168,7 @@ export function PatchesPage({ devices, patchSummary, persons, onOpenDevice }: Pr
             value={personFilter}
             onChange={(e) => setPersonFilter(e.target.value === 'alle' ? 'alle' : Number(e.target.value))}
           >
-            <option value="alle">◉ Personen · alle</option>
+            <option value="alle">Personen · alle</option>
             {persons.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -178,7 +180,7 @@ export function PatchesPage({ devices, patchSummary, persons, onOpenDevice }: Pr
           value={osFilter}
           onChange={(e) => setOsFilter(e.target.value as OsCategory | 'alle')}
         >
-          <option value="alle">⊞ Gerätetypen · alle</option>
+          <option value="alle">Gerätetypen · alle</option>
           {CATEGORIES.map((c) => (
             <option key={c.id} value={c.id}>{c.label}</option>
           ))}
@@ -189,7 +191,7 @@ export function PatchesPage({ devices, patchSummary, persons, onOpenDevice }: Pr
           value={availability}
           onChange={(e) => setAvailability(e.target.value as Availability)}
         >
-          <option value="alle">⌁ Verfügbarkeit · alle</option>
+          <option value="alle">Verfügbarkeit · alle</option>
           <option value="online">online</option>
           <option value="offline">offline</option>
         </select>
@@ -199,7 +201,7 @@ export function PatchesPage({ devices, patchSummary, persons, onOpenDevice }: Pr
           value={patchState}
           onChange={(e) => setPatchState(e.target.value as PatchState)}
         >
-          <option value="alle">⛨ Patch-Status · alle</option>
+          <option value="alle">Patch-Status · alle</option>
           <option value="offen">Updates offen</option>
           <option value="sicherheit">Sicherheitsupdates offen</option>
           <option value="aktuell">aktuell</option>
