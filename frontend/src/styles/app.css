@@ -1,8 +1,11 @@
 /* ============================================================
-   Vektor — Design tokens + component classes
+   Ryntra — Design tokens + component classes
    Styling lives here (central CSS + custom properties); components
    use these classes and only inline dynamic values (bar widths,
    data-driven colors). Theme switches via body[data-theme].
+
+   Palette (Uxintace sunset): #181A2F · #242E49 · #37415C
+                              #FDA481 · #B4182D · #54162B
    ============================================================ */
 
 :root {
@@ -15,62 +18,67 @@ body {
   color: var(--tx);
   font-family: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 13px;
-  /* --- Dark (default) --- */
-  --bg: #13151a;
-  --panel: #17191f;
-  --card: linear-gradient(180deg, #1c1f26, #181b21);
-  --line: rgba(255, 255, 255, 0.07);
+  /* --- Dark (default): navy base, peach accent, crimson danger --- */
+  --bg: #181a2f;
+  --panel: #1e2338;
+  --card: linear-gradient(180deg, #242e49, #1f2740);
+  --line: rgba(255, 255, 255, 0.08);
   --line2: rgba(255, 255, 255, 0.05);
-  --tx: #eceef2;
-  --tx2: #9aa2af;
-  --tx3: #7a828f;
-  --chip: rgba(255, 255, 255, 0.06);
-  --input: rgba(255, 255, 255, 0.05);
-  --shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
-  --hover: rgba(255, 255, 255, 0.04);
-  --accent: #5b9bff;
-  --accent2: color-mix(in srgb, var(--accent) 78%, #14213c);
-  --accT: color-mix(in srgb, var(--accent) 72%, white);
+  --tx: #eef0f6;
+  --tx2: #a3abc2;
+  --tx3: #7e87a3;
+  --chip: rgba(255, 255, 255, 0.07);
+  --input: rgba(255, 255, 255, 0.055);
+  --shadow: 0 4px 18px rgba(8, 10, 24, 0.45);
+  --hover: rgba(255, 255, 255, 0.045);
+  --accent: #fda481;
+  --accent2: color-mix(in srgb, var(--accent) 78%, #54162b);
+  --accT: color-mix(in srgb, var(--accent) 85%, white);
   --accBg: color-mix(in srgb, var(--accent) 13%, transparent);
   --accLine: color-mix(in srgb, var(--accent) 35%, transparent);
+  /* Text that sits ON an accent-filled surface (peach is light). */
+  --onAccent: #181a2f;
   --ok: #4cc472;
   --okBg: rgba(76, 196, 114, 0.13);
   --warn: #e8b64c;
   --warnBg: rgba(232, 182, 76, 0.14);
-  --danger: #f0766e;
-  --dangerS: #e5534b;
-  --dangerBg: rgba(229, 83, 75, 0.13);
-  --violet: #7c6df2;
-  --console: #101217;
+  --danger: #b4182d;
+  --dangerS: #e05a6b;
+  --dangerBg: rgba(180, 24, 45, 0.2);
+  --violet: #d7566a; /* secondary series color (RAM bars, gradients) */
+  --maroon: #54162b;
+  --console: #121426;
   --consoleLine: rgba(255, 255, 255, 0.08);
   --mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
 }
 
 body[data-theme='light'] {
   color-scheme: light;
-  --bg: #f1f2f6;
-  --panel: #f8f9fb;
-  --card: linear-gradient(180deg, #ffffff, #fcfcfe);
-  --line: rgba(22, 28, 40, 0.1);
-  --line2: rgba(22, 28, 40, 0.06);
-  --tx: #1a1f28;
-  --tx2: #525a6a;
-  --tx3: #848c9c;
-  --chip: rgba(22, 28, 40, 0.06);
-  --input: rgba(22, 28, 40, 0.045);
-  --shadow: 0 4px 16px rgba(28, 38, 60, 0.09);
-  --hover: rgba(22, 28, 40, 0.04);
-  --accent: #3d74e8;
-  --accT: color-mix(in srgb, var(--accent) 82%, black);
+  --bg: #f4f1ee;
+  --panel: #faf8f6;
+  --card: linear-gradient(180deg, #ffffff, #fbf9f7);
+  --line: rgba(36, 46, 73, 0.12);
+  --line2: rgba(36, 46, 73, 0.07);
+  --tx: #1d2438;
+  --tx2: #4d5670;
+  --tx3: #808aa5;
+  --chip: rgba(36, 46, 73, 0.07);
+  --input: rgba(36, 46, 73, 0.05);
+  --shadow: 0 4px 16px rgba(36, 46, 73, 0.1);
+  --hover: rgba(36, 46, 73, 0.045);
+  --accent: #d16a3e; /* darker terracotta: peach lacks contrast on white */
+  --accT: color-mix(in srgb, var(--accent) 85%, black);
+  --onAccent: #ffffff;
   --ok: #279a52;
   --okBg: rgba(39, 154, 82, 0.13);
   --warn: #a97c1e;
   --warnBg: rgba(200, 146, 46, 0.16);
-  --danger: #d8453c;
-  --dangerS: #d8453c;
-  --dangerBg: rgba(216, 69, 60, 0.1);
-  --violet: #6a5ae0;
-  --console: #14161c;
+  --danger: #b4182d;
+  --dangerS: #b4182d;
+  --dangerBg: rgba(180, 24, 45, 0.1);
+  --violet: #b03a52;
+  --maroon: #54162b;
+  --console: #181a2f;
   --consoleLine: rgba(255, 255, 255, 0.08);
 }
 
@@ -236,8 +244,18 @@ h1.page-title {
   place-items: center;
   font-weight: 800;
   font-size: 13px;
-  color: #fff;
+  color: var(--onAccent);
   flex: none;
+  overflow: hidden;
+}
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.nav-item .nav-ico svg {
+  display: block;
 }
 .brand-name {
   font-weight: 800;
@@ -437,7 +455,7 @@ h1.page-title {
 .btn-primary {
   background: linear-gradient(140deg, var(--accent), var(--accent2));
   border: none;
-  color: #fff;
+  color: var(--onAccent);
   box-shadow: 0 3px 12px var(--accLine);
 }
 .btn-primary:hover {
@@ -457,7 +475,7 @@ h1.page-title {
 .btn-danger {
   background: none;
   border: 1px solid var(--line);
-  color: var(--danger);
+  color: var(--dangerS);
 }
 .btn-icon {
   width: 32px;

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { formatRelative } from '../format';
 import { osShort } from '../ui';
+import { OsIcon } from '../icons';
 import type { Device, InventoryMatch, PatchSummary, Person } from '../types';
 import { Dot, Skeleton, deviceState, diskColor, stateColor } from '../ui';
 
@@ -50,7 +51,7 @@ function SoftwareSearch({ onOpenDevice }: { onOpenDevice: (id: number) => void }
           style={{ marginLeft: 'auto', width: 260, flex: 'none' }}
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="⌕ Paketname, z. B. java, openssl, firefox…"
+          placeholder="Paketname, z. B. java, openssl, firefox…"
         />
       </div>
       {error && <p className="err">{error}</p>}
@@ -141,7 +142,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
           style={{ marginLeft: 'auto', width: 230, flex: 'none' }}
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="⌕ Hostname, Besitzer, Tag…"
+          placeholder="Suchen: Hostname, Besitzer, Tag…"
         />
       </div>
 
@@ -162,7 +163,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
             value={personFilter}
             onChange={(e) => setPersonFilter(e.target.value === 'alle' ? 'alle' : Number(e.target.value))}
           >
-            <option value="alle">◉ Alle Personen</option>
+            <option value="alle">Alle Personen</option>
             {persons.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -212,7 +213,9 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
                   <span className="cell-name">
                     <Dot color={stateColor(st)} />
                     <span className="name">{d.hostname}</span>
-                    <span className="chip-mono">{osShort(d.os)}</span>
+                    <span className="chip-mono" title={osShort(d.os)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <OsIcon os={d.os} size={11} /> {osShort(d.os)}
+                    </span>
                   </span>
                   <span style={{ color: 'var(--tx2)', fontWeight: 600 }}>
                     {personName(d.person_id) || d.owner_label || '—'}

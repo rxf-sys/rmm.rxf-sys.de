@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { formatRelative } from '../format';
+import { IconFileCode } from '../icons';
 import type { Device, Person, Script, ScriptSchedule, ScopeKind } from '../types';
 
 interface Props {
@@ -185,8 +186,8 @@ export function ScheduledScripts({ schedules, devices, persons, isAdmin, onChang
       {schedules.map((s) => (
         <div key={s.id} className="row" style={{ gap: 10, padding: '11px 16px', borderBottom: '1px solid var(--line2)', opacity: s.enabled ? 1 : 0.55 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-            <span style={{ fontWeight: 700, fontSize: 12.5 }}>
-              📜 {scriptName(s.script_id)}
+            <span style={{ fontWeight: 700, fontSize: 12.5, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <IconFileCode size={13} /> {scriptName(s.script_id)}
               <span className="mono" style={{ fontSize: 10.5, color: 'var(--accent)' }}>
                 {' '}· {s.weekday === null ? 'täglich' : WEEKDAYS[s.weekday]} {String(s.hour).padStart(2, '0')}:00
               </span>

@@ -5,7 +5,8 @@ import type { Account, AuditEvent, Device } from '../types';
 import type { Fleet } from '../hooks/useFleet';
 import { describeAudit } from './AuditPage';
 import type { PageId } from './Sidebar';
-import { Dot, Skeleton, deviceState, diskColor, osShort, stateColor } from '../ui';
+import { Dot, Skeleton, deviceState, diskColor, stateColor } from '../ui';
+import { OsIcon } from '../icons';
 
 interface Props {
   fleet: Fleet;
@@ -61,8 +62,8 @@ function DeviceCard({ d, onOpen }: { d: Device; onOpen: () => void }) {
         <span style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {d.hostname}
         </span>
-        <span className="chip chip-os" style={{ marginLeft: 'auto' }}>
-          {osShort(d.os)}
+        <span className="chip chip-os" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center' }} title={d.os}>
+          <OsIcon os={d.os} size={12} />
         </span>
       </div>
       <div className="muted" style={{ fontSize: 11 }}>

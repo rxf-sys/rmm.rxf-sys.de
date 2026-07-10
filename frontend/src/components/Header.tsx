@@ -1,3 +1,5 @@
+import { IconBell, IconMenu, IconSearch } from '../icons';
+
 interface Props {
   crumbPre: string;
   crumbCur: string;
@@ -22,7 +24,7 @@ export function Header({
   return (
     <div className="header">
       <button className="btn-icon burger" title="Menü" aria-label="Menü" onClick={onToggleNav}>
-        ☰
+        <IconMenu />
       </button>
       <span className="crumb">
         {crumbPre}
@@ -30,11 +32,12 @@ export function Header({
       </span>
       <div className="header-right">
         <button className="search-pill" onClick={onOpenPalette}>
-          ⌕ Suchen oder Befehl…
+          <IconSearch size={13} /> Suchen oder Befehl…
           <span className="kbd">⌘K</span>
         </button>
         <button className="btn-icon" title="Alarme" onClick={onOpenAlerts}>
-          ◎{openAlerts > 0 && <span className="dot-notify" />}
+          <IconBell />
+          {openAlerts > 0 && <span className="dot-notify" />}
         </button>
         {canEnroll && (
           <button className="btn btn-primary" onClick={onOpenEnroll}>

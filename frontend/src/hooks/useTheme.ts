@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 export type Theme = 'dark' | 'light';
 
-const KEY = 'vektor-theme';
+const KEY = 'ryntra-theme';
 
 function initial(): Theme {
   const stored = localStorage.getItem(KEY);

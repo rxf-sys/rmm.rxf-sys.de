@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { formatDateTime } from '../format';
+import { IconDownload } from '../icons';
 import type { CreatedEnrollToken, EnrollToken } from '../types';
 
 interface Props {
@@ -158,8 +159,8 @@ export function EnrollModal({ onClose }: Props) {
               </button>
               {platform === 'windows' && (
                 <>
-                  <a className="btn btn-sm" href={downloadUrl} download style={{ textDecoration: 'none' }}>
-                    ⬇ Windows-Agent herunterladen
+                  <a className="btn btn-sm" href={downloadUrl} download style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <IconDownload size={13} /> Windows-Agent herunterladen
                   </a>
                   <button className="btn btn-sm" onClick={() => void copyText(downloadUrl)}>
                     Download-Link kopieren

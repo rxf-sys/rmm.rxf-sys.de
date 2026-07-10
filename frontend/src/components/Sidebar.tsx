@@ -1,4 +1,19 @@
+import type { ReactNode } from 'react';
 import type { Account, Device } from '../types';
+import {
+  IconBell,
+  IconClock,
+  IconGrid,
+  IconList,
+  IconLogout,
+  IconMonitor,
+  IconMoon,
+  IconSettings,
+  IconShield,
+  IconSun,
+  IconTerminal,
+  IconUsers,
+} from '../icons';
 import { deviceState, stateColor } from '../ui';
 
 export type PageId =
@@ -15,20 +30,20 @@ export type PageId =
 interface NavDef {
   id: PageId;
   label: string;
-  icon: string;
+  icon: ReactNode;
   adminOnly?: boolean;
 }
 
 const NAV: NavDef[] = [
-  { id: 'overview', label: 'Übersicht', icon: '◈' },
-  { id: 'devices', label: 'Geräte', icon: '▤' },
-  { id: 'persons', label: 'Personen', icon: '◉' },
-  { id: 'alerts', label: 'Alarme', icon: '◎' },
-  { id: 'patches', label: 'Patch-Management', icon: '⛨' },
-  { id: 'scripts', label: 'Skripte', icon: '⌘' },
-  { id: 'automation', label: 'Automatisierung', icon: '⟳' },
-  { id: 'audit', label: 'Audit-Log', icon: '≡', adminOnly: true },
-  { id: 'admin', label: 'Administration', icon: '⚙', adminOnly: true },
+  { id: 'overview', label: 'Übersicht', icon: <IconGrid /> },
+  { id: 'devices', label: 'Geräte', icon: <IconMonitor /> },
+  { id: 'persons', label: 'Personen', icon: <IconUsers /> },
+  { id: 'alerts', label: 'Alarme', icon: <IconBell /> },
+  { id: 'patches', label: 'Patch-Management', icon: <IconShield /> },
+  { id: 'scripts', label: 'Skripte', icon: <IconTerminal /> },
+  { id: 'automation', label: 'Automatisierung', icon: <IconClock /> },
+  { id: 'audit', label: 'Audit-Log', icon: <IconList />, adminOnly: true },
+  { id: 'admin', label: 'Administration', icon: <IconSettings />, adminOnly: true },
 ];
 
 interface Props {
@@ -78,10 +93,12 @@ export function Sidebar({
   return (
     <div className="sidebar">
       <div className="brand">
-        <span className="brand-mark">V</span>
+        <span className="brand-mark">
+          <img src="/logo.png" alt="Ryntra" />
+        </span>
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
-          <span className="brand-name">Vektor</span>
-          <span className="brand-sub">Homelab Workspace</span>
+          <span className="brand-name">Ryntra</span>
+          <span className="brand-sub">Remote Monitoring &amp; Management</span>
         </div>
       </div>
 
@@ -159,7 +176,7 @@ export function Sidebar({
               title="Theme wechseln"
               onClick={onToggleTheme}
             >
-              {theme === 'dark' ? '☾' : '☀'}
+              {theme === 'dark' ? <IconMoon /> : <IconSun />}
             </button>
             <button
               className="btn-icon"
@@ -168,7 +185,7 @@ export function Sidebar({
               aria-label="Abmelden"
               onClick={onLogout}
             >
-              ⎋
+              <IconLogout />
             </button>
           </div>
         </div>
