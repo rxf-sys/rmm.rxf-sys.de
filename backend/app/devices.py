@@ -100,6 +100,9 @@ async def _migrate_devices(db: aiosqlite.Connection) -> None:
     if "person_id" not in cols:
         await db.execute("ALTER TABLE devices ADD COLUMN person_id INTEGER")
         log.info("devices.migrated", column="person_id")
+    if "maintenance_until" not in cols:
+        await db.execute("ALTER TABLE devices ADD COLUMN maintenance_until INTEGER")
+        log.info("devices.migrated", column="maintenance_until")
 
 
 @asynccontextmanager
@@ -137,6 +140,13 @@ def _row_to_device(row: aiosqlite.Row, offline_after_s: int) -> dict[str, Any]:
         "person_id": (
             int(row["person_id"])
             if "person_id" in row.keys() and row["person_id"] is not None
+            else None
+        ),
+        "maintenance_until": (
+            int(row["maintenance_until"])
+            if "maintenance_until" in row.keys()
+            and row["maintenance_until"] is not None
+            and int(row["maintenance_until"]) > time.time()
             else None
         ),
         "created_at": int(row["created_at"]),
@@ -418,6 +428,89 @@ async def update_device(
             await db.execute(f"UPDATE devices SET {', '.join(sets)} WHERE id = ?", params)
             await db.commit()
     return await get_device(device_id, offline_after_s=1)
+
+
+async def search_software(query: str, limit: int = 200) -> list[dict[str, Any]]:
+    """Fleet-wide software search ('auf welchen Geräten ist Java?'). Scans the
+    stored software inventory of every device for a case-insensitive name
+    match. Returns per-match rows: device id/hostname + package name/version."""
+    q = query.strip().lower()
+    if not q:
+        return []
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT i.device_id, d.hostname, i.payload_json FROM inventory i"
+            " JOIN devices d ON d.id = i.device_id WHERE i.kind = 'software'"
+        ) as cur:
+            rows = await cur.fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        try:
+            items = json.loads(r["payload_json"])
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", ""))
+            if q in name.lower():
+                out.append(
+                    {
+                        "device_id": int(r["device_id"]),
+                        "hostname": r["hostname"],
+                        "name": name,
+                        "version": str(item.get("version", "")),
+                    }
+                )
+                if len(out) >= limit:
+                    return out
+    return out
+
+
+async def set_maintenance(device_id: int, until_ts: int | None) -> dict[str, Any] | None:
+    """Silence alerts for a device until ``until_ts`` (None clears it)."""
+    async with _connect() as db:
+        cur = await db.execute(
+            "UPDATE devices SET maintenance_until = ? WHERE id = ?", (until_ts, device_id)
+        )
+        await db.commit()
+        if (cur.rowcount or 0) == 0:
+            return None
+    return await get_device(device_id, offline_after_s=1)
+
+
+async def in_maintenance_ids() -> set[int]:
+    """Device ids whose maintenance window is currently open (for the alert
+    engine, which reads this once per tick)."""
+    now = int(time.time())
+    async with _connect() as db:
+        async with db.execute(
+            "SELECT id FROM devices WHERE maintenance_until IS NOT NULL AND maintenance_until > ?",
+            (now,),
+        ) as cur:
+            return {int(r[0]) for r in await cur.fetchall()}
+
+
+async def device_macs(device_id: int) -> list[str]:
+    """MAC addresses reported in the hardware inventory (for Wake-on-LAN)."""
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT payload_json FROM inventory WHERE device_id = ? AND kind = 'hardware'",
+            (device_id,),
+        ) as cur:
+            row = await cur.fetchone()
+    if row is None:
+        return []
+    try:
+        data = json.loads(row["payload_json"])
+        macs = data.get("macs") if isinstance(data, dict) else None
+        return [str(m) for m in macs] if isinstance(macs, list) else []
+    except (ValueError, TypeError):
+        return []
 
 
 async def delete_device(device_id: int) -> bool:

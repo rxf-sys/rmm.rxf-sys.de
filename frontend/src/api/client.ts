@@ -11,12 +11,17 @@ import type {
   EnrollToken,
   Job,
   MetricSample,
+  AlertStats,
+  InventoryMatch,
+  NtfyConfig,
   Patch,
   PatchSummary,
   PatchWindow,
   Person,
   RemoteConfig,
   Script,
+  ScriptSchedule,
+  SessionInfo,
   Shell,
 } from '../types';
 
@@ -72,10 +77,26 @@ export function apiErrorMessage(e: unknown): string {
 }
 
 export const api = {
-  login: (username: string, password: string) =>
-    post<{ user: Account }>('/api/auth/login', { username, password }),
+  login: (username: string, password: string, totpCode?: string) =>
+    post<{ user: Account }>('/api/auth/login', {
+      username,
+      password,
+      ...(totpCode ? { totp_code: totpCode } : {}),
+    }),
   logout: () => post<{ ok: boolean }>('/api/auth/logout'),
   authMe: () => get<{ user: Account }>('/api/auth/me'),
+
+  // Two-factor (TOTP)
+  totpSetup: () => post<{ secret: string; otpauth_uri: string }>('/api/auth/totp/setup'),
+  totpConfirm: (secret: string, code: string) =>
+    post<{ ok: boolean }>('/api/auth/totp/confirm', { secret, code }),
+  totpDisable: (code: string) => post<{ ok: boolean }>('/api/auth/totp/disable', { code }),
+
+  // Sessions
+  sessions: (signal?: AbortSignal) =>
+    get<{ sessions: SessionInfo[] }>('/api/auth/sessions', signal),
+  revokeSession: (prefix: string) => del<{ ok: boolean }>(`/api/auth/sessions/${prefix}`),
+  revokeOtherSessions: () => post<{ ok: boolean; revoked: number }>('/api/auth/sessions/revoke-others'),
 
   devices: (signal?: AbortSignal) => get<{ devices: Device[] }>('/api/devices', signal),
   device: (id: number, signal?: AbortSignal) =>
@@ -88,6 +109,22 @@ export const api = {
     id: number,
     body: { owner_label?: string; tags?: string[]; rustdesk_id?: string; person_id?: number },
   ) => patch<{ device: Device }>(`/api/devices/${id}`, body),
+  wakeDevice: (id: number) => post<{ ok: boolean; sent: number }>(`/api/devices/${id}/wake`),
+  setMaintenance: (id: number, minutes: number) =>
+    post<{ device: Device }>(`/api/devices/${id}/maintenance`, { minutes }),
+  deviceAlerts: (id: number, signal?: AbortSignal) =>
+    get<{ alerts: Alert[]; stats: AlertStats }>(`/api/devices/${id}/alerts`, signal),
+  agentLogs: (id: number) => get<{ lines: string[] }>(`/api/devices/${id}/agent-logs`),
+
+  // Fleet-wide inventory search
+  searchInventory: (q: string, signal?: AbortSignal) =>
+    get<{ results: InventoryMatch[] }>(`/api/inventory/search?q=${encodeURIComponent(q)}`, signal),
+
+  // ntfy settings (admin)
+  ntfyConfig: (signal?: AbortSignal) => get<NtfyConfig>('/api/settings/ntfy', signal),
+  updateNtfy: (body: { base: string; topic: string; token?: string | null }) =>
+    send<NtfyConfig>('PUT', '/api/settings/ntfy', body),
+  testNtfy: () => post<{ ok: boolean }>('/api/settings/ntfy/test'),
 
   // Persons
   persons: (signal?: AbortSignal) => get<{ persons: Person[] }>('/api/persons', signal),
@@ -186,6 +223,26 @@ export const api = {
     },
   ) => send<{ rule: AlertRule }>('PUT', `/api/automation/rules/${id}`, body),
   deleteRule: (id: number) => del<{ ok: boolean }>(`/api/automation/rules/${id}`),
+  createSchedule: (body: {
+    script_id: number;
+    enabled?: boolean;
+    weekday?: number | null;
+    hour?: number;
+    scope_kind?: string;
+    scope_value?: string;
+  }) => post<{ schedule: ScriptSchedule }>('/api/automation/schedules', body),
+  updateSchedule: (
+    id: number,
+    body: {
+      script_id: number;
+      enabled: boolean;
+      weekday: number | null;
+      hour: number;
+      scope_kind: string;
+      scope_value: string;
+    },
+  ) => send<{ schedule: ScriptSchedule }>('PUT', `/api/automation/schedules/${id}`, body),
+  deleteSchedule: (id: number) => del<{ ok: boolean }>(`/api/automation/schedules/${id}`),
 
   // Remote desktop
   remoteConfig: (signal?: AbortSignal) => get<RemoteConfig>('/api/remote/config', signal),
@@ -199,4 +256,11 @@ export const api = {
 export function openJobSocket(jobId: number): WebSocket {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return new WebSocket(`${proto}//${window.location.host}/api/jobs/${jobId}/ws`);
+}
+
+/** Open the fleet-event socket. The server pushes `{type:'refresh'}` hints;
+ * the caller re-reads the REST endpoints. */
+export function openFleetSocket(): WebSocket {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return new WebSocket(`${proto}//${window.location.host}/api/fleet/ws`);
 }

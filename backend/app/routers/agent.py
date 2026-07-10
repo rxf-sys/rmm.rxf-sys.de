@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from .. import devices, jobs, metrics, patches, releases
 from ..agents_ws import manager
 from ..audit import record as audit_record
+from ..fleet_ws import hub as fleet_hub
 
 log = structlog.get_logger("agent_api")
 
@@ -233,12 +234,15 @@ async def agent_ws(ws: WebSocket) -> None:
         return
 
     device_id = device["id"]
+    was_connected = manager.is_connected(device_id)
     stale = manager.register(device_id, ws)
     if stale is not None:
         try:
             await stale.close(code=1000, reason="superseded by new connection")
         except Exception:  # noqa: BLE001 - stale socket is usually already dead
             pass
+    if not was_connected:
+        fleet_hub.broadcast("device_online")
 
     update_offered = False
     try:
@@ -309,6 +313,12 @@ async def agent_ws(ws: WebSocket) -> None:
                 items = payload.get("patches")
                 if isinstance(items, list):
                     await patches.apply_scan(device_id, items)
+                    fleet_hub.broadcast("patches")
+            elif msg_type == "agent_logs" and isinstance(payload, dict):
+                lines = payload.get("lines")
+                manager.resolve_logs(
+                    device_id, [str(x) for x in lines] if isinstance(lines, list) else []
+                )
             elif msg_type == "ping":
                 # Lets agents (and tests) confirm the pipeline end-to-end:
                 # everything sent before the ping has been processed.
@@ -321,3 +331,5 @@ async def agent_ws(ws: WebSocket) -> None:
         pass
     finally:
         manager.unregister(device_id, ws)
+        if not manager.is_connected(device_id):
+            fleet_hub.broadcast("device_offline")

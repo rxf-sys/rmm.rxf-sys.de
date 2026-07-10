@@ -7,8 +7,9 @@ export type AuthStatus = 'loading' | 'authed' | 'anon';
 export interface AuthState {
   user: Account | null;
   status: AuthStatus;
-  /** Throws on bad credentials — the caller surfaces the message. */
-  login: (username: string, password: string) => Promise<void>;
+  /** Throws on bad credentials — the caller surfaces the message. A thrown
+   * "totp_required" tells the login page to ask for the second factor. */
+  login: (username: string, password: string, totpCode?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -41,8 +42,8 @@ export function useAuth(): AuthState {
     };
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const r = await api.login(username, password);
+  const login = useCallback(async (username: string, password: string, totpCode?: string) => {
+    const r = await api.login(username, password, totpCode);
     setUser(r.user);
     setStatus('authed');
   }, []);

@@ -9,6 +9,7 @@ backoff window anyway.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import structlog
@@ -20,6 +21,32 @@ log = structlog.get_logger("agents_ws")
 class ConnectionManager:
     def __init__(self) -> None:
         self._conns: dict[int, WebSocket] = {}
+        # Pending "get_logs" requests: device_id → Future resolved when the
+        # agent's "agent_logs" reply arrives.
+        self._log_waiters: dict[int, asyncio.Future[list[str]]] = {}
+
+    async def request_logs(self, device_id: int, timeout: float = 5.0) -> list[str] | None:
+        """Ask a connected agent for its recent log lines. Returns None when
+        the device isn't connected or doesn't answer in time."""
+        if not self.is_connected(device_id):
+            return None
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future[list[str]] = loop.create_future()
+        self._log_waiters[device_id] = fut
+        try:
+            if not await self.send(device_id, {"type": "get_logs"}):
+                return None
+            return await asyncio.wait_for(fut, timeout)
+        except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+            return None
+        finally:
+            self._log_waiters.pop(device_id, None)
+
+    def resolve_logs(self, device_id: int, lines: list[str]) -> None:
+        """Called by the WS receive loop when an ``agent_logs`` reply lands."""
+        fut = self._log_waiters.get(device_id)
+        if fut is not None and not fut.done():
+            fut.set_result(lines)
 
     def register(self, device_id: int, ws: WebSocket) -> WebSocket | None:
         """Register a connection; returns a superseded stale socket (the
@@ -69,6 +96,7 @@ class ConnectionManager:
 
     def reset_for_tests(self) -> None:
         self._conns.clear()
+        self._log_waiters.clear()
 
 
 manager = ConnectionManager()

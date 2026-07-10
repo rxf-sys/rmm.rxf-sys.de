@@ -126,6 +126,11 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
             Lege Personen an (Familie, Kunden) und weise ihnen Geräte zu — danach kannst du Geräte
             und Alarm-Regeln nach Person filtern.
           </p>
+          {isAdmin && (
+            <button className="btn btn-primary" style={{ marginTop: 4 }} onClick={() => setDraft({ ...EMPTY })}>
+              + Neue Person anlegen
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid-2">

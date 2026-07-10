@@ -201,6 +201,9 @@ func handleMessage(ctx context.Context, cfg Config, msg message, s *sender) {
 			report := scanPatches(ctx)
 			s.send(ctx, "patch_report", map[string]any{"patches": report})
 		}()
+	case "get_logs":
+		// Remote diagnostics: ship the recent log ring to the dashboard.
+		s.send(ctx, "agent_logs", map[string]any{"lines": logRing.Snapshot()})
 	case "update":
 		var spec updateSpec
 		if err := json.Unmarshal(msg.Payload, &spec); err != nil {

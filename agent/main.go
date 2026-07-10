@@ -17,6 +17,8 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"os"
 
 	"github.com/kardianos/service"
@@ -64,14 +66,17 @@ func newService() (service.Service, error) {
 		// options are honoured by the systemd and launchd generators; the
 		// Windows SCM restart policy is set by install.ps1.
 		Option: service.KeyValue{
-			"Restart":         "always",
-			"RestartSec":      3,
+			"Restart":           "always",
+			"RestartSec":        3,
 			"SuccessExitStatus": "0",
 		},
 	})
 }
 
 func main() {
+	// Mirror log output into the in-memory ring so the server can pull the
+	// recent lines for remote diagnostics (message type "get_logs").
+	log.SetOutput(io.MultiWriter(os.Stderr, logRing))
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)

@@ -97,6 +97,10 @@ async def ensure_schema(settings: Settings) -> None:
         await db.execute("PRAGMA foreign_keys = ON")
         await db.execute("PRAGMA journal_mode = WAL")
         await db.executescript(_SCHEMA)
+        async with db.execute("PRAGMA table_info(users)") as cur:
+            cols = {row[1] for row in await cur.fetchall()}
+        if "totp_secret" not in cols:
+            await db.execute("ALTER TABLE users ADD COLUMN totp_secret TEXT")
         await db.commit()
     log.info("accounts.ready", db=_db_path)
 
@@ -140,7 +144,8 @@ def _hash_token(token: str) -> str:
 
 
 def _row_to_user(row: aiosqlite.Row) -> dict[str, Any]:
-    """Public user dict — never includes the password hash."""
+    """Public user dict — never includes the password hash or TOTP secret."""
+    keys = row.keys()
     return {
         "id": int(row["id"]),
         "username": row["username"],
@@ -149,6 +154,7 @@ def _row_to_user(row: aiosqlite.Row) -> dict[str, Any]:
         "disabled": bool(row["disabled"]),
         "created_at": int(row["created_at"]),
         "last_login_at": int(row["last_login_at"]) if row["last_login_at"] else None,
+        "totp_enabled": bool(row["totp_secret"]) if "totp_secret" in keys else False,
     }
 
 
@@ -270,6 +276,33 @@ async def count_active_admins() -> int:
 
 
 # ---------------------------------------------------------------------------
+# TOTP (two-factor)
+# ---------------------------------------------------------------------------
+
+
+async def get_totp_secret(user_id: int) -> str | None:
+    async with _connect() as db:
+        async with db.execute("SELECT totp_secret FROM users WHERE id = ?", (user_id,)) as cur:
+            row = await cur.fetchone()
+    return str(row[0]) if row and row[0] else None
+
+
+async def set_totp_secret(user_id: int, secret: str | None) -> None:
+    async with _connect() as db:
+        await db.execute("UPDATE users SET totp_secret = ? WHERE id = ?", (secret, user_id))
+        await db.commit()
+
+
+def verify_totp(secret: str, code: str) -> bool:
+    import pyotp
+
+    if not secret or not code:
+        return False
+    # valid_window=1 tolerates ±30 s clock drift between server and phone.
+    return pyotp.TOTP(secret).verify(code.strip().replace(" ", ""), valid_window=1)
+
+
+# ---------------------------------------------------------------------------
 # Authentication + sessions
 # ---------------------------------------------------------------------------
 
@@ -367,6 +400,53 @@ async def delete_session(token: str) -> None:
     async with _connect() as db:
         await db.execute("DELETE FROM sessions WHERE token_hash = ?", (_hash_token(token),))
         await db.commit()
+
+
+async def list_sessions(user_id: int, current_token: str = "") -> list[dict[str, Any]]:
+    """Active sessions for a user, newest first. Marks the caller's own
+    session so the UI can label it and refuse to revoke it blindly."""
+    current_hash = _hash_token(current_token) if current_token else ""
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT token_hash, token_prefix, created_at, expires_at, last_seen_at"
+            " FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC",
+            (user_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+    return [
+        {
+            "token_prefix": r["token_prefix"],
+            "created_at": int(r["created_at"]),
+            "expires_at": int(r["expires_at"]),
+            "last_seen_at": int(r["last_seen_at"]),
+            "current": r["token_hash"] == current_hash,
+        }
+        for r in rows
+    ]
+
+
+async def revoke_session_by_prefix(user_id: int, token_prefix: str) -> bool:
+    """Revoke one of the user's sessions by its short prefix."""
+    async with _connect() as db:
+        cur = await db.execute(
+            "DELETE FROM sessions WHERE user_id = ? AND token_prefix = ?",
+            (user_id, token_prefix),
+        )
+        await db.commit()
+        return (cur.rowcount or 0) > 0
+
+
+async def revoke_other_sessions(user_id: int, current_token: str) -> int:
+    """Log out everywhere except the current session."""
+    keep = _hash_token(current_token) if current_token else ""
+    async with _connect() as db:
+        cur = await db.execute(
+            "DELETE FROM sessions WHERE user_id = ? AND token_hash != ?",
+            (user_id, keep),
+        )
+        await db.commit()
+        return cur.rowcount or 0
 
 
 async def cleanup_expired_sessions() -> int:

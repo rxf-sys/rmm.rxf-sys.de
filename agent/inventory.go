@@ -1,9 +1,11 @@
 package main
 
 import (
+	"net"
 	"os"
 	"runtime"
 	"sort"
+	"strings"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/host"
@@ -53,8 +55,44 @@ func collectInventory() inventoryPayload {
 	if vm, err := mem.VirtualMemory(); err == nil {
 		hw["mem_total_b"] = vm.Total
 	}
+	if macs := collectMACs(); len(macs) > 0 {
+		// The server uses these for Wake-on-LAN (magic packets into the LAN).
+		hw["macs"] = macs
+	}
 
-	software := collectSoftware()
+	return finishInventory(hw, collectSoftware())
+}
+
+// collectMACs returns the MAC addresses of physical-looking, non-loopback
+// interfaces. Virtual adapters (docker, veth, bridges, TAP) are skipped by
+// name — best-effort, the server just tries every reported MAC for WoL.
+func collectMACs() []string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, ifc := range ifaces {
+		if ifc.Flags&net.FlagLoopback != 0 || len(ifc.HardwareAddr) != 6 {
+			continue
+		}
+		name := strings.ToLower(ifc.Name)
+		if strings.HasPrefix(name, "docker") || strings.HasPrefix(name, "veth") ||
+			strings.HasPrefix(name, "br-") || strings.HasPrefix(name, "virbr") ||
+			strings.HasPrefix(name, "tap") || strings.HasPrefix(name, "tun") ||
+			strings.HasPrefix(name, "vmnet") || strings.HasPrefix(name, "zt") {
+			continue
+		}
+		mac := ifc.HardwareAddr.String()
+		if mac == "" || mac == "00:00:00:00:00:00" {
+			continue
+		}
+		out = append(out, mac)
+	}
+	return out
+}
+
+func finishInventory(hw map[string]any, software []softwareItem) inventoryPayload {
 	sort.Slice(software, func(i, j int) bool { return software[i].Name < software[j].Name })
 	if len(software) > maxSoftwareItems {
 		software = software[:maxSoftwareItems]

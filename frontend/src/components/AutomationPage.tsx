@@ -3,6 +3,7 @@ import { api, apiErrorMessage } from '../api/client';
 import { formatRelative } from '../format';
 import type { AlertRule, AutomationConfig, Device, Person, RuleType, ScopeKind } from '../types';
 import { Skeleton } from '../ui';
+import { ScheduledScripts } from './ScheduledScripts';
 
 interface Props {
   devices: Device[];
@@ -408,6 +409,16 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
             ))}
           </div>
         </div>
+      )}
+
+      {cfg && (
+        <ScheduledScripts
+          schedules={cfg.schedules}
+          devices={devices}
+          persons={persons}
+          isAdmin={isAdmin}
+          onChanged={() => void reload()}
+        />
       )}
     </div>
   );

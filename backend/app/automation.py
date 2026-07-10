@@ -28,7 +28,7 @@ from typing import Any, AsyncIterator
 import aiosqlite
 import structlog
 
-from . import devices, jobs, patches
+from . import devices, jobs, patches, wol
 from .agents_ws import manager
 from .audit import record as audit_record
 from .config import Settings
@@ -48,6 +48,18 @@ CREATE TABLE IF NOT EXISTS alert_rules (
     threshold   INTEGER,
     scope_kind  TEXT    NOT NULL DEFAULT 'all',
     scope_value TEXT    NOT NULL DEFAULT '',
+    created_at  INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS script_schedules (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    script_id   INTEGER NOT NULL,
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    weekday     INTEGER,               -- 0-6, NULL = every day
+    hour        INTEGER NOT NULL,
+    scope_kind  TEXT    NOT NULL DEFAULT 'all',
+    scope_value TEXT    NOT NULL DEFAULT '',
+    last_run    INTEGER,
     created_at  INTEGER NOT NULL
 );
 """
@@ -310,12 +322,29 @@ async def run_patch_window(settings: Settings, now: float | None = None) -> list
 
     tag = str(cfg["tag"] or "").strip()
     fleet = await devices.list_devices(settings.offline_after_s)
+
+    # Wecken vor dem Fenster: offline targets in scope get a magic packet so
+    # they can come up in time for the install. Best-effort — no WoL config,
+    # no wake, and unreachable devices simply miss this window.
+    for d in fleet:
+        if tag and tag not in (d.get("tags") or []):
+            continue
+        if not manager.is_connected(d["id"]):
+            macs = await devices.device_macs(d["id"])
+            if macs:
+                try:
+                    wol.wake(macs, settings.wol_broadcast)
+                    log.info("automation.patch_window_wake", device_id=d["id"])
+                except OSError as e:  # noqa: BLE001 - one bad NIC shouldn't abort
+                    log.warning("automation.wake_failed", device_id=d["id"], error=str(e))
+
     created: list[int] = []
     for d in fleet:
         if tag and tag not in (d.get("tags") or []):
             continue
         # Offline devices are skipped, not queued: a failed job row per absent
-        # laptop every week is noise. They catch the next window.
+        # laptop every week is noise. They catch the next window (they may be
+        # waking from the magic packet just sent — next tick picks them up).
         if not manager.is_connected(d["id"]):
             continue
         if await jobs.active_job_of_kind(d["id"], "patch_install") is not None:
@@ -340,6 +369,148 @@ async def run_patch_window(settings: Settings, now: float | None = None) -> list
     if created:
         log.info("automation.patch_window_fired", jobs=len(created))
     return created
+
+
+# ---------------------------------------------------------------------------
+# Scheduled scripts
+# ---------------------------------------------------------------------------
+
+
+def _row_to_schedule(row: aiosqlite.Row) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "script_id": int(row["script_id"]),
+        "enabled": bool(row["enabled"]),
+        "weekday": int(row["weekday"]) if row["weekday"] is not None else None,
+        "hour": int(row["hour"]),
+        "scope_kind": row["scope_kind"],
+        "scope_value": row["scope_value"],
+        "last_run": int(row["last_run"]) if row["last_run"] else None,
+        "created_at": int(row["created_at"]),
+    }
+
+
+async def list_schedules() -> list[dict[str, Any]]:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM script_schedules ORDER BY id") as cur:
+            return [_row_to_schedule(r) for r in await cur.fetchall()]
+
+
+async def create_schedule(
+    script_id: int,
+    *,
+    hour: int,
+    weekday: int | None = None,
+    enabled: bool = True,
+    scope_kind: str = "all",
+    scope_value: str = "",
+) -> dict[str, Any]:
+    async with _connect() as db:
+        cur = await db.execute(
+            "INSERT INTO script_schedules (script_id, enabled, weekday, hour, scope_kind,"
+            " scope_value, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (script_id, int(enabled), weekday, hour, scope_kind, scope_value, int(time.time())),
+        )
+        await db.commit()
+        sched_id = int(cur.lastrowid or 0)
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM script_schedules WHERE id = ?", (sched_id,)) as sel:
+            row = await sel.fetchone()
+    assert row is not None
+    return _row_to_schedule(row)
+
+
+async def update_schedule(
+    sched_id: int,
+    *,
+    hour: int,
+    weekday: int | None,
+    enabled: bool,
+    scope_kind: str,
+    scope_value: str,
+) -> dict[str, Any] | None:
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE script_schedules SET hour = ?, weekday = ?, enabled = ?, scope_kind = ?,"
+            " scope_value = ? WHERE id = ?",
+            (hour, weekday, int(enabled), scope_kind, scope_value, sched_id),
+        )
+        await db.commit()
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM script_schedules WHERE id = ?", (sched_id,)) as sel:
+            row = await sel.fetchone()
+    return _row_to_schedule(row) if row else None
+
+
+async def delete_schedule(sched_id: int) -> bool:
+    async with _connect() as db:
+        cur = await db.execute("DELETE FROM script_schedules WHERE id = ?", (sched_id,))
+        await db.commit()
+        return (cur.rowcount or 0) > 0
+
+
+async def run_script_schedules(settings: Settings, now: float | None = None) -> list[int]:
+    """One scheduler tick for scheduled scripts. Dispatches script jobs to
+    every online in-scope device whose schedule is due this hour and hasn't
+    run in the last 2 h. Returns created job ids."""
+    from . import scripts  # local import avoids a module cycle
+
+    now = time.time() if now is None else now
+    lt = time.localtime(now)
+    schedules = await list_schedules()
+    if not schedules:
+        return []
+    fleet = await devices.list_devices(settings.offline_after_s)
+    created: list[int] = []
+    for sched in schedules:
+        if not sched["enabled"]:
+            continue
+        if sched["weekday"] is not None and sched["weekday"] != lt.tm_wday:
+            continue
+        if sched["hour"] != lt.tm_hour:
+            continue
+        if sched["last_run"] is not None and now - sched["last_run"] < 2 * 3600:
+            continue
+        script = await scripts.get(sched["script_id"])
+        if script is None:
+            continue
+        await _mark_schedule_run(sched["id"], int(now))
+        for d in fleet:
+            if not _rule_matches(
+                {"scope_kind": sched["scope_kind"], "scope_value": sched["scope_value"]}, d
+            ):
+                continue
+            if not manager.is_connected(d["id"]):
+                continue
+            job = await jobs.create_job(
+                d["id"],
+                kind="script",
+                script_id=script["id"],
+                script_name=script["name"],
+                shell=script["shell"],
+                command=script["content"],
+                created_by="automation",
+            )
+            if not await manager.send(d["id"], jobs.dispatch_payload(job)):
+                await jobs.fail_undispatched(job["id"], "Gerät ist nicht verbunden")
+                continue
+            await audit_record(
+                "script.scheduled_run",
+                device_id=d["id"],
+                script=script["name"],
+                actor="automation",
+            )
+            created.append(job["id"])
+    if created:
+        log.info("automation.script_schedules_fired", jobs=len(created))
+    return created
+
+
+async def _mark_schedule_run(sched_id: int, ts: int) -> None:
+    async with _connect() as db:
+        await db.execute("UPDATE script_schedules SET last_run = ? WHERE id = ?", (ts, sched_id))
+        await db.commit()
 
 
 def reset_for_tests(db_path: str) -> None:

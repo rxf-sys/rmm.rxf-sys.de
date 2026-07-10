@@ -50,6 +50,7 @@ export default function App() {
   const [detailId, setDetailId] = useState<number | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const [favorites, setFavorites] = useState<number[]>(loadFavorites);
 
   const toggleFavorite = useCallback((id: number) => {
@@ -94,11 +95,13 @@ export default function App() {
     setPage(p);
     setDetailId(null);
     setPaletteOpen(false);
+    setNavOpen(false);
   };
   const openDevice = (id: number) => {
     setDetailId(id);
     setPage('devices');
     setPaletteOpen(false);
+    setNavOpen(false);
   };
 
   const openAlerts = fleet.alerts.filter((a) => a.resolved_at === null).length;
@@ -109,7 +112,8 @@ export default function App() {
   const crumbPre = detailId !== null ? 'Vektor / Geräte / ' : 'Vektor / ';
 
   return (
-    <div className="app-shell">
+    <div className={navOpen ? 'app-shell nav-open' : 'app-shell'}>
+      {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
       <Sidebar
         page={page}
         onNavigate={goPage}
@@ -132,6 +136,7 @@ export default function App() {
           onOpenPalette={() => setPaletteOpen(true)}
           onOpenAlerts={() => goPage('alerts')}
           onOpenEnroll={() => setEnrollOpen(true)}
+          onToggleNav={() => setNavOpen((o) => !o)}
         />
         <div className="content">
           {detailId !== null ? (
@@ -149,7 +154,14 @@ export default function App() {
               onLogout={logout}
             />
           ) : page === 'overview' ? (
-            <OverviewPage fleet={fleet} user={user} onOpenDevice={openDevice} onNavigate={goPage} />
+            <OverviewPage
+              fleet={fleet}
+              user={user}
+              onOpenDevice={openDevice}
+              onNavigate={goPage}
+              onOpenEnroll={() => setEnrollOpen(true)}
+              canEnroll={isOperator}
+            />
           ) : page === 'devices' ? (
             <DevicesPage
               devices={fleet.devices}

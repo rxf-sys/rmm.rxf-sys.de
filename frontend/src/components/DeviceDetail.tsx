@@ -3,6 +3,8 @@ import { api, apiErrorMessage } from '../api/client';
 import { formatBytes, formatRelative, osLabel } from '../format';
 import { useJobStream } from '../hooks/useJobStream';
 import type {
+  Alert,
+  AlertStats,
   Credential,
   Device,
   DeviceDetail as DeviceDetailData,
@@ -30,14 +32,23 @@ interface Props {
   onLogout: () => void;
 }
 
-type TabId = 'overview' | 'history' | 'inventory' | 'remote' | 'patches' | 'passwords' | 'jobs';
-const TABS: { id: TabId; label: string; adminOnly?: boolean }[] = [
+type TabId =
+  | 'overview'
+  | 'history'
+  | 'inventory'
+  | 'remote'
+  | 'patches'
+  | 'passwords'
+  | 'diagnostics'
+  | 'jobs';
+const TABS: { id: TabId; label: string; adminOnly?: boolean; operatorOnly?: boolean }[] = [
   { id: 'overview', label: 'Übersicht' },
   { id: 'history', label: 'Verlauf' },
   { id: 'inventory', label: 'Inventar' },
   { id: 'remote', label: 'Remote' },
   { id: 'patches', label: 'Updates' },
   { id: 'passwords', label: 'Passwörter', adminOnly: true },
+  { id: 'diagnostics', label: 'Diagnose', operatorOnly: true },
   { id: 'jobs', label: 'Aktivität' },
 ];
 
@@ -128,6 +139,27 @@ export function DeviceDetail({
     }
   };
 
+  const wake = async () => {
+    setError(null);
+    try {
+      const r = await api.wakeDevice(deviceId);
+      setError(`✓ Magic Packet an ${r.sent} MAC(s) gesendet — das Gerät sollte in Kürze hochfahren.`);
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    }
+  };
+
+  const setMaintenance = async (minutes: number) => {
+    setError(null);
+    try {
+      await api.setMaintenance(deviceId, minutes);
+      await load();
+      setMenuOpen(false);
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    }
+  };
+
   if (error && !detail) return <div className="screen"><p className="err">{error}</p></div>;
   if (!detail) return <div className="screen"><span className="muted">Lade Gerät…</span></div>;
 
@@ -150,7 +182,17 @@ export function DeviceDetail({
             </span>
           ))}
         </span>
+        {d.maintenance_until && (
+          <span className="badge badge-warn" title="Alarme unterdrückt">
+            🛠 Wartung bis {new Date(d.maintenance_until * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
         <div className="row grow" style={{ marginLeft: 'auto', gap: 8, position: 'relative' }}>
+          {isOperator && !d.online && (
+            <button className="btn" onClick={() => void wake()} title="Wake-on-LAN">
+              ⏻ Aufwecken
+            </button>
+          )}
           <button className="btn" onClick={() => setTab('remote')}>
             ⌘ Terminal
           </button>
@@ -172,6 +214,17 @@ export function DeviceDetail({
                 {favorite ? '★ Favorit entfernen' : '☆ Zu Favoriten'}
               </button>
               {isOperator && (
+                <>
+                  <div className="palette-sep">Wartung (Alarme aus)</div>
+                  <button className="palette-item" onClick={() => void setMaintenance(60)}>🛠 1 Stunde</button>
+                  <button className="palette-item" onClick={() => void setMaintenance(240)}>🛠 4 Stunden</button>
+                  <button className="palette-item" onClick={() => void setMaintenance(720)}>🛠 12 Stunden</button>
+                  {d.maintenance_until && (
+                    <button className="palette-item" onClick={() => void setMaintenance(0)}>✓ Wartung beenden</button>
+                  )}
+                </>
+              )}
+              {isOperator && (
                 <button className="palette-item" onClick={() => { setEditing(true); setMenuOpen(false); }}>
                   Bearbeiten
                 </button>
@@ -189,7 +242,7 @@ export function DeviceDetail({
       {error && <p className="err">{error}</p>}
 
       <div className="tabs">
-        {TABS.filter((t) => !t.adminOnly || isAdmin).map((t) => (
+        {TABS.filter((t) => (!t.adminOnly || isAdmin) && (!t.operatorOnly || isOperator)).map((t) => (
           <button key={t.id} className={tab === t.id ? 'tab active' : 'tab'} onClick={() => setTab(t.id)}>
             {t.label}
           </button>
@@ -202,6 +255,7 @@ export function DeviceDetail({
 
       {tab === 'overview' && <OverviewTab detail={detail} onGoTab={setTab} />}
       {tab === 'history' && <HistoryTab deviceId={deviceId} />}
+      {tab === 'diagnostics' && isOperator && <DiagnosticsTab deviceId={deviceId} connected={d.connected} />}
       {tab === 'inventory' && <InventoryTab detail={detail} />}
       {tab === 'remote' && <RemoteTab device={d} isOperator={isOperator} onSession={openRemoteSession} onChanged={() => void load()} />}
       {tab === 'patches' && <UpdatesTab deviceId={deviceId} connected={d.connected} isOperator={isOperator} />}
@@ -560,9 +614,16 @@ const RANGES = [
   { label: '24 h', hours: 24 },
   { label: '7 Tage', hours: 168 },
 ];
+const RULE_LABEL_SHORT: Record<string, string> = {
+  offline: 'Offline',
+  disk: 'Disk',
+  patch_age: 'Patches',
+};
+
 function HistoryTab({ deviceId }: { deviceId: number }) {
   const [hours, setHours] = useState(24);
   const [samples, setSamples] = useState<MetricSample[] | null>(null);
+  const [alertData, setAlertData] = useState<{ alerts: Alert[]; stats: AlertStats } | null>(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -572,6 +633,15 @@ function HistoryTab({ deviceId }: { deviceId: number }) {
       .catch(() => setSamples([]));
     return () => ctrl.abort();
   }, [deviceId, hours]);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    api
+      .deviceAlerts(deviceId, ctrl.signal)
+      .then(setAlertData)
+      .catch(() => setAlertData(null));
+    return () => ctrl.abort();
+  }, [deviceId]);
 
   const W = 600;
   const H = 220;
@@ -624,6 +694,96 @@ function HistoryTab({ deviceId }: { deviceId: number }) {
         </>
       ) : (
         <span className="muted">Noch nicht genug Verlaufsdaten — der Chart füllt sich mit jedem Heartbeat.</span>
+      )}
+
+      {alertData && (
+        <div style={{ borderTop: '1px solid var(--line2)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+            <span className="card-title-sm">Alarm-Trend (30 Tage)</span>
+            <span className="muted" style={{ fontSize: 11 }}>
+              {alertData.stats.total} Alarm(e) · aktuell {alertData.stats.open} offen
+            </span>
+            <div className="row grow" style={{ marginLeft: 'auto', gap: 6, flex: 'none', flexWrap: 'wrap' }}>
+              {Object.entries(alertData.stats.by_rule).map(([rule, n]) => (
+                <span key={rule} className="chip">
+                  {(RULE_LABEL_SHORT[rule] ?? rule)}: {n}×
+                </span>
+              ))}
+              {alertData.stats.total === 0 && <span className="muted" style={{ fontSize: 11 }}>keine Alarme — stabil ✓</span>}
+            </div>
+          </div>
+          {alertData.alerts.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 180, overflowY: 'auto' }}>
+              {alertData.alerts.map((a) => (
+                <div key={a.id} className="row" style={{ gap: 8, fontSize: 11.5, padding: '4px 0' }}>
+                  <span className="dot" style={{ background: a.resolved_at ? 'var(--ok)' : 'var(--dangerS)' }} />
+                  <span style={{ fontWeight: 600 }}>{a.message}</span>
+                  <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 10.5, flex: 'none' }}>
+                    {formatRelative(a.fired_at)}
+                    {a.resolved_at ? ` · behoben ${formatRelative(a.resolved_at)}` : ' · offen'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostics tab (agent logs)
+// ---------------------------------------------------------------------------
+function DiagnosticsTab({ deviceId, connected }: { deviceId: number; connected: boolean }) {
+  const [lines, setLines] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchLogs = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.agentLogs(deviceId);
+      setLines(r.lines);
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="row" style={{ gap: 8 }}>
+        <span className="card-title">Agent-Diagnose</span>
+        <span className="muted" style={{ fontSize: 11 }}>letzte Log-Zeilen des Agenten</span>
+        <button
+          className="btn btn-accent btn-sm grow"
+          style={{ marginLeft: 'auto' }}
+          onClick={() => void fetchLogs()}
+          disabled={busy || !connected}
+        >
+          {busy ? 'Lade…' : '⟳ Logs abrufen'}
+        </button>
+      </div>
+      {!connected && <span className="muted">Gerät ist nicht verbunden — Logs sind nur bei aktivem Agent abrufbar.</span>}
+      {error && <p className="err">{error}</p>}
+      {lines !== null && (
+        <div className="console">
+          <div className="console-head">
+            <span className="console-title">rmm-agent · {lines.length} Zeilen</span>
+          </div>
+          <div className="console-body" style={{ maxHeight: 420 }}>
+            {lines.length === 0 ? (
+              <span className="console-line" style={{ color: '#4a5361' }}>Keine Log-Zeilen gepuffert.</span>
+            ) : (
+              lines.map((l, i) => (
+                <span key={i} className="console-line">{l}</span>
+              ))
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

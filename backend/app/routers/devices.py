@@ -12,7 +12,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from .. import credentials, devices, jobs, metrics, patches, persons
+import time
+
+from .. import alerts, credentials, devices, jobs, metrics, patches, persons, wol
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..auth import require_operator, verify_session
@@ -103,6 +105,38 @@ async def device_history(
     return {"samples": await metrics.history(device_id, hours)}
 
 
+@router.get("/{device_id}/alerts")
+async def device_alerts(
+    device_id: int,
+    user: dict = Depends(verify_session),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Alert history + a 30-day trend summary for the device detail view."""
+    if await devices.get_device(device_id, settings.offline_after_s) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    return {
+        "alerts": await alerts.for_device(device_id),
+        "stats": await alerts.stats_for_device(device_id),
+    }
+
+
+@router.get("/{device_id}/agent-logs")
+async def device_agent_logs(
+    device_id: int,
+    user: dict = Depends(require_operator),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Pull the agent's recent in-memory log lines for remote diagnostics."""
+    if await devices.get_device(device_id, settings.offline_after_s) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    if not manager.is_connected(device_id):
+        raise HTTPException(status_code=409, detail="Gerät ist nicht verbunden")
+    lines = await manager.request_logs(device_id)
+    if lines is None:
+        raise HTTPException(status_code=504, detail="Agent hat nicht rechtzeitig geantwortet")
+    return {"lines": lines}
+
+
 class UpdateDeviceRequest(BaseModel):
     owner_label: str | None = Field(default=None, max_length=120)
     tags: list[str] | None = None
@@ -136,6 +170,52 @@ async def update_device(
     # Re-read with the real threshold so the response carries correct 'online'.
     fresh = await devices.get_device(device_id, settings.offline_after_s)
     return {"device": _with_connected(fresh or device)}
+
+
+@router.post("/{device_id}/wake")
+async def wake_device(
+    device_id: int,
+    user: dict = Depends(require_operator),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Send a Wake-on-LAN magic packet to the device's known MACs."""
+    if await devices.get_device(device_id, settings.offline_after_s) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    macs = await devices.device_macs(device_id)
+    if not macs:
+        raise HTTPException(
+            status_code=422,
+            detail="Keine MAC-Adresse bekannt — das Gerät muss sich einmal online gemeldet haben.",
+        )
+    try:
+        sent = wol.wake(macs, settings.wol_broadcast)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"WoL fehlgeschlagen: {e}") from e
+    await audit_record("device.wake", user=user["username"], device_id=device_id, macs=len(macs))
+    return {"ok": True, "sent": sent, "macs": macs}
+
+
+class MaintenanceRequest(BaseModel):
+    # Minutes to silence alerts; 0 clears maintenance immediately.
+    minutes: int = Field(ge=0, le=60 * 24 * 14)
+
+
+@router.post("/{device_id}/maintenance")
+async def set_maintenance(
+    device_id: int,
+    body: MaintenanceRequest,
+    user: dict = Depends(require_operator),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Silence a device's alerts for a window (Wartungsmodus)."""
+    until = int(time.time()) + body.minutes * 60 if body.minutes else None
+    device = await devices.set_maintenance(device_id, until)
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    await audit_record(
+        "device.maintenance", user=user["username"], device_id=device_id, minutes=body.minutes
+    )
+    return {"device": _with_connected(device)}
 
 
 @router.delete("/{device_id}")
