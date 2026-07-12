@@ -101,6 +101,9 @@ async def ensure_schema(settings: Settings) -> None:
             cols = {row[1] for row in await cur.fetchall()}
         if "totp_secret" not in cols:
             await db.execute("ALTER TABLE users ADD COLUMN totp_secret TEXT")
+        if "totp_backup_codes" not in cols:
+            # JSON list of sha256 hashes; each code is one-time.
+            await db.execute("ALTER TABLE users ADD COLUMN totp_backup_codes TEXT")
         await db.commit()
     log.info("accounts.ready", db=_db_path)
 
@@ -300,6 +303,84 @@ def verify_totp(secret: str, code: str) -> bool:
         return False
     # valid_window=1 tolerates ±30 s clock drift between server and phone.
     return pyotp.TOTP(secret).verify(code.strip().replace(" ", ""), valid_window=1)
+
+
+# --- Backup codes (one-time recovery for a lost authenticator) -----------------
+
+BACKUP_CODE_COUNT = 8
+
+
+def _normalize_backup_code(code: str) -> str:
+    return code.strip().replace(" ", "").replace("-", "").lower()
+
+
+async def generate_backup_codes(user_id: int) -> list[str]:
+    """Mint fresh one-time recovery codes (returned in plaintext exactly
+    once; only sha256 hashes are stored). Replaces any previous set."""
+    import json as _json
+
+    codes = [f"{secrets.token_hex(2)}-{secrets.token_hex(2)}" for _ in range(BACKUP_CODE_COUNT)]
+    hashes = [hashlib.sha256(_normalize_backup_code(c).encode()).hexdigest() for c in codes]
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE users SET totp_backup_codes = ? WHERE id = ?",
+            (_json.dumps(hashes), user_id),
+        )
+        await db.commit()
+    return codes
+
+
+async def consume_backup_code(user_id: int, code: str) -> bool:
+    """Burn one recovery code. True when it matched (and is now gone)."""
+    import json as _json
+
+    async with _connect() as db:
+        async with db.execute(
+            "SELECT totp_backup_codes FROM users WHERE id = ?", (user_id,)
+        ) as cur:
+            row = await cur.fetchone()
+        if not row or not row[0]:
+            return False
+        try:
+            hashes: list[str] = _json.loads(row[0])
+        except (ValueError, TypeError):
+            return False
+        digest = hashlib.sha256(_normalize_backup_code(code).encode()).hexdigest()
+        if digest not in hashes:
+            return False
+        hashes.remove(digest)
+        await db.execute(
+            "UPDATE users SET totp_backup_codes = ? WHERE id = ?",
+            (_json.dumps(hashes), user_id),
+        )
+        await db.commit()
+    return True
+
+
+async def backup_codes_left(user_id: int) -> int:
+    import json as _json
+
+    async with _connect() as db:
+        async with db.execute(
+            "SELECT totp_backup_codes FROM users WHERE id = ?", (user_id,)
+        ) as cur:
+            row = await cur.fetchone()
+    if not row or not row[0]:
+        return 0
+    try:
+        return len(_json.loads(row[0]))
+    except (ValueError, TypeError):
+        return 0
+
+
+async def clear_totp(user_id: int) -> None:
+    """Remove second factor AND recovery codes (disable or admin reset)."""
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE users SET totp_secret = NULL, totp_backup_codes = NULL WHERE id = ?",
+            (user_id,),
+        )
+        await db.commit()
 
 
 # ---------------------------------------------------------------------------

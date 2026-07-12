@@ -122,11 +122,15 @@ async def login(
     if secret:
         if not body.totp_code:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="totp_required")
+        # Backup codes (one-time) are the recovery path for a lost phone.
         if not accounts.verify_totp(secret, body.totp_code):
-            _record_fail(ip)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Code ungültig"
-            )
+            if await accounts.consume_backup_code(user["id"], body.totp_code):
+                await audit_record("auth.backup_code_used", user=user["username"], ip=ip)
+            else:
+                _record_fail(ip)
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Code ungültig"
+                )
     _clear_fails(ip)
     # Session rotation: if the browser still carries a session cookie (e.g.
     # re-login from an open tab), revoke that server-side row first — without
@@ -191,8 +195,10 @@ async def totp_confirm(body: TotpConfirm, user: dict = Depends(verify_session)) 
     if not accounts.verify_totp(body.secret, body.code):
         raise HTTPException(status_code=422, detail="Code ungültig — bitte erneut versuchen")
     await accounts.set_totp_secret(user["id"], body.secret)
+    backup_codes = await accounts.generate_backup_codes(user["id"])
     await audit_record("auth.totp_enabled", user=user["username"])
-    return {"ok": True}
+    # The plaintext codes exist only in this response — hashes in the DB.
+    return {"ok": True, "backup_codes": backup_codes}
 
 
 class TotpDisable(BaseModel):
@@ -204,9 +210,11 @@ async def totp_disable(body: TotpDisable, user: dict = Depends(verify_session)) 
     secret = await accounts.get_totp_secret(user["id"])
     if not secret:
         raise HTTPException(status_code=409, detail="2FA ist nicht aktiv")
-    if not accounts.verify_totp(secret, body.code):
+    if not accounts.verify_totp(secret, body.code) and not await accounts.consume_backup_code(
+        user["id"], body.code
+    ):
         raise HTTPException(status_code=422, detail="Code ungültig")
-    await accounts.set_totp_secret(user["id"], None)
+    await accounts.clear_totp(user["id"])
     await audit_record("auth.totp_disabled", user=user["username"])
     return {"ok": True}
 

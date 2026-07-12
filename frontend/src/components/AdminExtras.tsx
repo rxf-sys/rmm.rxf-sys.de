@@ -26,6 +26,7 @@ export function AdminExtras({ currentUser }: Props) {
 function TotpCard({ user }: { user: Account }) {
   const [enabled, setEnabled] = useState(!!user.totp_enabled);
   const [setup, setSetup] = useState<{ secret: string; otpauth_uri: string } | null>(null);
+  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
   const [code, setCode] = useState('');
   const [disableMode, setDisableMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,10 +45,11 @@ function TotpCard({ user }: { user: Account }) {
     if (!setup) return;
     setError(null);
     try {
-      await api.totpConfirm(setup.secret, code);
+      const r = await api.totpConfirm(setup.secret, code);
       setEnabled(true);
       setSetup(null);
       setCode('');
+      setBackupCodes(r.backup_codes);
       setMsg('2FA aktiviert.');
     } catch (e) {
       setError(apiErrorMessage(e));
@@ -113,6 +115,33 @@ function TotpCard({ user }: { user: Account }) {
         </div>
       )}
 
+      {backupCodes && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7, border: '1px solid var(--warn)', borderRadius: 9, padding: '10px 12px' }}>
+          <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--warn)' }}>
+            Backup-Codes — jetzt sichern, sie werden nie wieder angezeigt
+          </span>
+          <span className="muted" style={{ fontSize: 11 }}>
+            Jeder Code funktioniert einmal als Ersatz für den App-Code (verlorenes Handy).
+          </span>
+          <code className="pre-box" style={{ userSelect: 'all', whiteSpace: 'pre-wrap' }}>
+            {backupCodes.join('   ')}
+          </code>
+          <div className="row" style={{ gap: 8 }}>
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                void navigator.clipboard.writeText(backupCodes.join('\n')).catch(() => {});
+              }}
+            >
+              Kopieren
+            </button>
+            <button className="btn btn-sm" onClick={() => setBackupCodes(null)}>
+              Gesichert ✓
+            </button>
+          </div>
+        </div>
+      )}
+
       {enabled && !disableMode && (
         <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setDisableMode(true)}>
           2FA deaktivieren
@@ -124,9 +153,8 @@ function TotpCard({ user }: { user: Account }) {
             className="input mono btn-sm"
             style={{ width: 120 }}
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            onChange={(e) => setCode(e.target.value.slice(0, 12))}
             placeholder="Code"
-            inputMode="numeric"
           />
           <button className="btn btn-danger btn-sm" onClick={() => void disable()} disabled={code.length < 6}>
             Bestätigen
