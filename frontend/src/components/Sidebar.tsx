@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { Account, Device } from '../types';
 import {
   IconBell,
+  IconBook,
   IconClock,
   IconGrid,
   IconList,
@@ -24,6 +25,7 @@ export type PageId =
   | 'patches'
   | 'scripts'
   | 'automation'
+  | 'docs'
   | 'audit'
   | 'admin';
 
@@ -42,6 +44,7 @@ const NAV: NavDef[] = [
   { id: 'patches', label: 'Patch-Management', icon: <IconShield /> },
   { id: 'scripts', label: 'Skripte', icon: <IconTerminal /> },
   { id: 'automation', label: 'Automatisierung', icon: <IconClock /> },
+  { id: 'docs', label: 'Dokumentation', icon: <IconBook /> },
   { id: 'audit', label: 'Audit-Log', icon: <IconList />, adminOnly: true },
   { id: 'admin', label: 'Administration', icon: <IconSettings />, adminOnly: true },
 ];

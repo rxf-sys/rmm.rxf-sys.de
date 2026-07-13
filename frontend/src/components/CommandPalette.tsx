@@ -32,6 +32,7 @@ const PAGES: { id: PageId; label: string; adminOnly?: boolean }[] = [
   { id: 'patches', label: 'Patch-Management' },
   { id: 'scripts', label: 'Skript-Bibliothek' },
   { id: 'automation', label: 'Automatisierung' },
+  { id: 'docs', label: 'Dokumentation' },
   { id: 'audit', label: 'Audit-Log', adminOnly: true },
   { id: 'admin', label: 'Administration', adminOnly: true },
 ];
