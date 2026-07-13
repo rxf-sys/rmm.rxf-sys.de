@@ -20,6 +20,8 @@ export function EnrollModal({ onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [dlError, setDlError] = useState<string | null>(null);
+  const [dlBusy, setDlBusy] = useState(false);
 
   const loadTokens = () =>
     api
@@ -98,6 +100,41 @@ export function EnrollModal({ onClose }: Props) {
   };
   const copyCmd = () => copyText(installCmd);
 
+  // Fetch the binary ourselves so a missing release surfaces as a readable
+  // message here, instead of a browser download that silently fails and saves
+  // the 404 body as "windows-amd64.json".
+  const downloadBinary = async () => {
+    if (dlBusy || !downloadUrl) return;
+    setDlError(null);
+    setDlBusy(true);
+    try {
+      const r = await fetch(downloadUrl, { credentials: 'include' });
+      if (!r.ok) {
+        let detail = `Fehler ${r.status}`;
+        try {
+          const j = (await r.json()) as { detail?: string };
+          if (j.detail) detail = j.detail;
+        } catch {
+          /* non-JSON error body */
+        }
+        throw new Error(detail);
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'rmm-agent.exe';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setDlError(e instanceof Error ? e.message : 'Download fehlgeschlagen');
+    } finally {
+      setDlBusy(false);
+    }
+  };
+
   return (
     <div className="overlay modal-wrap" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -159,9 +196,14 @@ export function EnrollModal({ onClose }: Props) {
               </button>
               {platform === 'windows' && (
                 <>
-                  <a className="btn btn-sm" href={downloadUrl} download style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <IconDownload size={13} /> Windows-Agent herunterladen
-                  </a>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => void downloadBinary()}
+                    disabled={dlBusy}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <IconDownload size={13} /> {dlBusy ? 'Lädt…' : 'Windows-Agent herunterladen'}
+                  </button>
                   <button className="btn btn-sm" onClick={() => void copyText(downloadUrl)}>
                     Download-Link kopieren
                   </button>
@@ -171,9 +213,14 @@ export function EnrollModal({ onClose }: Props) {
                 Weiteres Token
               </button>
             </div>
+            {dlError && (
+              <p className="err" role="alert" style={{ margin: 0 }}>
+                {dlError}
+              </p>
+            )}
             <span className="muted" style={{ fontSize: 10.5 }}>
-              Voraussetzung: signierte Agent-Releases liegen auf dem Server (agent-releases/) —
-              sonst meldet der Download „kein Release hinterlegt".
+              Voraussetzung: ein Agent-Release liegt auf dem Server (agent-releases/) — sonst meldet
+              der Download „kein Release hinterlegt". Siehe Tab „Dokumentation" → Release erzeugen.
             </span>
             <span style={{ fontWeight: 600, fontSize: 11, color: 'var(--warn)' }}>
               ⚠ Das Token wird nur einmal angezeigt und ist {formatDateTime(created.expires_at)}{' '}

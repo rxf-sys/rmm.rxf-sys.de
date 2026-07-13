@@ -5,7 +5,7 @@ VERSION ?= 0.1.0-dev
 LDFLAGS  = -s -w -X main.version=$(VERSION)
 DIST     = dist
 
-.PHONY: build vet test release clean keygen sign \
+.PHONY: build vet test release clean keygen sign dev-manifest \
         linux-amd64 linux-arm64 windows-amd64 darwin-amd64 darwin-arm64
 
 build:
@@ -46,6 +46,14 @@ keygen:
 sign: release
 	@test -n "$(AGENT_SIGN_KEY)" || (echo "AGENT_SIGN_KEY is required" && exit 1)
 	cd $(DIST) && go run ../tools/sign sign "$(AGENT_SIGN_KEY)" "$(VERSION)" rmm-agent-*
+
+# Build all targets + an UNSIGNED manifest.json. Enough to make the dashboard
+# download / one-liner install work without setting up a signing key first.
+# Auto-update stays off for these targets (that needs `make sign`). Copy the
+# contents of $(DIST) to the server's AGENT_RELEASE_DIR (infrastructure/agent-releases/).
+#   make dev-manifest VERSION=0.1.0
+dev-manifest: release
+	cd $(DIST) && go run ../tools/sign manifest "$(VERSION)" rmm-agent-*
 
 clean:
 	rm -rf $(DIST) rmm-agent

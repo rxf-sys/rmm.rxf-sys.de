@@ -214,8 +214,24 @@ export function DocsPage() {
           subtitle="Signierte Binaries bauen und auf den Server legen"
         >
           <p style={{ margin: 0 }}>
-            Das Dashboard liefert kein Binary aus, solange kein signiertes Release auf dem Server
-            liegt. So wird eins gebaut (auf der Build-Maschine, Go + Make erforderlich):
+            Das Dashboard liefert kein Binary aus, solange kein Release auf dem Server liegt. Das
+            ist die Ursache, wenn der Download „Konnte nicht heruntergeladen werden – keine Datei"
+            meldet.
+          </p>
+          <div className="callout-note">
+            <b>Schnellweg (ohne Signaturschlüssel):</b> baut alle Ziele + ein unsigniertes
+            Manifest — der Download und der Einzeiler funktionieren sofort. Auto-Update bleibt für
+            diese Binaries aus (dafür der signierte Weg darunter).
+            <div style={{ marginTop: 8 }}>
+              <Code>{`cd agent
+make dev-manifest VERSION=0.1.0
+# dist/ nach infrastructure/agent-releases/ kopieren, dann Backend neu starten:
+cp dist/* /opt/rxf-rmm/infrastructure/agent-releases/
+docker compose -f /opt/rxf-rmm/infrastructure/docker-compose.yml up -d backend`}</Code>
+            </div>
+          </div>
+          <p style={{ margin: 0 }}>
+            Für Produktion mit <b>Auto-Update</b> die Binaries signieren (Go + Make erforderlich):
           </p>
           <Step n={1} title="Einmalig einen Signaturschlüssel erzeugen">
             <p className="muted" style={{ margin: 0 }}>

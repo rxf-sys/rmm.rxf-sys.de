@@ -19,6 +19,14 @@ make sign VERSION=0.2.0 AGENT_SIGN_KEY=<base64 private key>
 # erzeugt dist/rmm-agent-<os>-<arch>[.exe] + dist/manifest.json
 ```
 
+**Schnellweg ohne Signaturschlüssel** (Download/Installer funktionieren sofort,
+Auto-Update bleibt für diese Binaries aus):
+
+```bash
+make dev-manifest VERSION=0.1.0
+# erzeugt dist/rmm-agent-<os>-<arch>[.exe] + ein unsigniertes dist/manifest.json
+```
+
 Den Inhalt von `dist/` in das Server-Verzeichnis `AGENT_RELEASE_DIR`
 (Default `/data/agent-releases`) legen. Der Server liest `manifest.json` beim
 Start; bei einem neuen Release also Backend neu starten (oder Dateien vor dem
