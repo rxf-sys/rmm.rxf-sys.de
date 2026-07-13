@@ -6,6 +6,7 @@ import { AutomationPage } from './components/AutomationPage';
 import { CommandPalette } from './components/CommandPalette';
 import { DeviceDetail } from './components/DeviceDetail';
 import { DevicesPage } from './components/DevicesPage';
+import { DocsPage } from './components/DocsPage';
 import { EnrollModal } from './components/EnrollModal';
 import { Header } from './components/Header';
 import { LoginPage } from './components/LoginPage';
@@ -26,6 +27,7 @@ const PAGE_LABEL: Record<PageId, string> = {
   patches: 'Patch-Management',
   scripts: 'Skripte',
   automation: 'Automatisierung',
+  docs: 'Dokumentation',
   audit: 'Audit-Log',
   admin: 'Administration',
 };
@@ -196,6 +198,8 @@ export default function App() {
             <ScriptsPage canManage={isOperator} devices={fleet.devices} onOpenDevice={openDevice} />
           ) : page === 'automation' ? (
             <AutomationPage devices={fleet.devices} persons={fleet.persons} isAdmin={isAdmin} />
+          ) : page === 'docs' ? (
+            <DocsPage />
           ) : page === 'admin' ? (
             <AdminPage currentUser={user} />
           ) : (

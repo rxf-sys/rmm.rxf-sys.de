@@ -612,6 +612,29 @@ h1.page-title {
   background: var(--chip);
 }
 
+/* Documentation page: highlighted note + FAQ list */
+.callout-note {
+  border: 1px solid var(--accLine);
+  background: var(--accBg);
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--tx2);
+}
+.doc-faq {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.doc-faq > div {
+  border-left: 2px solid var(--accLine);
+  padding-left: 11px;
+}
+.doc-faq b {
+  font-size: 12.5px;
+}
+
 .dot {
   width: 8px;
   height: 8px;

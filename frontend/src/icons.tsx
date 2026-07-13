@@ -178,6 +178,20 @@ export const IconActivity = (p: IconProps) => (
   </S>
 );
 
+export const IconBook = (p: IconProps) => (
+  <S {...p}>
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+  </S>
+);
+
+export const IconCopy = (p: IconProps) => (
+  <S {...p}>
+    <rect x="9" y="9" width="13" height="13" rx="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </S>
+);
+
 // --- OS logos (filled marks) ---------------------------------------------------
 
 export function WindowsLogo({ size = 13, style }: IconProps) {
