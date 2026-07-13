@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { apiErrorMessage } from '../api/client';
+import { RyntraLogo } from '../icons';
 
 interface Props {
   /** Performs the login; throws on credential errors. The special message
@@ -39,8 +40,8 @@ export function LoginPage({ onLogin }: Props) {
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
         <div className="brand" style={{ padding: 0 }}>
-          <span className="brand-mark" style={{ width: 34, height: 34 }}>
-            <img src="/logo.png" alt="Ryntra" />
+          <span className="brand-mark" style={{ width: 34, height: 34 }} role="img" aria-label="Ryntra">
+            <RyntraLogo size={21} />
           </span>
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
             <span style={{ fontWeight: 800, fontSize: 18 }}>Ryntra</span>

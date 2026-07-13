@@ -14,6 +14,7 @@ import {
   IconSun,
   IconTerminal,
   IconUsers,
+  RyntraLogo,
 } from '../icons';
 import { deviceState, stateColor } from '../ui';
 
@@ -96,8 +97,8 @@ export function Sidebar({
   return (
     <div className="sidebar">
       <div className="brand">
-        <span className="brand-mark">
-          <img src="/logo.png" alt="Ryntra" />
+        <span className="brand-mark" role="img" aria-label="Ryntra">
+          <RyntraLogo size={17} />
         </span>
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
           <span className="brand-name">Ryntra</span>
