@@ -19,6 +19,9 @@ const (
 	inventoryInterval = 12 * time.Hour
 	backoffMin        = 2 * time.Second
 	backoffMax        = 5 * time.Minute
+	// A connection alive at least this long counts as healthy — its later
+	// drop resets the reconnect backoff instead of compounding it.
+	healthyConnMin = 30 * time.Second
 	writeTimeout      = 10 * time.Second
 	outboxSize        = 64
 )
@@ -60,10 +63,20 @@ func (s *sender) send(ctx context.Context, msgType string, payload any) {
 func runAgent(ctx context.Context, cfg Config) {
 	backoff := backoffMin
 	for {
-		if err := connectAndServe(ctx, cfg); err != nil {
-			if ctx.Err() != nil {
-				return
-			}
+		start := time.Now()
+		err := connectAndServe(ctx, cfg)
+		if ctx.Err() != nil {
+			return
+		}
+		// A connection that stayed up a while was healthy — the drop is a
+		// server restart or transient network blip, not a failing endpoint.
+		// Reset the backoff so the agent reconnects within seconds (and the
+		// device flips back online quickly) instead of waiting out a window
+		// that crept up to backoffMax over earlier failures.
+		if time.Since(start) >= healthyConnMin {
+			backoff = backoffMin
+		}
+		if err != nil {
 			log.Printf("connection lost: %v — retrying in %s", err, backoff)
 		}
 		// Jitter spreads a fleet's reconnects after a server restart.

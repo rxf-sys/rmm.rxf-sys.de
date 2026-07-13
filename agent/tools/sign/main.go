@@ -34,10 +34,38 @@ type manifest struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: sign keygen | sign <privkey_b64> <version> <file>...")
+		fmt.Fprintln(os.Stderr, "usage: sign keygen | sign <privkey_b64> <version> <file>... | manifest <version> <file>...")
 		os.Exit(2)
 	}
 	switch os.Args[1] {
+	case "manifest":
+		// First-install manifest WITHOUT signatures: enough for the
+		// token-authenticated download endpoint (which never checks sigs), but
+		// auto-update stays disabled for these targets since update_for
+		// requires a signature. Lets an operator ship a working download
+		// without setting up a signing key first.
+		if len(os.Args) < 4 {
+			fmt.Fprintln(os.Stderr, "usage: manifest <version> <file>...")
+			os.Exit(2)
+		}
+		version := os.Args[2]
+		m := manifest{Version: version, Targets: map[string]target{}}
+		for _, path := range os.Args[3:] {
+			data, err := os.ReadFile(path)
+			must(err)
+			sum := sha256.Sum256(data)
+			name := filepath.Base(path)
+			m.Targets[targetKey(name)] = target{
+				File:   name,
+				SHA256: hex.EncodeToString(sum[:]),
+				Sig:    "",
+			}
+			fmt.Printf("added %s (unsigned)\n", name)
+		}
+		out, _ := json.MarshalIndent(m, "", "  ")
+		must(os.WriteFile("manifest.json", out, 0o644))
+		fmt.Println("wrote manifest.json (unsigned — download works, auto-update off)")
+
 	case "keygen":
 		pub, priv, err := ed25519.GenerateKey(rand.Reader)
 		must(err)
