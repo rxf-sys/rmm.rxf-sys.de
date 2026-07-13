@@ -326,13 +326,27 @@ async def record_heartbeat(device_id: int, payload: dict[str, Any]) -> None:
     # The agent reports its RustDesk ID once the client is installed; keep the
     # last non-empty value so a heartbeat before install doesn't wipe it.
     rustdesk_id = str(payload.get("rustdesk_id", ""))[:40]
+    # Track live hostname renames; empty (older agents) leaves the enrollment
+    # value untouched.
+    hostname = str(payload.get("hostname", "")).strip()[:255]
     async with _connect() as db:
         await db.execute(
             "UPDATE devices SET last_seen_at = ?, heartbeat_json = ?,"
             " agent_version = CASE WHEN ? != '' THEN ? ELSE agent_version END,"
-            " rustdesk_id = CASE WHEN ? != '' THEN ? ELSE rustdesk_id END"
+            " rustdesk_id = CASE WHEN ? != '' THEN ? ELSE rustdesk_id END,"
+            " hostname = CASE WHEN ? != '' THEN ? ELSE hostname END"
             " WHERE id = ?",
-            (now, blob, agent_version, agent_version, rustdesk_id, rustdesk_id, device_id),
+            (
+                now,
+                blob,
+                agent_version,
+                agent_version,
+                rustdesk_id,
+                rustdesk_id,
+                hostname,
+                hostname,
+                device_id,
+            ),
         )
         await db.commit()
 

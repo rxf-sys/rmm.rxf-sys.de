@@ -123,6 +123,27 @@ def test_ws_heartbeat_and_inventory_roundtrip(ws_client: TestClient, settings: S
     assert not manager.is_connected(device_id)
 
 
+def test_ws_heartbeat_updates_hostname(ws_client: TestClient, settings: Settings):
+    """A live hostname in the heartbeat tracks device renames; an empty one
+    (older agents) leaves the enrollment value untouched."""
+    creds = _enroll(hostname="old-name")
+    device_id = creds["device_id"]
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as ws:
+        _sync(ws)
+        ws.send_json({"type": "heartbeat", "payload": {"hostname": "renamed-pc"}})
+        _sync(ws)
+        device = asyncio.run(devices.get_device(device_id, settings.offline_after_s))
+        assert device is not None
+        assert device["hostname"] == "renamed-pc"
+
+        # A heartbeat without a hostname must not wipe the tracked value.
+        ws.send_json({"type": "heartbeat", "payload": {"cpu_pct": 5.0}})
+        _sync(ws)
+        device = asyncio.run(devices.get_device(device_id, settings.offline_after_s))
+        assert device is not None
+        assert device["hostname"] == "renamed-pc"
+
+
 def test_ws_reconnect_supersedes_old_connection(ws_client: TestClient):
     creds = _enroll()
     device_id = creds["device_id"]
