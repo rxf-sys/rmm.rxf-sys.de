@@ -219,16 +219,18 @@ export function DocsPage() {
             meldet.
           </p>
           <div className="callout-note">
-            <b>Schnellweg (ohne Signaturschlüssel):</b> baut alle Ziele + ein unsigniertes
-            Manifest — der Download und der Einzeiler funktionieren sofort. Auto-Update bleibt für
-            diese Binaries aus (dafür der signierte Weg darunter).
+            <b>Schnellweg — nur Docker auf dem Server nötig</b> (kein Go/Make/npm). Baut alle Ziele
+            in einem Container, legt ein unsigniertes Manifest nach{' '}
+            <span className="mono">agent-releases/</span> und startet das Backend neu — Download und
+            Einzeiler funktionieren danach sofort:
             <div style={{ marginTop: 8 }}>
-              <Code>{`cd agent
-make dev-manifest VERSION=0.1.0
-# dist/ nach infrastructure/agent-releases/ kopieren, dann Backend neu starten:
-cp dist/* /opt/rxf-rmm/infrastructure/agent-releases/
-docker compose -f /opt/rxf-rmm/infrastructure/docker-compose.yml up -d backend`}</Code>
+              <Code>{`cd /opt/rxf-rmm/infrastructure
+./build-agent.sh 0.1.0`}</Code>
             </div>
+            Auf einer Build-Maschine <b>mit</b> Go/Make geht es auch direkt:
+            <span className="mono"> cd agent &amp;&amp; make dev-manifest VERSION=0.1.0</span>, dann
+            <span className="mono"> dist/*</span> nach <span className="mono">agent-releases/</span>{' '}
+            kopieren und das Backend neu starten. Auto-Update bleibt bei beiden aus.
           </div>
           <p style={{ margin: 0 }}>
             Für Produktion mit <b>Auto-Update</b> die Binaries signieren (Go + Make erforderlich):
