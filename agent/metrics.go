@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -17,6 +18,7 @@ type diskMetric struct {
 type heartbeatPayload struct {
 	Ts           int64        `json:"ts"`
 	AgentVersion string       `json:"agent_version"`
+	Hostname     string       `json:"hostname,omitempty"`
 	CPUPct       float64      `json:"cpu_pct"`
 	MemPct       float64      `json:"mem_pct"`
 	Disks        []diskMetric `json:"disks"`
@@ -31,6 +33,9 @@ func collectHeartbeat() heartbeatPayload {
 		Ts:           time.Now().Unix(),
 		AgentVersion: version,
 	}
+	// Report the live OS hostname so the dashboard tracks renames instead of
+	// keeping the value captured at enrollment.
+	hb.Hostname, _ = os.Hostname()
 
 	// Interval 0 = delta since the previous call; the first call after
 	// process start reports 0, every later heartbeat gets a real value
