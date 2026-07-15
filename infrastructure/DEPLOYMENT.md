@@ -71,20 +71,60 @@ Portfreigaben auf `192.168.2.211`: **TCP 21115–21117, UDP 21116**
 (+ 21118/21119 nur für Web-Clients). DNS: `rd.rxf-sys.de` als **DNS-only**
 (graue Wolke) auf deine öffentliche IP. Vollständig: `RUSTDESK.md`.
 
-## 6. CD-Pipeline [manuell, GitHub]
+## 6. CD-Pipeline: Self-hosted Runner [manuell, im LXC CT 111]
 
-GitHub → Settings → Secrets and variables → Actions:
+Das Deploy läuft über einen **Self-hosted GitHub-Actions-Runner im LXC
+selbst** — kein SSH von außen nötig. (Ein GitHub-hosted Runner erreicht den
+LXC nicht: die LAN-IP ist von außen unerreichbar, und Cloudflare nimmt auf
+proxied Hostnamen kein rohes SSH an.)
 
-| Secret | Wert |
-|---|---|
-| `DEPLOY_HOST` | `192.168.2.211` oder Cloudflare-Tunnel-SSH-Hostname |
-| `DEPLOY_USER` | `root` |
-| `DEPLOY_SSH_KEY` | privater ED25519-Schlüssel (öffentlicher Teil in `~/.ssh/authorized_keys` im LXC) |
+**a) Deploy-Nutzer anlegen** (Docker-Gruppe genügt; kein sudo nötig):
 
-Danach deployt jeder grüne CI-Lauf auf `main` automatisch per SSH
-(`.github/workflows/cd.yml` → `deploy.sh`). Der Deploy schlägt fehl, wenn der
-Backend-Healthcheck nicht grün wird — ein grüner Deploy heißt also, die API
-antwortet wirklich.
+```bash
+useradd -m -s /bin/bash ghrunner
+usermod -aG docker ghrunner
+chown -R ghrunner:ghrunner /opt/rxf-rmm
+```
+
+**b) Runner installieren:** GitHub → Repo → **Settings → Actions → Runners →
+"New self-hosted runner"** (Linux x64) zeigt die exakten Download-/
+Konfigurations-Befehle inkl. Registrierungs-Token. Als `ghrunner` ausführen
+und beim `config.sh` das Label **`rmm`** vergeben (darauf matcht
+`cd.yml` mit `runs-on: [self-hosted, rmm]`):
+
+```bash
+su - ghrunner
+mkdir actions-runner && cd actions-runner
+# … Download-Befehle aus der GitHub-UI einfügen …
+./config.sh --url https://github.com/rxf-sys/rmm.rxf-sys.de \
+  --token <TOKEN-AUS-DER-UI> --labels rmm --unattended
+exit
+# Als Dienst installieren (läuft dann als ghrunner, startet mit dem LXC):
+cd /home/ghrunner/actions-runner
+./svc.sh install ghrunner && ./svc.sh start
+```
+
+Danach deployt jeder grüne CI-Lauf auf `main` automatisch
+(`.github/workflows/cd.yml` → `deploy.sh`, lokal im LXC). Der Deploy schlägt
+fehl, wenn der Backend-Healthcheck nicht grün wird — ein grüner Deploy heißt
+also, die API antwortet wirklich.
+
+Hinweise:
+
+- `deploy.sh` macht `git fetch` in `/opt/rxf-rmm` — das muss **als
+  `ghrunner`** funktionieren. Bei privatem Repo: read-only **Deploy Key**
+  für `ghrunner` anlegen (`ssh-keygen` als ghrunner, Public Key im Repo
+  unter Settings → Deploy keys eintragen) und die Remote-URL auf SSH
+  stellen: `git -C /opt/rxf-rmm remote set-url origin
+  git@github.com:rxf-sys/rmm.rxf-sys.de.git`. Test:
+  `su - ghrunner -c 'git -C /opt/rxf-rmm fetch origin main'`.
+- Die früheren Secrets `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_SSH_KEY` werden
+  nicht mehr gebraucht → in den Repo-Settings löschen.
+- Der Runner sollte nur für **dieses private Repo** registriert sein.
+  `cd.yml` triggert ausschließlich nach grüner CI auf `main`, es laufen
+  also keine PR-Workflows auf dem LXC.
+- Mitgliedschaft in der `docker`-Gruppe ist faktisch root-äquivalent auf dem
+  LXC — für den Einsatzzweck (der Runner deployt genau diesen Host) okay.
 
 ## 7. Backup [manuell, im LXC]
 
