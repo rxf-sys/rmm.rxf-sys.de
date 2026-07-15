@@ -16,28 +16,24 @@ concurrency:
 jobs:
   deploy:
     name: Deploy to RMM LXC (CT 111)
-    runs-on: ubuntu-latest
+    # Läuft auf dem Self-hosted Runner IM LXC selbst — das Deploy ist damit
+    # ein lokaler Skriptaufruf. Ein GitHub-hosted Runner käme an den LXC
+    # nicht heran: die LAN-IP ist von außen unerreichbar und Cloudflare
+    # nimmt auf proxied Hostnamen kein rohes SSH an.
+    runs-on: [self-hosted, rmm]
     # Only deploy when the CI run that triggered this actually passed.
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     environment: production
     steps:
-      - name: Deploy via SSH
-        # Pinned to the v1.2.5 release SHA — a moving tag on a third-party
-        # action that receives our deploy SSH key is a supply-chain risk.
-        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: 22
-          script: /opt/rxf-rmm/infrastructure/deploy.sh
+      - name: Deploy
+        run: /opt/rxf-rmm/infrastructure/deploy.sh
 
-# Setup (einmalig):
-# GitHub → Settings → Secrets and variables → Actions:
-#   DEPLOY_HOST    — IP des LXC (192.168.2.211) oder Cloudflare-Tunnel-SSH-Hostname
-#   DEPLOY_USER    — SSH-Nutzer (z.B. root)
-#   DEPLOY_SSH_KEY — privater SSH-Schlüssel (ED25519 empfohlen)
+# Setup (einmalig, im LXC CT 111): Self-hosted Runner installieren —
+# GitHub → Settings → Actions → Runners → "New self-hosted runner" (Linux
+# x64) zeigt die exakten Befehle inkl. Registrierungs-Token. Beim
+# `config.sh` das Label `rmm` vergeben und den Runner als Dienst starten
+# (`./svc.sh install <user> && ./svc.sh start`).
+# Details + Nutzer/Rechte: infrastructure/DEPLOYMENT.md, Abschnitt 6.
 #
-# Der Runner verbindet sich direkt (appleboy/ssh-action), es ist kein
-# ProxyCommand nötig. Bei SSH via Cloudflare-Tunnel den Tunnel-Hostname als
-# DEPLOY_HOST setzen. Details: infrastructure/DEPLOYMENT.md
+# Die früheren Secrets DEPLOY_HOST / DEPLOY_USER / DEPLOY_SSH_KEY werden
+# nicht mehr benötigt und können gelöscht werden.
