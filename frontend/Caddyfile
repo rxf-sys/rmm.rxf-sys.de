@@ -1,6 +1,19 @@
 :80 {
 	encode zstd gzip
 
+	# Proxy-IP-Header nur vom bekannten cloudflared-Host (TRUSTED_PROXY_CIDR,
+	# z. B. die IP von CT 104) durchlassen. Alle anderen Peers — direkter
+	# LAN-Zugriff auf Port 80 — könnten CF-Connecting-IP/X-Forwarded-For frei
+	# fälschen und damit das Login-Rate-Limit pro "IP" beliebig umgehen; ihre
+	# Header werden gestrippt, sodass das Backend auf die echte Peer-IP
+	# zurückfällt. Default 127.0.0.1/32 = niemandem vertrauen (fail-safe).
+	@untrusted_proxy not remote_ip {$TRUSTED_PROXY_CIDR:127.0.0.1/32}
+	request_header @untrusted_proxy -CF-Connecting-IP
+	request_header @untrusted_proxy -X-Real-IP
+	request_header @untrusted_proxy -X-Forwarded-For
+	request_header @untrusted_proxy -X-Forwarded-Proto
+	request_header @untrusted_proxy -X-Forwarded-Host
+
 	handle /api/* {
 		reverse_proxy backend:8080
 	}
@@ -25,10 +38,11 @@
 		# TLS terminates at the Cloudflare edge; the header still has to be
 		# emitted by the origin so browsers pin HTTPS for the domain.
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		# 'unsafe-inline' for styles only (React style props + the Google Fonts
-		# stylesheet). Scripts stay strictly self-hosted; Vite emits external
-		# module bundles, no inline scripts. Fonts load from Google Fonts.
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		# 'unsafe-inline' for styles only (React style props). Scripts stay
+		# strictly self-hosted; Vite emits external module bundles, no inline
+		# scripts. Fonts are self-hosted (@fontsource, bundled by Vite) — no
+		# external origin needed at all.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
 	}
 

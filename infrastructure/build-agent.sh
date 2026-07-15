@@ -17,6 +17,9 @@ set -euo pipefail
 
 VERSION="${1:-0.1.0}"
 GO_IMAGE="golang:1.24-alpine"
+# Optional: base64-Public-Key aus `make keygen`. Wenn gesetzt, wird er in die
+# Binaries gepinnt, sodass ein späteres signiertes Release verifizierbar ist.
+AGENT_UPDATE_PUBKEY="${AGENT_UPDATE_PUBKEY:-}"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
@@ -31,8 +34,12 @@ docker run --rm \
   -w /src \
   -e CGO_ENABLED=0 \
   -e "VERSION=$VERSION" \
+  -e "AGENT_UPDATE_PUBKEY=$AGENT_UPDATE_PUBKEY" \
   "$GO_IMAGE" sh -euc '
     LDFLAGS="-s -w -X main.version=${VERSION}"
+    if [ -n "${AGENT_UPDATE_PUBKEY}" ]; then
+      LDFLAGS="$LDFLAGS -X main.updatePublicKey=${AGENT_UPDATE_PUBKEY}"
+    fi
     rm -rf dist && mkdir -p dist
     for t in linux-amd64 linux-arm64 windows-amd64 darwin-amd64 darwin-arm64; do
       os="${t%-*}"; arch="${t#*-}"; ext=""

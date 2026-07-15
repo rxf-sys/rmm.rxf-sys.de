@@ -16,7 +16,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--tx);
-  font-family: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: 'Manrope Variable', 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-size: 13px;
   /* --- Dark (default): navy base, peach accent, crimson danger --- */
   --bg: #181a2f;

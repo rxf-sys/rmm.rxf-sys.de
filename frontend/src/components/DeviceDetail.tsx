@@ -50,7 +50,8 @@ const TABS: { id: TabId; label: string; adminOnly?: boolean; operatorOnly?: bool
   { id: 'patches', label: 'Updates' },
   { id: 'passwords', label: 'Passwörter', adminOnly: true },
   { id: 'diagnostics', label: 'Diagnose', operatorOnly: true },
-  { id: 'jobs', label: 'Aktivität' },
+  // Job-Kommandos/-Output können Secrets enthalten — API ist operator-only.
+  { id: 'jobs', label: 'Aktivität', operatorOnly: true },
 ];
 
 const JOB_STATUS_LABEL: Record<JobStatus, string> = {

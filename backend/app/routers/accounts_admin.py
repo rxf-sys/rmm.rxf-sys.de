@@ -84,7 +84,10 @@ async def update_account(
 ) -> dict:
     target = await _target_or_404(user_id)
 
-    if body.role == "viewer" and target["role"] == "admin":
+    # Any role change away from admin (viewer OR techniker) is a demotion —
+    # both guards must fire, otherwise the last admin could strand the system
+    # without account/audit/settings access.
+    if body.role is not None and body.role != "admin" and target["role"] == "admin":
         _forbid_self(user, user_id, "herabgestuft")
         await _forbid_last_admin(target, "herabgestuft")
     if body.disabled is True:

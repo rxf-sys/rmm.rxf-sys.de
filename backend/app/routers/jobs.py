@@ -1,8 +1,10 @@
 """Job endpoints: create/dispatch, list, detail, and a live-output socket.
 
-Creating a job is admin-only and always audited — this is the surface that
-runs arbitrary commands on family machines, so every invocation is on the
-record. Reads (list/detail/live) are open to any logged-in account.
+Creating a job is operator-only (admin/techniker) and always audited — this
+is the surface that runs arbitrary commands on family machines, so every
+invocation is on the record. Reads (list/detail/live) are operator-only as
+well: job commands and output can contain secrets, which a viewer account
+(family member) must never see.
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from pydantic import BaseModel, Field
 from .. import accounts, devices, jobs, scripts
 from ..agents_ws import manager
 from ..audit import record as audit_record
-from ..auth import require_operator, verify_session
+from ..auth import require_operator
 from ..config import Settings, get_settings
 
 log = structlog.get_logger("jobs_api")
@@ -98,13 +100,13 @@ async def create_job(
 async def list_device_jobs(
     device_id: int,
     limit: int = Query(default=50, ge=1, le=200),
-    user: dict = Depends(verify_session),
+    user: dict = Depends(require_operator),
 ) -> dict:
     return {"jobs": await jobs.list_jobs(device_id, limit)}
 
 
 @router.get("/api/jobs/{job_id}")
-async def get_job(job_id: int, user: dict = Depends(verify_session)) -> dict:
+async def get_job(job_id: int, user: dict = Depends(require_operator)) -> dict:
     job = await jobs.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job nicht gefunden")
@@ -113,16 +115,21 @@ async def get_job(job_id: int, user: dict = Depends(verify_session)) -> dict:
 
 @router.websocket("/api/jobs/{job_id}/ws")
 async def job_output_ws(ws: WebSocket, job_id: int) -> None:
-    """Live output for one job. Session-authenticated via the cookie; sends a
-    snapshot (status + output so far) then streams output/status/done events
-    until the job reaches a terminal state."""
+    """Live output for one job. Session-authenticated via the cookie and
+    operator-only (job output can contain secrets); sends a snapshot (status +
+    output so far) then streams output/status/done events until the job
+    reaches a terminal state."""
     settings = get_settings()
     await ws.accept()
 
     if settings.auth_enabled:
         token = ws.cookies.get(settings.session_cookie_name, "")
-        if await accounts.resolve_session(token) is None:
+        ws_user = await accounts.resolve_session(token)
+        if ws_user is None:
             await ws.close(code=4401, reason="not authenticated")
+            return
+        if ws_user.get("role") not in ("admin", "techniker"):
+            await ws.close(code=4403, reason="operator privileges required")
             return
 
     job = await jobs.get_job(job_id)

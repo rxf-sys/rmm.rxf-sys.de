@@ -24,13 +24,13 @@ interface Props {
   onToggleTheme: () => void;
 }
 
-const PAGES: { id: PageId; label: string; adminOnly?: boolean }[] = [
+const PAGES: { id: PageId; label: string; adminOnly?: boolean; operatorOnly?: boolean }[] = [
   { id: 'overview', label: 'Übersicht' },
   { id: 'devices', label: 'Geräte' },
   { id: 'persons', label: 'Personen' },
   { id: 'alerts', label: 'Alarm-Center' },
   { id: 'patches', label: 'Patch-Management' },
-  { id: 'scripts', label: 'Skript-Bibliothek' },
+  { id: 'scripts', label: 'Skript-Bibliothek', operatorOnly: true },
   { id: 'automation', label: 'Automatisierung' },
   { id: 'docs', label: 'Dokumentation' },
   { id: 'audit', label: 'Audit-Log', adminOnly: true },
@@ -56,6 +56,8 @@ export function CommandPalette({
 
     for (const p of PAGES) {
       if (p.adminOnly && !isAdmin) continue;
+      // canEnroll ist das Operator-Signal (admin/techniker) aus App.
+      if (p.operatorOnly && !canEnroll) continue;
       if (!query || p.label.toLowerCase().includes(query)) {
         out.push({
           id: `page-${p.id}`,

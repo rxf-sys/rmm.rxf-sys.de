@@ -2,20 +2,22 @@
 
 ## Release bauen und signieren (auf der Build-Maschine)
 
-Einmalig einen Signaturschlüssel erzeugen und den **öffentlichen** Teil in
-`agent/update.go` (`updatePublicKey`) eintragen; den privaten Teil geheim
-halten:
+Einmalig einen Signaturschlüssel erzeugen; den privaten Teil geheim halten,
+der **öffentliche** Teil wird bei jedem Build per `AGENT_UPDATE_PUBKEY`
+automatisch in die Binaries gepinnt (kein Edit von `agent/update.go` nötig):
 
 ```bash
 cd agent
 make keygen
-# → private (AGENT_SIGN_KEY) + public (in update.go pinnen)
+# → private (AGENT_SIGN_KEY) + public (AGENT_UPDATE_PUBKEY)
 ```
 
-Für jedes Release die Binaries bauen und signieren:
+Für jedes Release die Binaries bauen und signieren (beide Schlüssel nötig —
+`make sign` bricht sonst ab, damit nie Binaries ohne verifizierbaren
+Update-Pfad ausgerollt werden):
 
 ```bash
-make sign VERSION=0.2.0 AGENT_SIGN_KEY=<base64 private key>
+make sign VERSION=0.2.0 AGENT_SIGN_KEY=<base64 private key> AGENT_UPDATE_PUBKEY=<base64 public key>
 # erzeugt dist/rmm-agent-<os>-<arch>[.exe] + dist/manifest.json
 ```
 

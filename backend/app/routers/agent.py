@@ -105,7 +105,8 @@ os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
 case "$arch" in x86_64|amd64) arch=amd64;; aarch64|arm64) arch=arm64;; *) echo "nicht unterstützte Architektur: $arch" >&2; exit 1;; esac
 echo "==> lade Agent ($os-$arch) von $SERVER"
-curl -fsSL "$SERVER/api/agent/setup/download/$os-$arch?token=$TOKEN" -o /usr/local/bin/rmm-agent
+# Token im Header statt in der URL — bleibt aus Proxy-/Access-Logs raus.
+curl -fsSL -H "X-Enroll-Token: $TOKEN" "$SERVER/api/agent/setup/download/$os-$arch" -o /usr/local/bin/rmm-agent
 chmod 0755 /usr/local/bin/rmm-agent
 echo "==> enrolle Gerät"
 /usr/local/bin/rmm-agent enroll --server "$SERVER" --token "$TOKEN" ${LABEL:+--label "$LABEL"}
@@ -148,8 +149,9 @@ if (Get-Service -Name $Service -ErrorAction SilentlyContinue) {
 
 Write-Host "==> lade Agent (windows-amd64) von $Server"
 try {
-  Invoke-WebRequest -UseBasicParsing `
-    -Uri "$Server/api/agent/setup/download/windows-amd64?token=$Token" -OutFile $exe
+  # Token im Header statt in der URL — bleibt aus Proxy-/Access-Logs raus.
+  Invoke-WebRequest -UseBasicParsing -Headers @{ 'X-Enroll-Token' = $Token } `
+    -Uri "$Server/api/agent/setup/download/windows-amd64" -OutFile $exe
 } catch {
   throw "Download fehlgeschlagen: $($_.Exception.Message) — Token noch gültig? Liegt ein signiertes Windows-Release auf dem Server (agent-releases/)?"
 }
@@ -199,11 +201,17 @@ async def _validate_setup_token(token: str) -> None:
 
 
 @router.get("/setup/download/{target}")
-async def setup_download(target: str, token: str = Query(default="")) -> FileResponse:
+async def setup_download(
+    target: str,
+    token: str = Query(default=""),
+    x_enroll_token: str = Header(default=""),
+) -> FileResponse:
     """Binary download for first-time installs, authenticated with an
     unconsumed enrollment token (self-updates use /download/{target} with
-    device credentials instead)."""
-    await _validate_setup_token(token)
+    device credentials instead). The token travels in the X-Enroll-Token
+    header (preferred — keeps it out of proxy/access logs); the query
+    parameter remains as fallback for plain browser downloads."""
+    await _validate_setup_token(x_enroll_token or token)
     path = releases.binary_path(target)
     if path is None:
         raise HTTPException(
@@ -219,9 +227,12 @@ async def setup_script(
     request: Request,
     token: str = Query(default=""),
     label: str = Query(default="", max_length=120),
+    x_enroll_token: str = Header(default=""),
 ) -> PlainTextResponse:
     """Self-contained install script for `curl | sudo bash` (Linux/macOS)
-    or `irm | iex` (Windows)."""
+    or `irm | iex` (Windows). Token preferred via X-Enroll-Token header
+    (stays out of proxy logs); query fallback kept for hand-typed URLs."""
+    token = x_enroll_token or token
     await _validate_setup_token(token)
     server = _public_base(request)
     if platform in ("linux", "darwin"):

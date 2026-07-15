@@ -40,6 +40,11 @@ services:
     ports:
       # cloudflared on CT 104 forwards rmm.rxf-sys.de -> http://192.168.2.211:80
       - "80:80"
+    environment:
+      # CIDR of the cloudflared host (CT 104). Only this peer may deliver
+      # proxy IP headers (CF-Connecting-IP etc.); everyone else gets them
+      # stripped by Caddy. Unset = trust nobody. See .env / Caddyfile.
+      TRUSTED_PROXY_CIDR: ${TRUSTED_PROXY_CIDR:-127.0.0.1/32}
     networks:
       - rmm
 

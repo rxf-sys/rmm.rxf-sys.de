@@ -241,16 +241,21 @@ async def fail_undispatched(job_id: int, reason: str) -> None:
     hub.publish(job_id, {"type": "done", "status": "failed", "exit_code": None})
 
 
-async def sweep_stale(timeout_s: int) -> int:
+async def sweep_stale(timeout_s: int, patch_timeout_s: int | None = None) -> int:
     """Mark long-running jobs that never reported back as timed out (agent
-    crashed mid-job). Runs on the cleanup tick."""
-    cutoff = int(time.time()) - timeout_s
+    crashed mid-job). Runs on the cleanup tick. ``patch_install`` jobs get
+    their own (longer) timeout — the agent legitimately runs installs for up
+    to an hour."""
+    now = int(time.time())
+    cutoff = now - timeout_s
+    patch_cutoff = now - (patch_timeout_s if patch_timeout_s is not None else timeout_s)
     async with _connect() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT id FROM jobs WHERE status IN ('queued', 'running')"
-            " AND created_at < ?",
-            (cutoff,),
+            " AND ((kind != 'patch_install' AND created_at < ?)"
+            "   OR (kind = 'patch_install' AND created_at < ?))",
+            (cutoff, patch_cutoff),
         ) as cur:
             stale = [int(r["id"]) for r in await cur.fetchall()]
         for jid in stale:

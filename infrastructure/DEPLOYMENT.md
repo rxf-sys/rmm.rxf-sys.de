@@ -93,7 +93,9 @@ ln -sf /opt/rxf-rmm/infrastructure/backup.sh /etc/cron.daily/backup-rxf-rmm
 ```
 
 Tägliches konsistentes SQLite-Backup nach `/opt/backups/rxf-rmm`, 14 Tage
-Rotation, RustDesk-Schlüssel inklusive.
+Rotation. Mitgesichert werden `credentials.key` (Fernet-Schlüssel der
+Geräte-Passwörter — ohne ihn sind die Passwörter einer wiederhergestellten
+DB unentschlüsselbar) und die RustDesk-Schlüssel.
 
 **Restore** (mit `restore.sh` — bitte einmal proben, ein ungetestetes Backup
 ist kein Backup):
@@ -102,24 +104,33 @@ ist kein Backup):
 # Backend stoppen, DB aus Backup einspielen (alte DB → rmm.db.pre-restore),
 # Backend neu starten. Prüft vorher die SQLite-Integrität des Backups.
 bash /opt/rxf-rmm/infrastructure/restore.sh /opt/backups/rxf-rmm/rmm-JJJJMMTT-HHMMSS.db
-# optional RustDesk-Schlüssel mit-wiederherstellen:
-bash restore.sh /opt/backups/.../rmm-….db /opt/backups/.../rustdesk-…
+# credentials.key und/oder RustDesk-Schlüssel mit-wiederherstellen
+# (Zusatz-Argumente werden am Typ erkannt: *.key-Datei bzw. Verzeichnis):
+bash restore.sh /opt/backups/.../rmm-….db /opt/backups/.../credentials-….key /opt/backups/.../rustdesk-…
 ```
 
 Empfehlung: nach dem Aufsetzen einmal ein Backup ziehen, `restore.sh` damit
-laufen lassen und sich am Dashboard anmelden — dann weißt du, dass der Weg
-funktioniert, bevor du ihn im Ernstfall brauchst.
+laufen lassen, sich am Dashboard anmelden und ein gespeichertes
+Geräte-Passwort aufdecken — dann weißt du, dass der Weg funktioniert,
+bevor du ihn im Ernstfall brauchst.
 
 ## 8. Agent-Auto-Update scharfstellen [manuell, Build-Maschine]
 
-Einmalig Schlüssel erzeugen, Public Key in `agent/update.go` pinnen (siehe
-`agent/install/README.md`). Pro Release:
+Einmalig Schlüssel erzeugen (`cd agent && make keygen`); der Public Key wird
+beim Build per `AGENT_UPDATE_PUBKEY` in die Binaries gepinnt — kein
+Source-Edit nötig (siehe `agent/install/README.md`). Pro Release:
 
 ```bash
-cd agent && make sign VERSION=0.2.0 AGENT_SIGN_KEY=<privkey>
+cd agent && make sign VERSION=0.2.0 AGENT_SIGN_KEY=<privkey> AGENT_UPDATE_PUBKEY=<pubkey>
 # dist/ nach /opt/rxf-rmm/infrastructure/agent-releases/ auf dem LXC kopieren
 docker compose up -d backend   # lädt das neue manifest.json
 ```
+
+Auch `build-agent.sh` (Docker-only-Build auf dem LXC) pinnt den Key, wenn
+`AGENT_UPDATE_PUBKEY` als Umgebungsvariable gesetzt ist. Wichtig: den Key
+**vor** dem Ausrollen der ersten Agents pinnen — ohne gepinnten Key lehnen
+bereits installierte Agents jedes Auto-Update ab und müssen manuell
+aktualisiert werden.
 
 ---
 
