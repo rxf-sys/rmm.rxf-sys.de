@@ -17,10 +17,15 @@ import (
 )
 
 // updatePublicKey is the ed25519 public key (base64) the agent trusts for
-// self-update payloads. Replace this with your own key from `make keygen`
-// before building release binaries — an attacker who controls the update
-// channel but not this key cannot ship a malicious agent. It is a var (not a
-// const) purely so tests can inject a throwaway key; production builds pin it.
+// self-update payloads. Release builds inject the real key at build time:
+//
+//	make sign VERSION=… AGENT_SIGN_KEY=… AGENT_UPDATE_PUBKEY=<base64 public key>
+//
+// (the Makefile turns AGENT_UPDATE_PUBKEY into -ldflags "-X main.updatePublicKey=…").
+// An attacker who controls the update channel but not the private key cannot
+// ship a malicious agent. With the placeholder still in place every update is
+// rejected (fail-safe) — auto-update only works once the key is pinned. It is
+// a var (not a const) so both the ldflags injection and tests can set it.
 var updatePublicKey = "REPLACE_WITH_YOUR_ED25519_PUBLIC_KEY_BASE64"
 
 // updateSpec is the payload the server sends when a newer agent is available.

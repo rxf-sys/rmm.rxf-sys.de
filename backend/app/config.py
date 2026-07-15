@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     # swept to 'timeout' (agent crashed mid-job). Sits above the agent's own
     # per-job timeout so the agent normally reports first.
     job_timeout_s: int = 900
+    # Same safety net for patch_install jobs, which run much longer (the
+    # agent allows 60 min per install run). Must stay above that value,
+    # otherwise the server discards the agent's late result.
+    patch_job_timeout_s: int = 4500
 
     # ---- Metrics history ----
     # Raw heartbeat samples (one row per heartbeat) are kept this long, then

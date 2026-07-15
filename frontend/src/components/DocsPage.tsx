@@ -124,7 +124,7 @@ export function DocsPage() {
             erzeugen und die Plattform <b>Windows</b> wählen. Der angezeigte Befehl lädt den
             Agenten, meldet das Gerät an und installiert den Dienst in einem Rutsch:
           </p>
-          <Code>{`irm '${SERVER}/api/agent/setup/windows?token=<TOKEN>' | iex`}</Code>
+          <Code>{`irm -Headers @{'X-Enroll-Token'='<TOKEN>'} '${SERVER}/api/agent/setup/windows' | iex`}</Code>
           <p style={{ margin: 0 }}>
             Voraussetzungen, damit der Einzeiler wirklich durchläuft:
           </p>

@@ -35,6 +35,7 @@ interface NavDef {
   label: string;
   icon: ReactNode;
   adminOnly?: boolean;
+  operatorOnly?: boolean;
 }
 
 const NAV: NavDef[] = [
@@ -43,7 +44,9 @@ const NAV: NavDef[] = [
   { id: 'persons', label: 'Personen', icon: <IconUsers /> },
   { id: 'alerts', label: 'Alarme', icon: <IconBell /> },
   { id: 'patches', label: 'Patch-Management', icon: <IconShield /> },
-  { id: 'scripts', label: 'Skripte', icon: <IconTerminal /> },
+  // Skript-Bodies können Secrets enthalten — die API liefert sie nur für
+  // Admin/Techniker, also den Tab für Viewer gar nicht erst anbieten.
+  { id: 'scripts', label: 'Skripte', icon: <IconTerminal />, operatorOnly: true },
   { id: 'automation', label: 'Automatisierung', icon: <IconClock /> },
   { id: 'docs', label: 'Dokumentation', icon: <IconBook /> },
   { id: 'audit', label: 'Audit-Log', icon: <IconList />, adminOnly: true },
@@ -84,6 +87,7 @@ export function Sidebar({
   onLogout,
 }: Props) {
   const isAdmin = user.role === 'admin';
+  const isOperator = isAdmin || user.role === 'techniker';
   const favDevices = favorites
     .map((id) => devices.find((d) => d.id === id))
     .filter((d): d is Device => d !== undefined);
@@ -107,7 +111,7 @@ export function Sidebar({
       </div>
 
       <div className="nav">
-        {NAV.filter((n) => !n.adminOnly || isAdmin).map((n) => {
+        {NAV.filter((n) => (!n.adminOnly || isAdmin) && (!n.operatorOnly || isOperator)).map((n) => {
           const badge =
             n.id === 'alerts' && openAlerts > 0
               ? { text: String(openAlerts), cls: 'badge-danger' }

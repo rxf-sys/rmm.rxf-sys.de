@@ -5,12 +5,11 @@ from httpx import AsyncClient
 from app import accounts
 
 
-async def test_scripts_crud_admin_only(client: AsyncClient):
+async def test_scripts_operator_only(client: AsyncClient):
     await accounts.create_user("viewer", "super-secret-pw", role="viewer")
     await client.post("/api/auth/login", json={"username": "viewer", "password": "super-secret-pw"})
-    # Reads allowed…
-    assert (await client.get("/api/scripts")).status_code == 200
-    # …writes are not.
+    # Script bodies can contain secrets — even reads are operator-only.
+    assert (await client.get("/api/scripts")).status_code == 403
     r = await client.post("/api/scripts", json={"name": "x", "shell": "bash", "content": "echo x"})
     assert r.status_code == 403
 

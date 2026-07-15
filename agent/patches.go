@@ -18,6 +18,13 @@ type patchItem struct {
 // patchScanTimeout caps a scan — Windows Update searches can be slow.
 const patchScanTimeout = 5 * time.Minute
 
+// patchInstallTimeout caps an install run. Deliberately much longer than the
+// shell-job timeout: a large dist-upgrade or Windows-Update run easily takes
+// more than 10 minutes, and killing apt/dpkg mid-transaction can leave the
+// package system inconsistent. The server's sweep (patch_job_timeout_s) sits
+// above this value.
+const patchInstallTimeout = 60 * time.Minute
+
 // scanPatches runs the OS-specific scan and always returns a slice (never
 // nil), so an empty report clears the server's list rather than being
 // treated as "no data".
@@ -41,7 +48,7 @@ func runPatchInstall(parent context.Context, s *sender, spec jobSpec) {
 	s.send(parent, "job_started", map[string]any{"job_id": spec.JobID})
 
 	w := &chunkWriter{ctx: parent, s: s, jobID: spec.JobID}
-	ctx, cancel := context.WithTimeout(parent, perJobTimeout)
+	ctx, cancel := context.WithTimeout(parent, patchInstallTimeout)
 	defer cancel()
 
 	status := "done"

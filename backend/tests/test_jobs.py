@@ -71,16 +71,39 @@ async def test_sweep_stale(client: AsyncClient, settings: Settings):
     assert (await jobs.get_job(job["id"]))["status"] == "timeout"
 
 
-async def test_create_job_endpoint_requires_admin(client: AsyncClient):
+async def test_sweep_patch_install_uses_own_timeout(client: AsyncClient, settings: Settings):
+    """A patch_install job older than job_timeout_s but younger than
+    patch_job_timeout_s survives the sweep — installs legitimately run long."""
+    device_id = await _make_device()
+    job = await jobs.create_job(device_id, kind="patch_install", command="[]", created_by="boss")
+    await jobs.mark_running(job["id"])
+    async with aiosqlite.connect(settings.storage_db_path) as db:
+        await db.execute(
+            "UPDATE jobs SET created_at = ? WHERE id = ?", (int(time.time()) - 2000, job["id"])
+        )
+        await db.commit()
+    # 2000 s old: past the shell timeout (900) but within the patch timeout.
+    assert await jobs.sweep_stale(timeout_s=900, patch_timeout_s=4500) == 0
+    assert (await jobs.get_job(job["id"]))["status"] == "running"
+    # Past the patch timeout it is swept like any other stale job.
+    assert await jobs.sweep_stale(timeout_s=900, patch_timeout_s=1800) == 1
+    assert (await jobs.get_job(job["id"]))["status"] == "timeout"
+
+
+async def test_job_endpoints_require_operator(client: AsyncClient):
     from app import accounts
 
     device_id = await _make_device()
+    job = await jobs.create_job(device_id, kind="shell", command="secret-cmd", created_by="boss")
     await accounts.create_user("viewer", "super-secret-pw", role="viewer")
     await client.post("/api/auth/login", json={"username": "viewer", "password": "super-secret-pw"})
     r = await client.post(
         f"/api/devices/{device_id}/jobs", json={"kind": "shell", "command": "echo x"}
     )
     assert r.status_code == 403
+    # Reads too — job commands/output can contain secrets.
+    assert (await client.get(f"/api/devices/{device_id}/jobs")).status_code == 403
+    assert (await client.get(f"/api/jobs/{job['id']}")).status_code == 403
 
 
 async def test_create_job_offline_device_fails_fast(admin_client: AsyncClient):

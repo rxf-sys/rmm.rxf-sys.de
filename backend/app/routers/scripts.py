@@ -1,4 +1,5 @@
-"""Script-library CRUD. Reads open to any account; writes are admin-only."""
+"""Script-library CRUD. Operator-only throughout — script bodies can contain
+credentials/host-specifics, so even reading the library is admin/techniker."""
 
 from __future__ import annotations
 
@@ -7,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from .. import scripts
 from ..audit import record as audit_record
-from ..auth import require_operator, verify_session
+from ..auth import require_operator
 
 router = APIRouter(prefix="/api/scripts", tags=["scripts"])
 
@@ -19,7 +20,7 @@ class ScriptBody(BaseModel):
 
 
 @router.get("")
-async def list_scripts(user: dict = Depends(verify_session)) -> dict:
+async def list_scripts(user: dict = Depends(require_operator)) -> dict:
     return {"scripts": await scripts.list_all()}
 
 

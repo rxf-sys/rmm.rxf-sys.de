@@ -40,6 +40,24 @@ async def test_setup_script_embeds_server_and_token(client: AsyncClient):
     assert (await client.get(f"/api/agent/setup/beos?token={token}")).status_code == 404
 
 
+async def test_setup_accepts_token_header(client: AsyncClient):
+    """The X-Enroll-Token header is the preferred transport (keeps the token
+    out of proxy/access logs); the query parameter stays as fallback."""
+    token = await _token()
+    r = await client.get("/api/agent/setup/linux", headers={"X-Enroll-Token": token})
+    assert r.status_code == 200
+    assert token in r.text
+    # Header wins over a bogus query value.
+    r = await client.get(
+        "/api/agent/setup/linux?token=bogus", headers={"X-Enroll-Token": token}
+    )
+    assert r.status_code == 200
+    # Bad header alone is rejected.
+    assert (
+        await client.get("/api/agent/setup/linux", headers={"X-Enroll-Token": "bogus"})
+    ).status_code == 403
+
+
 async def test_setup_script_token_not_consumed(client: AsyncClient):
     """Fetching the script twice must work — only enrollment burns the token."""
     token = await _token()

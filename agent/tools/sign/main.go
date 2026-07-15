@@ -71,7 +71,7 @@ func main() {
 		must(err)
 		fmt.Println("private (keep secret, e.g. AGENT_SIGN_KEY):")
 		fmt.Println("  " + base64.StdEncoding.EncodeToString(priv))
-		fmt.Println("public (pin in agent/update.go updatePublicKey):")
+		fmt.Println("public (pass as AGENT_UPDATE_PUBKEY to make/build-agent.sh — pinned at build time):")
 		fmt.Println("  " + base64.StdEncoding.EncodeToString(pub))
 
 	case "sign":

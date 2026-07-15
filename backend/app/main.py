@@ -74,7 +74,7 @@ async def _cleanup_loop() -> None:
             await accounts.cleanup_expired_sessions()
             await devices.cleanup_expired_enrollment_tokens()
             await metrics.aggregate_and_cleanup(_settings)
-            await jobs.sweep_stale(_settings.job_timeout_s)
+            await jobs.sweep_stale(_settings.job_timeout_s, _settings.patch_job_timeout_s)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 - never let the loop die

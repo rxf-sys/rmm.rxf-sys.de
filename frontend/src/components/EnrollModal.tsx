@@ -61,30 +61,34 @@ export function EnrollModal({ onClose }: Props) {
   const [platform, setPlatform] = useState<'windows' | 'linux' | 'darwin'>('windows');
 
   // One-liners against the token-authenticated setup endpoints: download
-  // binary + enroll + service install in one paste. The token is only
+  // binary + enroll + service install in one paste. The token rides in the
+  // X-Enroll-Token header (stays out of proxy/access logs) and is only
   // consumed by the enrollment itself.
+  const token = created?.token ?? '';
   const setupUrl = (p: string) =>
-    `${SERVER_HINT}/api/agent/setup/${p}?token=${created?.token ?? ''}${
-      created?.label ? `&label=${encodeURIComponent(created.label)}` : ''
+    `${SERVER_HINT}/api/agent/setup/${p}${
+      created?.label ? `?label=${encodeURIComponent(created.label)}` : ''
     }`;
   const commands: Record<'windows' | 'linux' | 'darwin', { label: string; cmd: string; hint: string }> = {
     windows: {
       label: 'Windows',
-      cmd: `irm '${setupUrl('windows')}' | iex`,
+      cmd: `irm -Headers @{'X-Enroll-Token'='${token}'} '${setupUrl('windows')}' | iex`,
       hint: 'In einer PowerShell mit Administratorrechten ausführen.',
     },
     linux: {
       label: 'Linux',
-      cmd: `curl -fsSL '${setupUrl('linux')}' | sudo bash`,
+      cmd: `curl -fsSL -H 'X-Enroll-Token: ${token}' '${setupUrl('linux')}' | sudo bash`,
       hint: 'Im Terminal ausführen (sudo).',
     },
     darwin: {
       label: 'macOS',
-      cmd: `curl -fsSL '${setupUrl('darwin')}' | sudo bash`,
+      cmd: `curl -fsSL -H 'X-Enroll-Token: ${token}' '${setupUrl('darwin')}' | sudo bash`,
       hint: 'Im Terminal ausführen (sudo).',
     },
   };
   const installCmd = created ? commands[platform].cmd : '';
+  // Browser-Downloads können keine Header setzen — der kopierbare Link nutzt
+  // deshalb weiterhin den Query-Fallback.
   const downloadUrl = created
     ? `${SERVER_HINT}/api/agent/setup/download/windows-amd64?token=${created.token}`
     : '';
@@ -108,7 +112,12 @@ export function EnrollModal({ onClose }: Props) {
     setDlError(null);
     setDlBusy(true);
     try {
-      const r = await fetch(downloadUrl, { credentials: 'include' });
+      // In-App-Download setzt das Token als Header; die Query-URL bleibt nur
+      // für den kopierbaren Link.
+      const r = await fetch(`${SERVER_HINT}/api/agent/setup/download/windows-amd64`, {
+        credentials: 'include',
+        headers: { 'X-Enroll-Token': created?.token ?? '' },
+      });
       if (!r.ok) {
         let detail = `Fehler ${r.status}`;
         try {

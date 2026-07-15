@@ -58,6 +58,10 @@ async def test_cannot_lock_yourself_out(admin_client: AsyncClient):
     assert (
         await admin_client.patch(f"/api/accounts/{me['id']}", json={"role": "viewer"})
     ).status_code == 409
+    # Demote to techniker is a demotion too — same guard.
+    assert (
+        await admin_client.patch(f"/api/accounts/{me['id']}", json={"role": "techniker"})
+    ).status_code == 409
     assert (await admin_client.delete(f"/api/accounts/{me['id']}")).status_code == 409
 
 
@@ -90,6 +94,10 @@ async def test_last_admin_is_protected(admin_client: AsyncClient):
     # Boss is again the last active admin — nobody may disable him.
     assert (
         await admin_client.patch(f"/api/accounts/{boss['id']}", json={"disabled": True})
+    ).status_code == 409
+    # …and no demotion path (viewer or techniker) may strip the last admin.
+    assert (
+        await admin_client.patch(f"/api/accounts/{boss['id']}", json={"role": "techniker"})
     ).status_code == 409
 
 
