@@ -26,7 +26,9 @@ jobs:
     environment: production
     steps:
       - name: Deploy
-        run: /opt/rxf-rmm/infrastructure/deploy.sh
+        # Über `bash` aufgerufen, damit ein fehlendes Execute-Bit auf dem
+        # Checkout im LXC das Deploy nie blockieren kann.
+        run: bash /opt/rxf-rmm/infrastructure/deploy.sh
 
 # Setup (einmalig, im LXC CT 111): Self-hosted Runner installieren —
 # GitHub → Settings → Actions → Runners → "New self-hosted runner" (Linux
