@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // Nichts als data:-URI inlinen: die CSP erlaubt nur font-src/img-src
+    // 'self', und Vites Default (4 KB) hatte kleine Font-Subsets als
+    // data:font/woff2 in die CSS gepackt — die der Browser dann blockt.
+    assetsInlineLimit: 0,
+  },
   server: {
     proxy: {
       // Local dev: uvicorn on :8080 serves the API. ws:true proxies the
