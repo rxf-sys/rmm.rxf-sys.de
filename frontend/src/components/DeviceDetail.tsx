@@ -511,10 +511,19 @@ function PasswordsTab({ deviceId }: { deviceId: number }) {
 // ---------------------------------------------------------------------------
 // Overview tab
 // ---------------------------------------------------------------------------
+interface NicInfo {
+  name: string;
+  mac?: string;
+  ips: string[];
+}
+
 function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (t: TabId) => void }) {
   const d = detail.device;
   const hw = (detail.inventory.hardware?.data ?? {}) as Record<string, unknown>;
   const disks = d.heartbeat.disks ?? [];
+  const nics = (Array.isArray(hw.nics) ? hw.nics : []) as NicInfo[];
+  // Fallback für ältere Agents, die nur die WoL-MAC-Liste melden.
+  const fallbackMacs = (Array.isArray(hw.macs) ? hw.macs : []) as string[];
   const meters = [
     { label: 'CPU', pct: Math.round(d.heartbeat.cpu_pct ?? 0), color: 'var(--accent)' },
     { label: 'RAM', pct: Math.round(d.heartbeat.mem_pct ?? 0), color: 'var(--violet)' },
@@ -525,12 +534,6 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
     ['Besitzer', d.owner_label || '—'],
     ['OS', `${osLabel(d.os)} ${d.os_version} (${d.arch})`],
     ['Agent', d.agent_version || '—'],
-    [
-      'Netzwerk',
-      d.online && d.heartbeat.net_rx_bps !== undefined
-        ? `↓ ${formatRate(d.heartbeat.net_rx_bps)} · ↑ ${formatRate(d.heartbeat.net_tx_bps)}`
-        : '—',
-    ],
     ['Uptime', typeof hw.uptime_s === 'number' ? `${Math.floor((hw.uptime_s as number) / 86400)} Tage` : '—'],
     ['Enroll', formatRelative(d.created_at)],
   ];
@@ -546,6 +549,43 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
               <span className="v">{v}</span>
             </div>
           ))}
+        </div>
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <span className="card-title-sm">Netzwerk</span>
+          {nics.length > 0 ? (
+            nics.map((n) => (
+              <div key={n.name} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div className="row" style={{ gap: 6 }}>
+                  <span className="chip-mono">{n.name}</span>
+                  <span style={{ fontWeight: 600, fontSize: 12 }}>{n.ips.join(' · ') || '—'}</span>
+                </div>
+                {n.mac && (
+                  <span className="mono muted" style={{ fontSize: 10.5 }}>MAC {n.mac}</span>
+                )}
+              </div>
+            ))
+          ) : fallbackMacs.length > 0 ? (
+            <>
+              {fallbackMacs.map((m) => (
+                <span key={m} className="mono muted" style={{ fontSize: 11 }}>MAC {m}</span>
+              ))}
+              <span className="muted" style={{ fontSize: 10.5 }}>
+                IP-Adressen erscheinen nach dem nächsten Agent-Update.
+              </span>
+            </>
+          ) : (
+            <span className="muted" style={{ fontSize: 11.5 }}>
+              Noch keine Netzwerkdaten — der Agent meldet sie mit dem Inventar.
+            </span>
+          )}
+          <div className="kv">
+            <span className="k">Durchsatz</span>
+            <span className="v">
+              {d.online && d.heartbeat.net_rx_bps !== undefined
+                ? `↓ ${formatRate(d.heartbeat.net_rx_bps)} · ↑ ${formatRate(d.heartbeat.net_tx_bps)}`
+                : '—'}
+            </span>
+          </div>
         </div>
         <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span className="card-title-sm">Remote-Desktop</span>
