@@ -25,6 +25,13 @@
 		@html path /index.html /
 		header @html Cache-Control "no-cache, no-store, must-revalidate"
 
+		# Kurze TTL für Favicons: ohne explizite Header cached Cloudflare
+		# .ico/.svg an der Edge (Default ~2 h) und Browser halten Favicons
+		# zusätzlich hartnäckig fest — ein Redesign käme sonst erst Stunden
+		# später an.
+		@icons path /favicon.ico /favicon.svg
+		header @icons Cache-Control "public, max-age=300, must-revalidate"
+
 		root * /srv
 		try_files {path} /index.html
 		file_server
