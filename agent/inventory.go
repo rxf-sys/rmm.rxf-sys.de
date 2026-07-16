@@ -59,8 +59,67 @@ func collectInventory() inventoryPayload {
 		// The server uses these for Wake-on-LAN (magic packets into the LAN).
 		hw["macs"] = macs
 	}
+	if nics := collectNICs(); len(nics) > 0 {
+		// Per-interface detail (IPs + MAC) for the dashboard's network card.
+		hw["nics"] = nics
+	}
 
 	return finishInventory(hw, collectSoftware())
+}
+
+// nicInfo is one network interface as shown in the device's network card.
+type nicInfo struct {
+	Name string   `json:"name"`
+	MAC  string   `json:"mac,omitempty"`
+	IPs  []string `json:"ips"`
+}
+
+// collectNICs lists up, non-loopback interfaces with their MAC and non-link-
+// local IPs. Per-container veth/tap noise is skipped; bridges stay (on a
+// Proxmox host vmbr0 carries the primary address).
+func collectNICs() []nicInfo {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var out []nicInfo
+	for _, ifc := range ifaces {
+		if ifc.Flags&net.FlagLoopback != 0 || ifc.Flags&net.FlagUp == 0 {
+			continue
+		}
+		name := strings.ToLower(ifc.Name)
+		if strings.HasPrefix(name, "veth") || strings.HasPrefix(name, "tap") ||
+			strings.HasPrefix(name, "tun") || strings.HasPrefix(name, "fwbr") ||
+			strings.HasPrefix(name, "fwln") || strings.HasPrefix(name, "fwpr") {
+			continue
+		}
+		var ips []string
+		addrs, _ := ifc.Addrs()
+		for _, a := range addrs {
+			ipnet, ok := a.(*net.IPNet)
+			if !ok || ipnet.IP == nil {
+				continue
+			}
+			if ipnet.IP.IsLoopback() || ipnet.IP.IsLinkLocalUnicast() {
+				continue
+			}
+			ips = append(ips, ipnet.IP.String())
+		}
+		// Interfaces without any routable address (down bridges, bare
+		// enslaved ports) would only clutter the card.
+		if len(ips) == 0 {
+			continue
+		}
+		mac := ifc.HardwareAddr.String()
+		if mac == "00:00:00:00:00:00" {
+			mac = ""
+		}
+		out = append(out, nicInfo{Name: ifc.Name, MAC: mac, IPs: ips})
+		if len(out) >= 12 {
+			break
+		}
+	}
+	return out
 }
 
 // collectMACs returns the MAC addresses of physical-looking, non-loopback
