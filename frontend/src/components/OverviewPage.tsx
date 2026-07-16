@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
-import { formatRelative } from '../format';
+import { formatRate, formatRelative } from '../format';
 import type { Account, AuditEvent, Device } from '../types';
 import type { Fleet } from '../hooks/useFleet';
 import { describeAudit } from './AuditPage';
@@ -36,7 +36,9 @@ function Ring({ pct, color, label }: { pct: number; color: string; label: string
         strokeLinecap="round"
         transform="rotate(-90 32 32)"
       />
-      <text x="32" y="37" textAnchor="middle" style={{ fill: 'var(--tx)', font: '700 14px Manrope' }}>
+      {/* Kein hartes 'Manrope': Familie heißt seit dem Self-Hosting
+          'Manrope Variable' — einfach vom Dokument erben. */}
+      <text x="32" y="37" textAnchor="middle" style={{ fill: 'var(--tx)', fontWeight: 700, fontSize: 14 }}>
         {label}
       </text>
     </svg>
@@ -88,6 +90,17 @@ function DeviceCard({ d, onOpen }: { d: Device; onOpen: () => void }) {
             <span className="bar-fill" style={{ width: `${Math.round(disk)}%`, background: diskColor(disk) }} />
           </div>
         </div>
+      </div>
+      <div className="row" style={{ gap: 10, width: '100%', fontSize: 10, fontWeight: 600, color: 'var(--tx3)' }}>
+        <span className="minibar-label">NETZ</span>
+        {d.online && d.heartbeat.net_rx_bps !== undefined ? (
+          <>
+            <span style={{ color: 'var(--tx2)' }}>↓ {formatRate(d.heartbeat.net_rx_bps)}</span>
+            <span style={{ color: 'var(--tx2)' }}>↑ {formatRate(d.heartbeat.net_tx_bps)}</span>
+          </>
+        ) : (
+          <span>—</span>
+        )}
       </div>
     </button>
   );

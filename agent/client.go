@@ -22,8 +22,8 @@ const (
 	// A connection alive at least this long counts as healthy — its later
 	// drop resets the reconnect backoff instead of compounding it.
 	healthyConnMin = 30 * time.Second
-	writeTimeout      = 10 * time.Second
-	outboxSize        = 64
+	writeTimeout   = 10 * time.Second
+	outboxSize     = 64
 )
 
 type message struct {

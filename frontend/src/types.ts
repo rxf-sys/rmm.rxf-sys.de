@@ -17,6 +17,10 @@ export interface Heartbeat {
   cpu_pct?: number;
   mem_pct?: number;
   disks?: { mount: string; used_pct: number; total_b: number }[];
+  /** Netzwerk-Durchsatz (Bytes/s, alle Nicht-Loopback-Interfaces); fehlt bei
+   * älteren Agents. */
+  net_rx_bps?: number;
+  net_tx_bps?: number;
 }
 
 export interface Device {
