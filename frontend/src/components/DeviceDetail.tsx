@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
-import { formatBytes, formatRelative, osLabel } from '../format';
+import { formatBytes, formatRate, formatRelative, osLabel } from '../format';
 import { useJobStream } from '../hooks/useJobStream';
 import type {
   Alert,
@@ -525,6 +525,12 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
     ['Besitzer', d.owner_label || '—'],
     ['OS', `${osLabel(d.os)} ${d.os_version} (${d.arch})`],
     ['Agent', d.agent_version || '—'],
+    [
+      'Netzwerk',
+      d.online && d.heartbeat.net_rx_bps !== undefined
+        ? `↓ ${formatRate(d.heartbeat.net_rx_bps)} · ↑ ${formatRate(d.heartbeat.net_tx_bps)}`
+        : '—',
+    ],
     ['Uptime', typeof hw.uptime_s === 'number' ? `${Math.floor((hw.uptime_s as number) / 86400)} Tage` : '—'],
     ['Enroll', formatRelative(d.created_at)],
   ];

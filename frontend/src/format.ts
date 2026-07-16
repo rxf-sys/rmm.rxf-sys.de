@@ -25,6 +25,20 @@ export function formatBytes(bytes: number): string {
   return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+/** Netzwerk-Rate in Bytes/s → lesbare Einheit. undefined (alter Agent, noch
+ * kein Sample) → '—'. */
+export function formatRate(bps: number | undefined | null): string {
+  if (bps === undefined || bps === null || Number.isNaN(bps)) return '—';
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+  let v = bps;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
 const OS_LABEL: Record<string, string> = {
   windows: 'Windows',
   linux: 'Linux',
