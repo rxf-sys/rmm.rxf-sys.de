@@ -104,13 +104,13 @@ export function Sidebar({
             identischer Look. */}
         <img
           src="/favicon.svg"
-          alt="Ryntra"
+          alt="Vulpexa"
           width={28}
           height={28}
           style={{ display: 'block', borderRadius: 8, boxShadow: '0 2px 10px var(--accLine)' }}
         />
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
-          <span className="brand-name">Ryntra</span>
+          <span className="brand-name">Vulpexa</span>
           <span className="brand-sub">Remote Monitoring &amp; Management</span>
         </div>
       </div>

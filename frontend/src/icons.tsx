@@ -192,30 +192,8 @@ export const IconCopy = (p: IconProps) => (
   </S>
 );
 
-// --- Brand -------------------------------------------------------------------
-
-/** Ryntra "R" monogram. Stroked in `currentColor`, so on the peach brand tile
- * (which sets color: var(--onAccent)) it renders as a crisp dark R at any size
- * — no raster asset, no blur. */
-export const RyntraLogo = (p: IconProps) => {
-  const { size = 20, style } = p;
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="3.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={{ display: 'block', ...style }}
-      aria-hidden
-    >
-      <path d="M11 7 V25 M11 7 H18 A5 5 0 0 1 18 17 H11 M13.5 17 L22 25" />
-    </svg>
-  );
-};
+// Brand-Artwork lebt in public/favicon.svg (Vulpexa-Fuchs) — Sidebar/Login
+// binden es als <img> ein, damit Tab-Icon und App-Logo identisch sind.
 
 // --- OS logos (filled marks) ---------------------------------------------------
 

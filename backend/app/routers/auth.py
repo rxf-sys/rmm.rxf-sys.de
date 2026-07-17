@@ -179,7 +179,7 @@ async def totp_setup(user: dict = Depends(verify_session)) -> dict:
     # simplest correct approach: store it immediately but only *enable* (report
     # totp_enabled) after confirmation. We instead return it and confirm in one
     # step below by re-sending it — avoids a pending-secret table.
-    uri = pyotp.TOTP(secret).provisioning_uri(name=user["username"], issuer_name="Ryntra")
+    uri = pyotp.TOTP(secret).provisioning_uri(name=user["username"], issuer_name="Vulpexa")
     return {"secret": secret, "otpauth_uri": uri}
 
 
