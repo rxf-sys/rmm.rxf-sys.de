@@ -646,6 +646,18 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
           ))}
         </div>
         <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <span className="card-title-sm">Sicherheit</span>
+          {secRows.map(([k, v]) => (
+            <div key={k} className="kv">
+              <span className="k">{k}</span>
+              <span className="v">{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="col">
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           <div className="row">
             <span className="card-title-sm">Netzwerk</span>
             <span style={{ marginLeft: 'auto', fontWeight: 600, fontSize: 11, color: 'var(--tx2)' }}>
@@ -753,38 +765,7 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
             </div>
           )}
         </div>
-        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-          <span className="card-title-sm">Sicherheit</span>
-          {secRows.map(([k, v]) => (
-            <div key={k} className="kv">
-              <span className="k">{k}</span>
-              <span className="v">{v}</span>
-            </div>
-          ))}
-        </div>
-        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <span className="card-title-sm">Remote-Desktop</span>
-          {d.rustdesk_id ? (
-            <>
-              <span className="muted" style={{ fontSize: 11.5 }}>
-                RustDesk-ID <span className="mono" style={{ color: 'var(--tx2)' }}>{d.rustdesk_id}</span>
-              </span>
-              <button className="btn btn-accent btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => onGoTab('remote')}>
-                Einrichten ↗
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="muted" style={{ fontSize: 11.5 }}>Noch nicht eingerichtet.</span>
-              <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => onGoTab('remote')}>
-                Einrichten →
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <span className="card-title-sm">
           Live-Metriken <span className="muted" style={{ fontSize: 10.5 }}>· zuletzt {formatRelative(d.last_seen_at)}</span>
         </span>
@@ -829,6 +810,7 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
             )}
           </div>
         )}
+        </div>
       </div>
 
       <div className="col">
@@ -856,6 +838,26 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
           <span className="muted" style={{ fontSize: 11.5 }}>
             Verlauf und Patch-Status in den Tabs „Aktivität" und „Updates".
           </span>
+        </div>
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span className="card-title-sm">Remote-Desktop</span>
+          {d.rustdesk_id ? (
+            <>
+              <span className="muted" style={{ fontSize: 11.5 }}>
+                RustDesk-ID <span className="mono" style={{ color: 'var(--tx2)' }}>{d.rustdesk_id}</span>
+              </span>
+              <button className="btn btn-accent btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => onGoTab('remote')}>
+                Einrichten ↗
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="muted" style={{ fontSize: 11.5 }}>Noch nicht eingerichtet.</span>
+              <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => onGoTab('remote')}>
+                Einrichten →
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
