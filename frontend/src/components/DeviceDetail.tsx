@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { formatBytes, formatRate, formatRelative, osLabel } from '../format';
 import { useJobStream } from '../hooks/useJobStream';
@@ -516,6 +516,7 @@ interface NicInfo {
   mac?: string;
   ips: string[];
   mtu?: number;
+  speed_mbit?: number;
 }
 
 function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (t: TabId) => void }) {
@@ -527,18 +528,109 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
   const fallbackMacs = (Array.isArray(hw.macs) ? hw.macs : []) as string[];
   const gateway = typeof hw.gateway === 'string' ? hw.gateway : '';
   const dnsList = (Array.isArray(hw.dns) ? hw.dns : []) as string[];
+  const hb = d.heartbeat;
   const meters = [
-    { label: 'CPU', pct: Math.round(d.heartbeat.cpu_pct ?? 0), color: 'var(--accent)' },
-    { label: 'RAM', pct: Math.round(d.heartbeat.mem_pct ?? 0), color: 'var(--violet)' },
-    ...disks.map((x) => ({ label: `Disk ${x.mount}`, pct: Math.round(x.used_pct), color: diskColor(x.used_pct) })),
+    { label: 'CPU', pct: Math.round(hb.cpu_pct ?? 0), color: 'var(--accent)', val: '' },
+    {
+      label: 'RAM',
+      pct: Math.round(hb.mem_pct ?? 0),
+      color: 'var(--violet)',
+      val: hb.mem_used_b && hb.mem_total_b ? `${formatBytes(hb.mem_used_b)} / ${formatBytes(hb.mem_total_b)}` : '',
+    },
+    ...disks.map((x) => ({
+      label: `Disk ${x.mount}`,
+      pct: Math.round(x.used_pct),
+      color: diskColor(x.used_pct),
+      val: x.total_b
+        ? `${formatBytes(x.used_b ?? (x.total_b * x.used_pct) / 100)} / ${formatBytes(x.total_b)}`
+        : '',
+    })),
   ];
-  const kv: [string, string][] = [
+  const model = [hw.manufacturer, hw.model]
+    .filter((s): s is string => typeof s === 'string' && s !== '')
+    .join(' ');
+  const kv: [string, ReactNode][] = [
     ['Status', `${d.online ? 'online' : 'offline'}${d.connected ? ' · verbunden' : ''}`],
     ['Besitzer', d.owner_label || '—'],
     ['OS', `${osLabel(d.os)} ${d.os_version} (${d.arch})`],
     ['Agent', d.agent_version || '—'],
-    ['Uptime', typeof hw.uptime_s === 'number' ? `${Math.floor((hw.uptime_s as number) / 86400)} Tage` : '—'],
-    ['Enroll', formatRelative(d.created_at)],
+  ];
+  if (model) kv.push(['Modell', model]);
+  if (typeof hw.serial === 'string' && hw.serial) {
+    kv.push(['Seriennummer', <span className="mono">{hw.serial as string}</span>]);
+  }
+  kv.push([
+    'Uptime',
+    typeof hw.uptime_s === 'number' ? `${Math.floor((hw.uptime_s as number) / 86400)} Tage` : '—',
+  ]);
+  if (d.online && hb.logged_in_user) kv.push(['Angemeldet', hb.logged_in_user]);
+  kv.push(['Enroll', formatRelative(d.created_at)]);
+  if (d.online && hb.reboot_required) {
+    kv.push([
+      'Neustart',
+      <span className="badge badge-warn" style={{ fontSize: 10.5 }}>
+        ⟳ erforderlich (Updates ausstehend)
+      </span>,
+    ]);
+  }
+  const battery = hb.battery_state
+    ? `${Math.round(hb.battery_pct ?? 0)} % · ${
+        { charging: 'lädt', discharging: 'entlädt', full: 'voll', ac: 'Netzbetrieb' }[
+          hb.battery_state
+        ] ?? hb.battery_state
+      }`
+    : '';
+  const security = (hw.security && typeof hw.security === 'object' ? hw.security : {}) as Record<
+    string,
+    string
+  >;
+  // Patch-Posture für die Sicherheit-Card (offene Security-Updates + letzter Scan).
+  const [secPatches, setSecPatches] = useState<{
+    open: number;
+    oldestDays: number | null;
+    lastScan: number | null;
+  } | null>(null);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    api
+      .devicePatches(d.id, ctrl.signal)
+      .then((r) => {
+        const sec = r.patches.filter((p) => p.severity === 'critical' || p.severity === 'important');
+        const oldest = sec.length ? Math.min(...sec.map((p) => p.detected_at)) : null;
+        const scanned = r.patches.length ? Math.max(...r.patches.map((p) => p.updated_at)) : null;
+        setSecPatches({
+          open: sec.length,
+          oldestDays: oldest !== null ? Math.floor((Date.now() / 1000 - oldest) / 86400) : null,
+          lastScan: scanned,
+        });
+      })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [d.id]);
+  const secRow = (label: string, value: string | undefined): [string, ReactNode] => [
+    label,
+    value ? value : <span className="muted">unbekannt</span>,
+  ];
+  const secRows: [string, ReactNode][] = [
+    secRow('Firewall', security.firewall),
+    secRow('Virenschutz', security.antivirus),
+    secRow('Verschlüsselung', security.encryption),
+    [
+      'Sicherheitsupdates',
+      secPatches === null ? (
+        '—'
+      ) : secPatches.open === 0 ? (
+        'keine offen'
+      ) : (
+        <span style={{ color: 'var(--warn)', fontWeight: 700 }}>
+          {secPatches.open} offen
+          {secPatches.oldestDays !== null && secPatches.oldestDays > 0
+            ? ` · ältestes seit ${secPatches.oldestDays} Tagen`
+            : ''}
+        </span>
+      ),
+    ],
+    ['Letzter Scan', secPatches?.lastScan ? formatRelative(secPatches.lastScan) : '—'],
   ];
 
   return (
@@ -579,6 +671,13 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
                 >
                   <div className="row" style={{ gap: 8 }}>
                     <span className="chip-mono">{n.name}</span>
+                    {n.speed_mbit ? (
+                      <span className="muted" style={{ fontSize: 10 }}>
+                        {n.speed_mbit >= 1000
+                          ? `${(n.speed_mbit / 1000).toLocaleString('de-DE')} Gbit/s`
+                          : `${n.speed_mbit} Mbit/s`}
+                      </span>
+                    ) : null}
                     {n.mtu ? (
                       <span className="muted" style={{ fontSize: 10 }}>MTU {n.mtu}</span>
                     ) : null}
@@ -621,7 +720,7 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
               Noch keine Netzwerkdaten — der Agent meldet sie mit dem Inventar.
             </span>
           )}
-          {(gateway || dnsList.length > 0) && (
+          {(gateway || dnsList.length > 0 || hb.net_rx_total_b !== undefined) && (
             <div
               style={{
                 display: 'flex',
@@ -643,8 +742,25 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
                   <span className="v mono">{dnsList.join(' · ')}</span>
                 </div>
               )}
+              {hb.net_rx_total_b !== undefined && (
+                <div className="kv">
+                  <span className="k">Traffic seit Boot</span>
+                  <span className="v">
+                    ↓ {formatBytes(hb.net_rx_total_b)} · ↑ {formatBytes(hb.net_tx_total_b ?? 0)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
+        </div>
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <span className="card-title-sm">Sicherheit</span>
+          {secRows.map(([k, v]) => (
+            <div key={k} className="kv">
+              <span className="k">{k}</span>
+              <span className="v">{v}</span>
+            </div>
+          ))}
         </div>
         <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span className="card-title-sm">Remote-Desktop</span>
@@ -676,7 +792,12 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
           <div key={m.label} className="meter">
             <div className="meter-head">
               <span style={{ color: 'var(--tx2)' }}>{m.label}</span>
-              <span className="pct" style={{ color: m.color }}>{m.pct}%</span>
+              {m.val && (
+                <span className="muted" style={{ marginLeft: 'auto', fontSize: 10.5, paddingRight: 8 }}>
+                  {m.val}
+                </span>
+              )}
+              <span className="pct" style={{ color: m.color, marginLeft: m.val ? 0 : 'auto' }}>{m.pct}%</span>
             </div>
             <div className="bar">
               <span className="bar-fill" style={{ width: `${m.pct}%`, background: m.color }} />
@@ -684,6 +805,30 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
           </div>
         ))}
         {meters.length === 0 && <span className="muted">Keine Live-Daten.</span>}
+        {(hb.cpu_temp_c || battery) && (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              paddingTop: 9,
+              borderTop: '1px solid var(--line2)',
+            }}
+          >
+            {hb.cpu_temp_c ? (
+              <div className="kv">
+                <span className="k">Temperatur</span>
+                <span className="v">CPU {Math.round(hb.cpu_temp_c)} °C</span>
+              </div>
+            ) : null}
+            {battery && (
+              <div className="kv">
+                <span className="k">Batterie</span>
+                <span className="v">{battery}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="col">
