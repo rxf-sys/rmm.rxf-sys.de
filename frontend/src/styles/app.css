@@ -1,5 +1,5 @@
 /* ============================================================
-   Ryntra — Design tokens + component classes
+   Vulpexa — Design tokens + component classes
    Styling lives here (central CSS + custom properties); components
    use these classes and only inline dynamic values (bar widths,
    data-driven colors). Theme switches via body[data-theme].

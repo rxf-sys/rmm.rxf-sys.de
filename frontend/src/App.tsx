@@ -111,7 +111,7 @@ export default function App() {
 
   const detailDevice = detailId !== null ? fleet.devices.find((d) => d.id === detailId) : undefined;
   const crumbCur = detailId !== null ? (detailDevice?.hostname ?? `Gerät ${detailId}`) : PAGE_LABEL[page];
-  const crumbPre = detailId !== null ? 'Ryntra / Geräte / ' : 'Ryntra / ';
+  const crumbPre = detailId !== null ? 'Vulpexa / Geräte / ' : 'Vulpexa / ';
 
   return (
     <div className={navOpen ? 'app-shell nav-open' : 'app-shell'}>

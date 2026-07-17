@@ -41,13 +41,13 @@ export function LoginPage({ onLogin }: Props) {
         <div className="brand" style={{ padding: 0 }}>
           <img
             src="/favicon.svg"
-            alt="Ryntra"
+            alt="Vulpexa"
             width={34}
             height={34}
             style={{ display: 'block', borderRadius: 9, boxShadow: '0 2px 10px var(--accLine)' }}
           />
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-            <span style={{ fontWeight: 800, fontSize: 18 }}>Ryntra</span>
+            <span style={{ fontWeight: 800, fontSize: 18 }}>Vulpexa</span>
             <span className="brand-sub">Remote Monitoring &amp; Management</span>
           </div>
         </div>
