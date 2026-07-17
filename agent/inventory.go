@@ -72,6 +72,7 @@ type nicInfo struct {
 	Name string   `json:"name"`
 	MAC  string   `json:"mac,omitempty"`
 	IPs  []string `json:"ips"`
+	MTU  int      `json:"mtu,omitempty"`
 }
 
 // collectNICs lists up, non-loopback interfaces with their MAC and non-link-
@@ -114,7 +115,7 @@ func collectNICs() []nicInfo {
 		if mac == "00:00:00:00:00:00" {
 			mac = ""
 		}
-		out = append(out, nicInfo{Name: ifc.Name, MAC: mac, IPs: ips})
+		out = append(out, nicInfo{Name: ifc.Name, MAC: mac, IPs: ips, MTU: ifc.MTU})
 		if len(out) >= 12 {
 			break
 		}

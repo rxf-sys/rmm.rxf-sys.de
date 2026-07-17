@@ -515,6 +515,7 @@ interface NicInfo {
   name: string;
   mac?: string;
   ips: string[];
+  mtu?: number;
 }
 
 function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (t: TabId) => void }) {
@@ -551,23 +552,63 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
           ))}
         </div>
         <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-          <span className="card-title-sm">Netzwerk</span>
+          <div className="row">
+            <span className="card-title-sm">Netzwerk</span>
+            <span style={{ marginLeft: 'auto', fontWeight: 600, fontSize: 11, color: 'var(--tx2)' }}>
+              {d.online && d.heartbeat.net_rx_bps !== undefined
+                ? `↓ ${formatRate(d.heartbeat.net_rx_bps)} · ↑ ${formatRate(d.heartbeat.net_tx_bps)}`
+                : ''}
+            </span>
+          </div>
           {nics.length > 0 ? (
-            nics.map((n) => (
-              <div key={n.name} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <div className="row" style={{ gap: 6 }}>
-                  <span className="chip-mono">{n.name}</span>
-                  <span style={{ fontWeight: 600, fontSize: 12 }}>{n.ips.join(' · ') || '—'}</span>
+            nics.map((n, i) => {
+              const v4 = n.ips.filter((ip) => !ip.includes(':'));
+              const v6 = n.ips.filter((ip) => ip.includes(':'));
+              return (
+                <div
+                  key={n.name}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                    paddingTop: i > 0 ? 9 : 0,
+                    borderTop: i > 0 ? '1px solid var(--line2)' : 'none',
+                  }}
+                >
+                  <div className="row" style={{ gap: 8 }}>
+                    <span className="chip-mono">{n.name}</span>
+                    {n.mtu ? (
+                      <span className="muted" style={{ fontSize: 10 }}>MTU {n.mtu}</span>
+                    ) : null}
+                  </div>
+                  {v4.map((ip) => (
+                    <div className="kv" key={ip}>
+                      <span className="k">IPv4</span>
+                      <span className="v mono">{ip}</span>
+                    </div>
+                  ))}
+                  {v6.map((ip) => (
+                    <div className="kv" key={ip}>
+                      <span className="k">IPv6</span>
+                      <span className="v mono" style={{ wordBreak: 'break-all' }}>{ip}</span>
+                    </div>
+                  ))}
+                  {n.mac && (
+                    <div className="kv">
+                      <span className="k">MAC</span>
+                      <span className="v mono">{n.mac}</span>
+                    </div>
+                  )}
                 </div>
-                {n.mac && (
-                  <span className="mono muted" style={{ fontSize: 10.5 }}>MAC {n.mac}</span>
-                )}
-              </div>
-            ))
+              );
+            })
           ) : fallbackMacs.length > 0 ? (
             <>
               {fallbackMacs.map((m) => (
-                <span key={m} className="mono muted" style={{ fontSize: 11 }}>MAC {m}</span>
+                <div className="kv" key={m}>
+                  <span className="k">MAC</span>
+                  <span className="v mono">{m}</span>
+                </div>
               ))}
               <span className="muted" style={{ fontSize: 10.5 }}>
                 IP-Adressen erscheinen nach dem nächsten Agent-Update.
@@ -578,14 +619,6 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
               Noch keine Netzwerkdaten — der Agent meldet sie mit dem Inventar.
             </span>
           )}
-          <div className="kv">
-            <span className="k">Durchsatz</span>
-            <span className="v">
-              {d.online && d.heartbeat.net_rx_bps !== undefined
-                ? `↓ ${formatRate(d.heartbeat.net_rx_bps)} · ↑ ${formatRate(d.heartbeat.net_tx_bps)}`
-                : '—'}
-            </span>
-          </div>
         </div>
         <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span className="card-title-sm">Remote-Desktop</span>
