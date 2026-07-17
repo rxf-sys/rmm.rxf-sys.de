@@ -63,15 +63,37 @@ func collectInventory() inventoryPayload {
 		// Per-interface detail (IPs + MAC) for the dashboard's network card.
 		hw["nics"] = nics
 	}
+	if gw := defaultGateway(); gw != "" {
+		hw["gateway"] = gw
+	}
+	if dns := dnsServers(); len(dns) > 0 {
+		hw["dns"] = dns
+	}
+	if man, model, serial := systemIdentity(); man != "" || model != "" || serial != "" {
+		if man != "" {
+			hw["manufacturer"] = man
+		}
+		if model != "" {
+			hw["model"] = model
+		}
+		if serial != "" {
+			hw["serial"] = serial
+		}
+	}
+	if sec := securityStatus(); len(sec) > 0 {
+		hw["security"] = sec
+	}
 
 	return finishInventory(hw, collectSoftware())
 }
 
 // nicInfo is one network interface as shown in the device's network card.
 type nicInfo struct {
-	Name string   `json:"name"`
-	MAC  string   `json:"mac,omitempty"`
-	IPs  []string `json:"ips"`
+	Name      string   `json:"name"`
+	MAC       string   `json:"mac,omitempty"`
+	IPs       []string `json:"ips"`
+	MTU       int      `json:"mtu,omitempty"`
+	SpeedMbit int      `json:"speed_mbit,omitempty"`
 }
 
 // collectNICs lists up, non-loopback interfaces with their MAC and non-link-
@@ -82,6 +104,7 @@ func collectNICs() []nicInfo {
 	if err != nil {
 		return nil
 	}
+	speeds := nicSpeeds()
 	var out []nicInfo
 	for _, ifc := range ifaces {
 		if ifc.Flags&net.FlagLoopback != 0 || ifc.Flags&net.FlagUp == 0 {
@@ -114,7 +137,10 @@ func collectNICs() []nicInfo {
 		if mac == "00:00:00:00:00:00" {
 			mac = ""
 		}
-		out = append(out, nicInfo{Name: ifc.Name, MAC: mac, IPs: ips})
+		out = append(out, nicInfo{
+			Name: ifc.Name, MAC: mac, IPs: ips, MTU: ifc.MTU,
+			SpeedMbit: speeds[ifc.Name],
+		})
 		if len(out) >= 12 {
 			break
 		}

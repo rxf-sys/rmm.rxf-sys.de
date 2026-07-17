@@ -16,11 +16,22 @@ export interface Heartbeat {
   agent_version?: string;
   cpu_pct?: number;
   mem_pct?: number;
-  disks?: { mount: string; used_pct: number; total_b: number }[];
+  mem_used_b?: number;
+  mem_total_b?: number;
+  disks?: { mount: string; used_pct: number; used_b?: number; total_b: number }[];
   /** Netzwerk-Durchsatz (Bytes/s, alle Nicht-Loopback-Interfaces); fehlt bei
    * älteren Agents. */
   net_rx_bps?: number;
   net_tx_bps?: number;
+  /** Kumulierte Zähler seit Boot. */
+  net_rx_total_b?: number;
+  net_tx_total_b?: number;
+  /** Best-effort-Extras — fehlen, wenn das System sie nicht liefert. */
+  cpu_temp_c?: number;
+  battery_pct?: number;
+  battery_state?: string; // charging|discharging|full|ac
+  logged_in_user?: string;
+  reboot_required?: boolean;
 }
 
 export interface Device {
