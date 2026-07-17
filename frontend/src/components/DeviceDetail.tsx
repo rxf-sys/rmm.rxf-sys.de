@@ -525,6 +525,8 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
   const nics = (Array.isArray(hw.nics) ? hw.nics : []) as NicInfo[];
   // Fallback für ältere Agents, die nur die WoL-MAC-Liste melden.
   const fallbackMacs = (Array.isArray(hw.macs) ? hw.macs : []) as string[];
+  const gateway = typeof hw.gateway === 'string' ? hw.gateway : '';
+  const dnsList = (Array.isArray(hw.dns) ? hw.dns : []) as string[];
   const meters = [
     { label: 'CPU', pct: Math.round(d.heartbeat.cpu_pct ?? 0), color: 'var(--accent)' },
     { label: 'RAM', pct: Math.round(d.heartbeat.mem_pct ?? 0), color: 'var(--violet)' },
@@ -618,6 +620,30 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
             <span className="muted" style={{ fontSize: 11.5 }}>
               Noch keine Netzwerkdaten — der Agent meldet sie mit dem Inventar.
             </span>
+          )}
+          {(gateway || dnsList.length > 0) && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                paddingTop: 9,
+                borderTop: '1px solid var(--line2)',
+              }}
+            >
+              {gateway && (
+                <div className="kv">
+                  <span className="k">Gateway</span>
+                  <span className="v mono">{gateway}</span>
+                </div>
+              )}
+              {dnsList.length > 0 && (
+                <div className="kv">
+                  <span className="k">DNS</span>
+                  <span className="v mono">{dnsList.join(' · ')}</span>
+                </div>
+              )}
+            </div>
           )}
         </div>
         <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

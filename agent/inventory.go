@@ -63,6 +63,12 @@ func collectInventory() inventoryPayload {
 		// Per-interface detail (IPs + MAC) for the dashboard's network card.
 		hw["nics"] = nics
 	}
+	if gw := defaultGateway(); gw != "" {
+		hw["gateway"] = gw
+	}
+	if dns := dnsServers(); len(dns) > 0 {
+		hw["dns"] = dns
+	}
 
 	return finishInventory(hw, collectSoftware())
 }
