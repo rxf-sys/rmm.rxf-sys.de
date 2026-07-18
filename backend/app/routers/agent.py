@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from .. import devices, jobs, metrics, patches, releases
 from ..agents_ws import manager
 from ..audit import record as audit_record
+from ..config import get_settings
 from ..fleet_ws import hub as fleet_hub
 
 log = structlog.get_logger("agent_api")
@@ -186,9 +187,17 @@ Write-Host "Fertig — das Gerät erscheint in Kürze im Dashboard."
 def _public_base(request: Request) -> str:
     """Origin the CLIENT used, reconstructed behind the Cloudflare tunnel
     (X-Forwarded-Proto) so generated URLs point at https://rmm.rxf-sys.de,
-    not the container-internal address."""
+    not the container-internal address.
+
+    In production the public origin is always HTTPS — even when the
+    forwarded header is missing (e.g. Caddy stripped it because
+    TRUSTED_PROXY_CIDR isn't configured yet). An http:// base would break
+    enrollment: the redirect to https turns the enroll POST into a GET
+    (405)."""
     proto = request.headers.get("x-forwarded-proto") or request.url.scheme
     host = request.headers.get("host") or request.url.netloc
+    if get_settings().app_env == "production":
+        proto = "https"
     return f"{proto}://{host}"
 
 

@@ -40,6 +40,22 @@ async def test_setup_script_embeds_server_and_token(client: AsyncClient):
     assert (await client.get(f"/api/agent/setup/beos?token={token}")).status_code == 404
 
 
+async def test_setup_script_forces_https_in_production(client: AsyncClient, monkeypatch):
+    """Produktion erzwingt https in der eingebetteten Server-URL — auch wenn
+    der Proxy X-Forwarded-Proto gestrippt hat. Mit http-Basis würde der
+    Enroll-POST über den http→https-Redirect zu einem GET (405)."""
+    from app.config import get_settings as real_get_settings
+
+    monkeypatch.setattr(real_get_settings(), "app_env", "production")
+    token = await _token()
+    r = await client.get(
+        f"/api/agent/setup/linux?token={token}", headers={"host": "rmm.rxf-sys.de"}
+    )
+    assert r.status_code == 200
+    assert "https://rmm.rxf-sys.de" in r.text
+    assert "'http://rmm.rxf-sys.de'" not in r.text
+
+
 async def test_setup_accepts_token_header(client: AsyncClient):
     """The X-Enroll-Token header is the preferred transport (keeps the token
     out of proxy/access logs); the query parameter stays as fallback."""
