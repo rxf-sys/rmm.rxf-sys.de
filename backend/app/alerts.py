@@ -112,6 +112,17 @@ async def _mark_notified(alert_id: int) -> None:
         await db.commit()
 
 
+async def device_id_of(alert_id: int) -> int | None:
+    """Device an alert belongs to, or None for unknown ids (viewer scoping
+    checks this BEFORE acking so foreign alerts stay untouched)."""
+    async with _connect() as db:
+        async with db.execute(
+            "SELECT device_id FROM alerts WHERE id = ?", (alert_id,)
+        ) as cur:
+            row = await cur.fetchone()
+    return int(row[0]) if row else None
+
+
 async def ack(alert_id: int, username: str) -> dict[str, Any] | None:
     """Acknowledge an open alert ("gesehen, kümmere mich"). Idempotent — the
     first acker wins the byline. Returns the row, or None for unknown/

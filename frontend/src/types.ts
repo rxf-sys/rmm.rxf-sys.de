@@ -9,6 +9,8 @@ export interface Account {
   created_at: number;
   last_login_at: number | null;
   totp_enabled?: boolean;
+  /** Verknüpfte Person — Betrachter sehen nur deren Geräte. */
+  person_id?: number | null;
 }
 
 export interface Heartbeat {

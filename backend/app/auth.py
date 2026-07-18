@@ -69,3 +69,17 @@ async def require_operator(user: dict[str, Any] = Depends(verify_session)) -> di
             detail="operator privileges required",
         )
     return user
+
+
+def person_scope(user: dict[str, Any]) -> int | None:
+    """Device-visibility scope: None = full fleet (admin/techniker). Viewer
+    accounts only see devices assigned to their linked person; a viewer
+    without a linked person sees no devices (-1 matches nothing)."""
+    if user.get("role") != "viewer":
+        return None
+    return user.get("person_id") or -1
+
+
+def device_visible(user: dict[str, Any], device: dict[str, Any]) -> bool:
+    scope = person_scope(user)
+    return scope is None or device.get("person_id") == scope
