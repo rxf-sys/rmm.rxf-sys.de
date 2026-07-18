@@ -84,9 +84,10 @@ async def test_patch_endpoints_require_admin_for_writes(client: AsyncClient):
     dev = await _make_device()
     await accounts.create_user("viewer", "super-secret-pw", role="viewer")
     await client.post("/api/auth/login", json={"username": "viewer", "password": "super-secret-pw"})
-    # Read allowed…
-    assert (await client.get(f"/api/devices/{dev}/patches")).status_code == 200
-    # …scan/install are admin-only.
+    # Ein Betrachter ohne Personen-Verknüpfung sieht kein Gerät → 404
+    # (Scoping; person-gebundene Sicht wird in test_viewer_scope geprüft).
+    assert (await client.get(f"/api/devices/{dev}/patches")).status_code == 404
+    # Scan/Install sind operator-only.
     assert (await client.post(f"/api/devices/{dev}/patches/scan")).status_code == 403
     assert (await client.post(f"/api/devices/{dev}/patches/install", json={})).status_code == 403
 

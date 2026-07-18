@@ -24,6 +24,11 @@ const EMPTY: Draft = { id: null, name: '', email: '', phone: '', notes: '' };
 export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh }: Props) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Zugangsdaten des automatisch angelegten Betrachter-Kontos — erscheinen
+  // genau einmal nach dem Anlegen (das Passwort ist danach nicht mehr abrufbar).
+  const [createdLogin, setCreatedLogin] = useState<{ username: string; password: string } | null>(
+    null,
+  );
 
   const save = async () => {
     if (!draft) return;
@@ -35,8 +40,14 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
         phone: draft.phone.trim(),
         notes: draft.notes.trim(),
       };
-      if (draft.id === null) await api.createPerson(body);
-      else await api.updatePerson(draft.id, body);
+      if (draft.id === null) {
+        const r = await api.createPerson(body);
+        if (r.account && r.initial_password) {
+          setCreatedLogin({ username: r.account.username, password: r.initial_password });
+        }
+      } else {
+        await api.updatePerson(draft.id, body);
+      }
       setDraft(null);
       onRefresh();
     } catch (e) {
@@ -45,7 +56,12 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
   };
 
   const remove = async (p: Person) => {
-    if (!confirm(`„${p.name}" wirklich löschen? Zugewiesene Geräte bleiben erhalten.`)) return;
+    if (
+      !confirm(
+        `„${p.name}" wirklich löschen? Zugewiesene Geräte bleiben erhalten, das verknüpfte Betrachter-Konto wird mitgelöscht.`,
+      )
+    )
+      return;
     try {
       await api.deletePerson(p.id);
       onRefresh();
@@ -56,6 +72,39 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
 
   return (
     <div className="screen">
+      {createdLogin && (
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ fontWeight: 800, fontSize: 13 }}>Betrachter-Konto angelegt</span>
+          <span className="muted" style={{ lineHeight: 1.6 }}>
+            Für die neue Person wurde automatisch ein Konto erstellt. Es sieht nur die Geräte,
+            die dieser Person zugewiesen sind.
+          </span>
+          <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
+            <span>
+              Benutzername: <span className="mono" style={{ fontWeight: 700 }}>{createdLogin.username}</span>
+            </span>
+            <span>
+              Passwort: <span className="mono" style={{ fontWeight: 700 }}>{createdLogin.password}</span>
+            </span>
+            <button
+              className="btn btn-sm"
+              onClick={() =>
+                void navigator.clipboard
+                  .writeText(`${createdLogin.username} / ${createdLogin.password}`)
+                  .catch(() => {})
+              }
+            >
+              Kopieren
+            </button>
+            <button className="btn btn-sm" onClick={() => setCreatedLogin(null)}>
+              Schließen
+            </button>
+          </div>
+          <span style={{ fontWeight: 600, fontSize: 11, color: 'var(--warn)' }}>
+            ⚠ Das Passwort wird nur einmal angezeigt — jetzt weitergeben oder notieren.
+          </span>
+        </div>
+      )}
       <div className="page-head center">
         <h1 className="page-title">Personen</h1>
         <span className="muted">{persons.length}</span>

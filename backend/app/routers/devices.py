@@ -17,7 +17,7 @@ import time
 from .. import alerts, credentials, devices, jobs, metrics, patches, persons, wol
 from ..agents_ws import manager
 from ..audit import record as audit_record
-from ..auth import require_operator, verify_session
+from ..auth import device_visible, person_scope, require_operator, verify_session
 from ..config import Settings, get_settings
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
@@ -36,6 +36,10 @@ async def list_devices(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     items = await devices.list_devices(settings.offline_after_s)
+    # Betrachter sehen nur die Geräte ihrer verknüpften Person.
+    scope = person_scope(user)
+    if scope is not None:
+        items = [d for d in items if d["person_id"] == scope]
     return {"devices": [_with_connected(d) for d in items]}
 
 
@@ -78,15 +82,22 @@ async def delete_enroll_token(token_id: int, user: dict = Depends(require_operat
 # --- Single device -----------------------------------------------------------
 
 
+async def _visible_or_404(device_id: int, user: dict, settings: Settings) -> dict:
+    """Load a device; 404 for unknown ids AND for devices outside a viewer's
+    person scope (no distinction — a scoped viewer can't probe the fleet)."""
+    device = await devices.get_device(device_id, settings.offline_after_s)
+    if device is None or not device_visible(user, device):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    return device
+
+
 @router.get("/{device_id}")
 async def get_device(
     device_id: int,
     user: dict = Depends(verify_session),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    device = await devices.get_device(device_id, settings.offline_after_s)
-    if device is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    device = await _visible_or_404(device_id, user, settings)
     return {
         "device": _with_connected(device),
         "inventory": await devices.get_inventory(device_id),
@@ -100,8 +111,7 @@ async def device_history(
     user: dict = Depends(verify_session),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    if await devices.get_device(device_id, settings.offline_after_s) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    await _visible_or_404(device_id, user, settings)
     return {"samples": await metrics.history(device_id, hours)}
 
 
@@ -112,8 +122,7 @@ async def device_alerts(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     """Alert history + a 30-day trend summary for the device detail view."""
-    if await devices.get_device(device_id, settings.offline_after_s) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    await _visible_or_404(device_id, user, settings)
     return {
         "alerts": await alerts.for_device(device_id),
         "stats": await alerts.stats_for_device(device_id),

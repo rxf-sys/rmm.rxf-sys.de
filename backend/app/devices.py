@@ -508,6 +508,15 @@ async def in_maintenance_ids() -> set[int]:
             return {int(r[0]) for r in await cur.fetchall()}
 
 
+async def device_ids_for_person(person_id: int) -> set[int]:
+    """Ids of the devices assigned to a person (viewer scoping)."""
+    async with _connect() as db:
+        async with db.execute(
+            "SELECT id FROM devices WHERE person_id = ?", (person_id,)
+        ) as cur:
+            return {int(r[0]) for r in await cur.fetchall()}
+
+
 async def device_macs(device_id: int) -> list[str]:
     """MAC addresses reported in the hardware inventory (for Wake-on-LAN)."""
     async with _connect() as db:

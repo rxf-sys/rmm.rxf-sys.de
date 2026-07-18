@@ -1,14 +1,12 @@
 module github.com/rxf-sys/rmm.rxf-sys.de/agent
 
-go 1.24.0
-
-toolchain go1.24.7
+go 1.25.0
 
 require (
 	github.com/gorilla/websocket v1.5.3
-	github.com/kardianos/service v1.2.4
+	github.com/kardianos/service v1.3.0
 	github.com/shirou/gopsutil/v4 v4.26.6
-	golang.org/x/sys v0.41.0
+	golang.org/x/sys v0.47.0
 )
 
 require (

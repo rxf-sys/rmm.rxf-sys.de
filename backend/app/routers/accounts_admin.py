@@ -12,7 +12,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from .. import accounts
+from .. import accounts, persons
 from ..audit import record as audit_record
 from ..auth import require_admin
 from .auth import MIN_PASSWORD_LEN
@@ -35,6 +35,8 @@ class UpdateAccountRequest(BaseModel):
     email: str | None = Field(default=None, max_length=200)
     # True removes the user's second factor + backup codes (lost phone).
     reset_totp: bool = False
+    # Person-Verknüpfung (Betrachter-Scope): 0 = entkoppeln, None = unverändert.
+    person_id: int | None = Field(default=None, ge=0)
 
 
 async def _target_or_404(user_id: int) -> dict:
@@ -93,9 +95,17 @@ async def update_account(
     if body.disabled is True:
         _forbid_self(user, user_id, "deaktiviert")
         await _forbid_last_admin(target, "deaktiviert")
+    if body.person_id:
+        if await persons.get_person(body.person_id) is None:
+            raise HTTPException(status_code=422, detail="Person nicht gefunden")
 
     updated = await accounts.update_user(
-        user_id, role=body.role, disabled=body.disabled, email=body.email
+        user_id,
+        role=body.role,
+        disabled=body.disabled,
+        email=body.email,
+        person_id=body.person_id or None,
+        clear_person=body.person_id == 0,
     )
     if body.password:
         await accounts.set_password(user_id, body.password)

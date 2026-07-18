@@ -16,7 +16,7 @@
 set -euo pipefail
 
 VERSION="${1:-0.1.0}"
-GO_IMAGE="golang:1.24-alpine"
+GO_IMAGE="golang:1.25-alpine"
 # Optional: base64-Public-Key aus `make keygen`. Wenn gesetzt, wird er in die
 # Binaries gepinnt, sodass ein späteres signiertes Release verifizierbar ist.
 AGENT_UPDATE_PUBKEY="${AGENT_UPDATE_PUBKEY:-}"

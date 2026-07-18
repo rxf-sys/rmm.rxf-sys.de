@@ -104,6 +104,10 @@ async def ensure_schema(settings: Settings) -> None:
         if "totp_backup_codes" not in cols:
             # JSON list of sha256 hashes; each code is one-time.
             await db.execute("ALTER TABLE users ADD COLUMN totp_backup_codes TEXT")
+        if "person_id" not in cols:
+            # Viewer accounts are scoped to a person: they only see devices
+            # assigned to that person.
+            await db.execute("ALTER TABLE users ADD COLUMN person_id INTEGER")
         await db.commit()
     log.info("accounts.ready", db=_db_path)
 
@@ -158,6 +162,11 @@ def _row_to_user(row: aiosqlite.Row) -> dict[str, Any]:
         "created_at": int(row["created_at"]),
         "last_login_at": int(row["last_login_at"]) if row["last_login_at"] else None,
         "totp_enabled": bool(row["totp_secret"]) if "totp_secret" in keys else False,
+        "person_id": (
+            int(row["person_id"])
+            if "person_id" in keys and row["person_id"] is not None
+            else None
+        ),
     }
 
 
@@ -179,6 +188,7 @@ async def create_user(
     *,
     role: str = "viewer",
     email: str | None = None,
+    person_id: int | None = None,
 ) -> dict[str, Any]:
     """Insert a new account. Raises AccountError on a duplicate username."""
     username = username.strip()
@@ -190,9 +200,9 @@ async def create_user(
     try:
         async with _connect() as db:
             cur = await db.execute(
-                "INSERT INTO users (username, email, password_hash, role, created_at)"
-                " VALUES (?, ?, ?, ?, ?)",
-                (username, email, hash_password(password), role, now),
+                "INSERT INTO users (username, email, password_hash, role, created_at, person_id)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (username, email, hash_password(password), role, now, person_id),
             )
             await db.commit()
             user_id = cur.lastrowid
@@ -234,9 +244,12 @@ async def update_user(
     role: str | None = None,
     disabled: bool | None = None,
     email: str | None = None,
+    person_id: int | None = None,
+    clear_person: bool = False,
 ) -> dict[str, Any] | None:
-    """Update role/disabled/email. Disabling also revokes every session of
-    the account, so an open browser tab is logged out on its next request."""
+    """Update role/disabled/email/person link. Disabling also revokes every
+    session of the account, so an open browser tab is logged out on its next
+    request."""
     if role is not None and role not in ROLES:
         raise AccountError(f"Ungültige Rolle: {role}")
     sets: list[str] = []
@@ -250,6 +263,11 @@ async def update_user(
     if email is not None:
         sets.append("email = ?")
         params.append(email.strip() or None)
+    if clear_person:
+        sets.append("person_id = NULL")
+    elif person_id is not None:
+        sets.append("person_id = ?")
+        params.append(person_id)
     if sets:
         params.append(user_id)
         async with _connect() as db:
@@ -267,6 +285,16 @@ async def delete_user(user_id: int) -> bool:
         cur = await db.execute("DELETE FROM users WHERE id = ?", (user_id,))
         await db.commit()
         return (cur.rowcount or 0) > 0
+
+
+async def users_for_person(person_id: int) -> list[dict[str, Any]]:
+    """Accounts linked to a person (for cleanup when the person is deleted)."""
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM users WHERE person_id = ? ORDER BY id ASC", (person_id,)
+        ) as cur:
+            return [_row_to_user(r) for r in await cur.fetchall()]
 
 
 async def count_active_admins() -> int:

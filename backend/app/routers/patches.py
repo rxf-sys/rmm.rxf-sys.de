@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from .. import devices, jobs, patches
 from ..agents_ws import manager
 from ..audit import record as audit_record
-from ..auth import require_operator, verify_session
+from ..auth import device_visible, person_scope, require_operator, verify_session
 from ..config import Settings, get_settings
 
 log = structlog.get_logger("patches_api")
@@ -27,7 +27,12 @@ router = APIRouter(tags=["patches"])
 
 @router.get("/api/patches/summary")
 async def patch_summary(user: dict = Depends(verify_session)) -> dict:
-    return {"summary": await patches.summary()}
+    summary = await patches.summary()
+    scope = person_scope(user)
+    if scope is not None:
+        visible = await devices.device_ids_for_person(scope)
+        summary = {k: v for k, v in summary.items() if k in visible}
+    return {"summary": summary}
 
 
 @router.get("/api/devices/{device_id}/patches")
@@ -36,7 +41,8 @@ async def device_patches(
     user: dict = Depends(verify_session),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    if await devices.get_device(device_id, settings.offline_after_s) is None:
+    device = await devices.get_device(device_id, settings.offline_after_s)
+    if device is None or not device_visible(user, device):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
     return {
         "patches": await patches.list_for_device(device_id),

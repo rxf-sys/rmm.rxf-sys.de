@@ -129,7 +129,10 @@ export const api = {
   // Persons
   persons: (signal?: AbortSignal) => get<{ persons: Person[] }>('/api/persons', signal),
   createPerson: (body: { name: string; email?: string; phone?: string; notes?: string }) =>
-    post<{ person: Person }>('/api/persons', body),
+    post<{ person: Person; account: Account | null; initial_password: string }>(
+      '/api/persons',
+      body,
+    ),
   updatePerson: (id: number, body: { name: string; email?: string; phone?: string; notes?: string }) =>
     send<{ person: Person }>('PUT', `/api/persons/${id}`, body),
   deletePerson: (id: number) => del<{ ok: boolean }>(`/api/persons/${id}`),
