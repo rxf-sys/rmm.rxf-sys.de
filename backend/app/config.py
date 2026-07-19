@@ -54,9 +54,13 @@ class Settings(BaseSettings):
     agent_release_dir: str = "/data/agent-releases"
 
     # ---- Jobs ----
+    # Per-job limit for shell/script jobs, sent to the agent with each
+    # dispatch (the agent kills the command after this long). 30 min covers
+    # sfc/dism-style repair runs.
+    shell_job_timeout_s: int = 1800
     # Safety net: a job still queued/running this long after creation is
-    # swept to 'timeout' (agent crashed mid-job). Sits above the agent's own
-    # per-job timeout so the agent normally reports first.
+    # swept to 'timeout' (agent crashed mid-job). The cleanup loop floors
+    # this above shell_job_timeout_s so the agent normally reports first.
     job_timeout_s: int = 900
     # Same safety net for patch_install jobs, which run much longer (the
     # agent allows 60 min per install run). Must stay above that value,
