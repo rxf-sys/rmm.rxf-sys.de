@@ -74,7 +74,12 @@ async def _cleanup_loop() -> None:
             await accounts.cleanup_expired_sessions()
             await devices.cleanup_expired_enrollment_tokens()
             await metrics.aggregate_and_cleanup(_settings)
-            await jobs.sweep_stale(_settings.job_timeout_s, _settings.patch_job_timeout_s)
+            # Floor the sweep above the agent's per-job limit — the agent
+            # must always get the chance to report the result itself.
+            await jobs.sweep_stale(
+                max(_settings.job_timeout_s, _settings.shell_job_timeout_s + 300),
+                _settings.patch_job_timeout_s,
+            )
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 - never let the loop die

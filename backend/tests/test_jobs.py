@@ -71,6 +71,17 @@ async def test_sweep_stale(client: AsyncClient, settings: Settings):
     assert (await jobs.get_job(job["id"]))["status"] == "timeout"
 
 
+async def test_dispatch_payload_carries_shell_timeout(client: AsyncClient):
+    """Shell-/Skript-Jobs tragen das server-konfigurierte Per-Job-Limit;
+    patch_install nutzt weiterhin das eigene Agent-Limit."""
+    device_id = await _make_device()
+    job = await jobs.create_job(device_id, kind="shell", command="x", created_by="boss")
+    payload = jobs.dispatch_payload(job)["payload"]
+    assert payload["timeout_s"] > 0
+    pj = await jobs.create_job(device_id, kind="patch_install", command="[]", created_by="boss")
+    assert "timeout_s" not in jobs.dispatch_payload(pj)["payload"]
+
+
 async def test_sweep_patch_install_uses_own_timeout(client: AsyncClient, settings: Settings):
     """A patch_install job older than job_timeout_s but younger than
     patch_job_timeout_s survives the sweep — installs legitimately run long."""

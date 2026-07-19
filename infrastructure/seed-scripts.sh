@@ -194,6 +194,16 @@ echo; echo "== RAM =="; free -h
 
 db = sqlite3.connect("/data/rmm.db")
 now = int(time.time())
+
+# Einmalige Korrektur: .ps1-Skripte, die noch als "bash" getaggt sind, auf
+# "powershell" umstellen (funktionierte dank Agent-Fallback, war aber
+# inkonsistent). Inhalte bleiben unangetastet.
+fixed = db.execute(
+    "UPDATE scripts SET shell = 'powershell' WHERE name LIKE '%.ps1' AND shell = 'bash'"
+).rowcount
+if fixed:
+    print(f"{fixed} .ps1-Skripte von 'bash' auf 'powershell' umgestellt.")
+
 created, skipped = 0, 0
 for name, shell, content in SCRIPTS:
     exists = db.execute("SELECT 1 FROM scripts WHERE name = ?", (name,)).fetchone()

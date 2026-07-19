@@ -9,9 +9,14 @@ import (
 	"time"
 )
 
-// perJobTimeout caps a single command. The server has its own, longer sweep
-// (job_timeout_s) as a backstop for the case where the agent dies entirely.
+// perJobTimeout caps a single command when the server doesn't send its own
+// limit (older servers). The server sweep (job_timeout_s) stays the backstop
+// for the case where the agent dies entirely.
 const perJobTimeout = 10 * time.Minute
+
+// maxJobTimeout bounds server-provided limits so a misconfigured server
+// can't park a job for days.
+const maxJobTimeout = 4 * time.Hour
 
 type jobSpec struct {
 	JobID    int64    `json:"job_id"`
@@ -19,6 +24,20 @@ type jobSpec struct {
 	Command  string   `json:"command"`
 	Shell    string   `json:"shell"`
 	PatchIDs []string `json:"patch_ids"`
+	// Server-controlled per-job limit in seconds; 0 = agent default.
+	TimeoutS int64 `json:"timeout_s"`
+}
+
+// jobTimeout picks the effective limit for one job.
+func jobTimeout(spec jobSpec) time.Duration {
+	if spec.TimeoutS <= 0 {
+		return perJobTimeout
+	}
+	d := time.Duration(spec.TimeoutS) * time.Second
+	if d > maxJobTimeout {
+		return maxJobTimeout
+	}
+	return d
 }
 
 // chunkWriter forwards process output to the server as job_output messages.
@@ -71,7 +90,7 @@ func shellCommand(ctx context.Context, shell, command string) (*exec.Cmd, error)
 func runJob(parent context.Context, s *sender, spec jobSpec) {
 	s.send(parent, "job_started", map[string]any{"job_id": spec.JobID})
 
-	ctx, cancel := context.WithTimeout(parent, perJobTimeout)
+	ctx, cancel := context.WithTimeout(parent, jobTimeout(spec))
 	defer cancel()
 
 	cmd, err := shellCommand(ctx, spec.Shell, spec.Command)

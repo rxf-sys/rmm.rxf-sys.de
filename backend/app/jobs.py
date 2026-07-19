@@ -164,6 +164,8 @@ def dispatch_payload(job: dict[str, Any]) -> dict[str, Any]:
     """The message body sent to the agent over its socket. For patch_install
     the ``command`` column carries a JSON list of patch ids (reusing the
     column keeps the jobs schema single-purpose)."""
+    from .config import get_settings  # local import avoids a module cycle
+
     payload: dict[str, Any] = {
         "job_id": job["id"],
         "kind": job["kind"],
@@ -175,6 +177,10 @@ def dispatch_payload(job: dict[str, Any]) -> dict[str, Any]:
             payload["patch_ids"] = _json.loads(job["command"]) if job["command"] else []
         except (ValueError, TypeError):
             payload["patch_ids"] = []
+    else:
+        # Server-controlled per-job limit; older agents ignore the field and
+        # keep their built-in 10-minute default.
+        payload["timeout_s"] = get_settings().shell_job_timeout_s
     return {"type": "job", "payload": payload}
 
 
