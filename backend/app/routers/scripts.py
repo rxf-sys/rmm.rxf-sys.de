@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/scripts", tags=["scripts"])
 class ScriptBody(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     shell: str = Field(default="bash")
+    os: str = Field(default="any", pattern="^(windows|linux|darwin|any)$")
     content: str = Field(default="", max_length=64_000)
 
 
@@ -27,7 +28,9 @@ async def list_scripts(user: dict = Depends(require_operator)) -> dict:
 @router.post("")
 async def create_script(body: ScriptBody, user: dict = Depends(require_operator)) -> dict:
     try:
-        script = await scripts.create(body.name, body.shell, body.content, user["username"])
+        script = await scripts.create(
+            body.name, body.shell, body.content, user["username"], os=body.os
+        )
     except scripts.ScriptError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     await audit_record("script.created", user=user["username"], name=body.name)
@@ -39,7 +42,9 @@ async def update_script(
     script_id: int, body: ScriptBody, user: dict = Depends(require_operator)
 ) -> dict:
     try:
-        script = await scripts.update(script_id, body.name, body.shell, body.content, user["username"])
+        script = await scripts.update(
+            script_id, body.name, body.shell, body.content, user["username"], os=body.os
+        )
     except scripts.ScriptError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     if script is None:

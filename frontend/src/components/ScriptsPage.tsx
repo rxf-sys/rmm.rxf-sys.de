@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { formatRelative } from '../format';
-import type { Device, Script, Shell } from '../types';
+import { AppleLogo, LinuxLogo, WindowsLogo } from '../icons';
+import type { Device, Script, ScriptOs, Shell } from '../types';
 
 interface Props {
   canManage: boolean;
@@ -13,10 +14,24 @@ interface Draft {
   id: number | null;
   name: string;
   shell: Shell;
+  os: ScriptOs;
   content: string;
 }
 
-const EMPTY: Draft = { id: null, name: '', shell: 'bash', content: '' };
+const EMPTY: Draft = { id: null, name: '', shell: 'bash', os: 'any', content: '' };
+
+const OS_META: Record<ScriptOs, { label: string; icon: React.ReactNode }> = {
+  windows: { label: 'Windows', icon: <WindowsLogo size={11} /> },
+  linux: { label: 'Linux', icon: <LinuxLogo size={11} /> },
+  darwin: { label: 'macOS', icon: <AppleLogo size={11} /> },
+  any: { label: 'Alle', icon: <span style={{ fontSize: 10 }}>✳</span> },
+};
+
+/** Which library OSes a device can run: an exact match or a cross-platform
+ * ("any") script. */
+function osMatchesDevice(scriptOs: ScriptOs, deviceOs: string): boolean {
+  return scriptOs === 'any' || scriptOs === deviceOs;
+}
 
 /** One script list row, expandable to show the content + a "run on device"
  * picker. Running creates a job and jumps to that device's detail so the
@@ -42,7 +57,9 @@ function ScriptRow({
   onOpenDevice: (id: number) => void;
   onError: (msg: string) => void;
 }) {
-  const [target, setTarget] = useState<number | ''>(onlineDevices[0]?.id ?? '');
+  // Nur Geräte anbieten, auf denen das Skript laufen kann (OS passt).
+  const runnable = onlineDevices.filter((d) => osMatchesDevice(s.os, d.os));
+  const [target, setTarget] = useState<number | ''>(runnable[0]?.id ?? '');
   const [busy, setBusy] = useState(false);
 
   const run = async () => {
@@ -75,6 +92,13 @@ function ScriptRow({
         onClick={onToggle}
       >
         <span style={{ color: 'var(--tx3)', fontSize: 10, width: 12 }}>{expanded ? '▾' : '▸'}</span>
+        <span
+          className="chip"
+          title={OS_META[s.os].label}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flex: 'none' }}
+        >
+          {OS_META[s.os].icon} {OS_META[s.os].label}
+        </span>
         <span style={{ fontWeight: 700, fontSize: 12.5 }}>{s.name}</span>
         <span className="badge badge-accent mono" style={{ fontSize: 9.5 }}>
           {s.shell}
@@ -107,8 +131,14 @@ function ScriptRow({
                 value={target}
                 onChange={(e) => setTarget(e.target.value ? Number(e.target.value) : '')}
               >
-                {onlineDevices.length === 0 && <option value="">kein Gerät online</option>}
-                {onlineDevices.map((d) => (
+                {runnable.length === 0 && (
+                  <option value="">
+                    {onlineDevices.length === 0
+                      ? 'kein Gerät online'
+                      : `kein passendes ${OS_META[s.os].label}-Gerät online`}
+                  </option>
+                )}
+                {runnable.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.hostname}
                   </option>
@@ -137,6 +167,7 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [q, setQ] = useState('');
+  const [osFilter, setOsFilter] = useState<ScriptOs | 'all'>('all');
 
   const load = () =>
     api
@@ -152,7 +183,12 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
     if (!draft) return;
     setError(null);
     try {
-      const body = { name: draft.name.trim(), shell: draft.shell, content: draft.content };
+      const body = {
+        name: draft.name.trim(),
+        shell: draft.shell,
+        os: draft.os,
+        content: draft.content,
+      };
       if (draft.id === null) await api.createScript(body);
       else await api.updateScript(draft.id, body);
       setDraft(null);
@@ -173,6 +209,18 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
   };
 
   const online = devices.filter((d) => d.online);
+
+  // Zähler pro OS für die Filter-Chips (nur OS mit Skripten anbieten).
+  const counts: Record<string, number> = { all: scripts?.length ?? 0 };
+  for (const s of scripts ?? []) counts[s.os] = (counts[s.os] ?? 0) + 1;
+  const osChips: (ScriptOs | 'all')[] = [
+    'all',
+    ...(['windows', 'linux', 'darwin', 'any'] as ScriptOs[]).filter((o) => counts[o]),
+  ];
+
+  const visible = (scripts ?? [])
+    .filter((s) => osFilter === 'all' || s.os === osFilter)
+    .filter((s) => !q.trim() || s.name.toLowerCase().includes(q.trim().toLowerCase()));
 
   return (
     <div className="screen">
@@ -195,6 +243,26 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
         )}
       </div>
 
+      {scripts !== null && scripts.length > 0 && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {osChips.map((o) => (
+            <button
+              key={o}
+              className={osFilter === o ? 'btn btn-accent btn-sm' : 'btn btn-sm'}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+              onClick={() => setOsFilter(o)}
+            >
+              {o === 'all' ? '📚 Alle' : (
+                <>
+                  {OS_META[o].icon} {OS_META[o].label}
+                </>
+              )}
+              <span className="muted" style={{ fontSize: 10 }}>{counts[o] ?? 0}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {error && <p className="err">{error}</p>}
 
       {draft && (
@@ -208,6 +276,17 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               placeholder="Name, z. B. Drucker-Spooler-Reset"
             />
+            <select
+              className="input"
+              value={draft.os}
+              onChange={(e) => setDraft({ ...draft, os: e.target.value as ScriptOs })}
+              title="Betriebssystem"
+            >
+              <option value="any">Alle OS</option>
+              <option value="windows">Windows</option>
+              <option value="linux">Linux</option>
+              <option value="darwin">macOS</option>
+            </select>
             <select
               className="input"
               value={draft.shell}
@@ -248,22 +327,25 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
 
       {scripts !== null && scripts.length > 0 && (
         <div className="card" style={{ overflow: 'hidden' }}>
-          {scripts
-            .filter((s) => !q.trim() || s.name.toLowerCase().includes(q.trim().toLowerCase()))
-            .map((s) => (
-              <ScriptRow
-                key={s.id}
-                s={s}
-                canManage={canManage}
-                onlineDevices={online}
-                expanded={expandedId === s.id}
-                onToggle={() => setExpandedId(expandedId === s.id ? null : s.id)}
-                onEdit={() => setDraft({ ...s })}
-                onDelete={() => void remove(s.id)}
-                onOpenDevice={onOpenDevice}
-                onError={setError}
-              />
-            ))}
+          {visible.map((s) => (
+            <ScriptRow
+              key={s.id}
+              s={s}
+              canManage={canManage}
+              onlineDevices={online}
+              expanded={expandedId === s.id}
+              onToggle={() => setExpandedId(expandedId === s.id ? null : s.id)}
+              onEdit={() => setDraft({ ...s })}
+              onDelete={() => void remove(s.id)}
+              onOpenDevice={onOpenDevice}
+              onError={setError}
+            />
+          ))}
+          {visible.length === 0 && (
+            <div className="muted" style={{ padding: '16px' }}>
+              Keine Skripte für diesen Filter.
+            </div>
+          )}
         </div>
       )}
     </div>

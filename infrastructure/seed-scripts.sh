@@ -15,6 +15,9 @@ import sqlite3
 import time
 
 SCRIPTS: list[tuple[str, str, str]] = []  # (name, shell, content)
+# OS wird abgeleitet: powershell -> windows, bash -> linux. Ausnahmen
+# (plattformuebergreifende Bash-Skripte) hier eintragen.
+OS_OVERRIDE: dict[str, str] = {}
 
 # ============================ Windows (PowerShell) ============================
 
@@ -86,6 +89,41 @@ Checkpoint-Computer -Description "Vulpexa RMM $(Get-Date -Format 'yyyy-MM-dd HH:
   -RestorePointType MODIFY_SETTINGS
 Get-ComputerRestorePoint | Select-Object -Last 5 SequenceNumber, CreationTime, Description |
   Format-Table -AutoSize
+""".strip()))
+
+SCRIPTS.append(("druckerwarteschlange-leeren.ps1", "powershell", r"""
+# Haengende Druckauftraege loeschen und den Spooler neu starten.
+$ErrorActionPreference = "Continue"
+Stop-Service -Name Spooler -Force
+Remove-Item "$env:SystemRoot\System32\spool\PRINTERS\*" -Force -ErrorAction SilentlyContinue
+Start-Service -Name Spooler
+Write-Output "Spooler neu gestartet, Warteschlange geleert."
+Get-Printer | Select-Object Name, PrinterStatus | Format-Table -AutoSize
+""".strip()))
+
+SCRIPTS.append(("windows-update-verlauf.ps1", "powershell", r"""
+# Die zuletzt installierten Windows-Updates (Datum, KB, Titel).
+Get-HotFix | Sort-Object InstalledOn -Descending |
+  Select-Object -First 20 InstalledOn, HotFixID, Description |
+  Format-Table -AutoSize
+""".strip()))
+
+SCRIPTS.append(("lokale-admins.ps1", "powershell", r"""
+# Mitglieder der lokalen Administratorengruppe (Sicherheits-Audit).
+Get-LocalGroupMember -Group "Administratoren" -ErrorAction SilentlyContinue |
+  Select-Object Name, PrincipalSource, ObjectClass | Format-Table -AutoSize
+# Faellt auf die englische Gruppe zurueck, falls das System englisch ist.
+if (-not $?) {
+  Get-LocalGroupMember -Group "Administrators" |
+    Select-Object Name, PrincipalSource, ObjectClass | Format-Table -AutoSize
+}
+""".strip()))
+
+SCRIPTS.append(("geplante-aufgaben.ps1", "powershell", r"""
+# Aktive geplante Aufgaben ausserhalb der Microsoft-Ordner (Persistenz-Check).
+Get-ScheduledTask | Where-Object {
+  $_.State -ne 'Disabled' -and $_.TaskPath -notlike '\Microsoft\*'
+} | Select-Object TaskName, TaskPath, State | Format-Table -AutoSize
 """.strip()))
 
 SCRIPTS.append(("bitlocker-schluessel-sichern.ps1", "powershell", r"""
@@ -262,6 +300,88 @@ ps aux --sort=-%mem | head -n 16
 echo; echo "== RAM =="; free -h
 """.strip()))
 
+SCRIPTS.append(("neustart-erforderlich.sh", "bash", r"""
+#!/usr/bin/env bash
+# Prueft, ob ein Reboot aussteht (Debian/Ubuntu + Kernel-Vergleich).
+if [ -f /var/run/reboot-required ]; then
+  echo "NEUSTART ERFORDERLICH:"
+  cat /var/run/reboot-required.pkgs 2>/dev/null || true
+else
+  echo "Kein Reboot-Marker gesetzt."
+fi
+run="$(uname -r)"
+inst="$(ls -1t /boot/vmlinuz-* 2>/dev/null | head -1 | sed 's|.*/vmlinuz-||')"
+echo "Laufender Kernel : $run"
+echo "Neuester Kernel  : ${inst:-unbekannt}"
+[ -n "$inst" ] && [ "$run" != "$inst" ] && echo "=> Neuerer Kernel installiert - Reboot empfohlen."
+""".strip()))
+
+SCRIPTS.append(("offene-ports.sh", "bash", r"""
+#!/usr/bin/env bash
+# Lauschende TCP/UDP-Ports mit zugehoerigem Prozess.
+if command -v ss >/dev/null; then
+  ss -tulpen
+else
+  netstat -tulpen 2>/dev/null || echo "weder ss noch netstat verfuegbar"
+fi
+""".strip()))
+
+SCRIPTS.append(("speicherfresser-verzeichnisse.sh", "bash", r"""
+#!/usr/bin/env bash
+# Die 20 groessten Verzeichnisse unterhalb der angegebenen Basis (Default /).
+BASE="${1:-/}"
+echo "Groesste Verzeichnisse unter $BASE:"
+du -xhd 3 "$BASE" 2>/dev/null | sort -rh | head -n 20
+""".strip()))
+
+SCRIPTS.append(("letzte-anmeldungen.sh", "bash", r"""
+#!/usr/bin/env bash
+# Letzte Anmeldungen und fehlgeschlagene Login-Versuche (Sicherheits-Check).
+echo "== Letzte erfolgreiche Anmeldungen =="
+last -n 15 2>/dev/null || echo "(last nicht verfuegbar)"
+echo; echo "== Fehlgeschlagene Versuche =="
+lastb -n 15 2>/dev/null || echo "(keine btmp-Daten / keine Rechte)"
+""".strip()))
+
+SCRIPTS.append(("zeit-synchronisation.sh", "bash", r"""
+#!/usr/bin/env bash
+# Status der Zeitsynchronisation (wichtig fuer Zertifikate, Logs, Backups).
+timedatectl status 2>/dev/null || true
+echo
+if command -v chronyc >/dev/null; then chronyc tracking; chronyc sources -v
+elif command -v ntpq >/dev/null; then ntpq -p
+else echo "(kein chrony/ntp installiert - systemd-timesyncd?)"; fi
+""".strip()))
+
+SCRIPTS.append(("proxmox-backup-status.sh", "bash", r"""
+#!/usr/bin/env bash
+# Letzte vzdump-Backups je VM/CT + Belegung des Backup-Storage.
+LOG=/var/log/vzdump.log
+if command -v pvesh >/dev/null; then
+  echo "== Backup-Tasks (letzte 10) =="
+  pvesh get /nodes/localhost/tasks --typefilter vzdump --limit 10 2>/dev/null \
+    | awk 'NR>2 {print $0}' || true
+fi
+echo; echo "== Backup-Dateien =="
+for d in /var/lib/vz/dump /mnt/pve/*/dump; do
+  [ -d "$d" ] || continue
+  echo "-- $d --"; ls -lht "$d" 2>/dev/null | head -n 8
+done
+""".strip()))
+
+# ============================ Plattformuebergreifend ==========================
+
+SCRIPTS.append(("agent-selbsttest.sh", "bash", r"""
+#!/usr/bin/env bash
+# Kleiner Selbsttest: laeuft der Job, stimmen Uhrzeit und Hostname?
+echo "Hostname : $(hostname)"
+echo "Datum    : $(date '+%Y-%m-%d %H:%M:%S %Z')"
+echo "Uptime   : $(uptime -p 2>/dev/null || uptime)"
+echo "Whoami   : $(whoami)"
+echo "OK - der Agent fuehrt Skripte aus."
+""".strip()))
+OS_OVERRIDE["agent-selbsttest.sh"] = "any"
+
 # ------------------------------------------------------------------------------
 
 db = sqlite3.connect("/data/rmm.db")
@@ -276,16 +396,24 @@ fixed = db.execute(
 if fixed:
     print(f"{fixed} .ps1-Skripte von 'bash' auf 'powershell' umgestellt.")
 
+# Sicherstellen, dass die os-Spalte existiert (aeltere DB vor dem Backend-
+# Deploy dieses Features). Das Backend legt sie sonst beim Start an.
+cols = {row[1] for row in db.execute("PRAGMA table_info(scripts)")}
+if "os" not in cols:
+    db.execute("ALTER TABLE scripts ADD COLUMN os TEXT NOT NULL DEFAULT 'any'")
+    db.execute("UPDATE scripts SET os = 'windows' WHERE shell = 'powershell'")
+
 created, skipped = 0, 0
 for name, shell, content in SCRIPTS:
     exists = db.execute("SELECT 1 FROM scripts WHERE name = ?", (name,)).fetchone()
     if exists:
         skipped += 1
         continue
+    os_val = OS_OVERRIDE.get(name) or ("windows" if shell == "powershell" else "linux")
     db.execute(
-        "INSERT INTO scripts (name, shell, content, updated_by, updated_at)"
-        " VALUES (?, ?, ?, ?, ?)",
-        (name, shell, content, "seed", now),
+        "INSERT INTO scripts (name, shell, os, content, updated_by, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (name, shell, os_val, content, "seed", now),
     )
     created += 1
 db.commit()
