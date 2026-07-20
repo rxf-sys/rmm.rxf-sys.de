@@ -88,6 +88,78 @@ Get-ComputerRestorePoint | Select-Object -Last 5 SequenceNumber, CreationTime, D
   Format-Table -AutoSize
 """.strip()))
 
+SCRIPTS.append(("bitlocker-schluessel-sichern.ps1", "powershell", r"""
+# BitLocker fuer das Systemlaufwerk sicherstellen und den Wiederherstellungs-
+# schluessel ausgeben.
+#
+# - Ist BitLocker schon aktiv: nur den Recovery-Key auslesen.
+# - Ist es aus: BitLocker aktivieren (XTS-AES-256, TPM + Recovery-Password)
+#   und den frisch erzeugten Key ausgeben.
+#
+# WICHTIG: Der 48-stellige Schluessel erscheint unten im Job-Output. Ihn danach
+# im Geraet unter "Passwoerter" als Eintrag speichern (Label z.B.
+# "BitLocker C:") — der Job-Output wird nicht verschluesselt abgelegt.
+$ErrorActionPreference = "Stop"
+$drive = $env:SystemDrive
+
+function Show-RecoveryKey($mount) {
+  $v = Get-BitLockerVolume -MountPoint $mount
+  $rp = $v.KeyProtector | Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' }
+  if (-not $rp) {
+    Write-Output "Kein Recovery-Password-Protector vorhanden — fuege einen hinzu..."
+    Add-BitLockerKeyProtector -MountPoint $mount -RecoveryPasswordProtector | Out-Null
+    $v = Get-BitLockerVolume -MountPoint $mount
+    $rp = $v.KeyProtector | Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' }
+  }
+  Write-Output ""
+  Write-Output "================ BITLOCKER WIEDERHERSTELLUNGSSCHLUESSEL ================"
+  Write-Output ("Laufwerk        : {0}" -f $mount)
+  Write-Output ("Schutzstatus    : {0}" -f $v.ProtectionStatus)
+  Write-Output ("Verschluesselung: {0}" -f $v.EncryptionMethod)
+  foreach ($p in $rp) {
+    Write-Output ("Recovery-Key-ID : {0}" -f $p.KeyProtectorId)
+    Write-Output ("SCHLUESSEL      : {0}" -f $p.RecoveryPassword)
+  }
+  Write-Output "=> Diesen Schluessel im Dashboard unter 'Passwoerter' speichern."
+  Write-Output "======================================================================="
+}
+
+$vol = Get-BitLockerVolume -MountPoint $drive
+if ($vol.ProtectionStatus -eq 'On' -or $vol.VolumeStatus -like 'Encrypt*') {
+  Write-Output "BitLocker ist auf $drive bereits aktiv ($($vol.VolumeStatus))."
+  Show-RecoveryKey $drive
+} else {
+  Write-Output "BitLocker ist auf $drive nicht aktiv — aktiviere..."
+  $tpm = Get-Tpm -ErrorAction SilentlyContinue
+  if (-not $tpm -or -not $tpm.TpmReady) {
+    throw "Kein einsatzbereites TPM gefunden — BitLocker muesste manuell mit anderem Protector eingerichtet werden. Abbruch."
+  }
+  Enable-BitLocker -MountPoint $drive -EncryptionMethod XtsAes256 -UsedSpaceOnly `
+    -TpmProtector -SkipHardwareTest | Out-Null
+  Add-BitLockerKeyProtector -MountPoint $drive -RecoveryPasswordProtector | Out-Null
+  Write-Output "BitLocker aktiviert. Verschluesselung laeuft im Hintergrund weiter."
+  Show-RecoveryKey $drive
+}
+""".strip()))
+
+SCRIPTS.append(("fastboot-deaktivieren.ps1", "powershell", r"""
+# Windows-Schnellstart (Fast Startup / hybrides Herunterfahren) deaktivieren.
+# Nuetzlich, wenn ein PC nach dem "Herunterfahren" nicht sauber neu startet,
+# WoL nicht zuverlaessig weckt oder Updates haengen bleiben.
+$ErrorActionPreference = "Stop"
+$key = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power"
+$before = (Get-ItemProperty -Path $key -Name HiberbootEnabled -ErrorAction SilentlyContinue).HiberbootEnabled
+Write-Output ("HiberbootEnabled vorher: {0}" -f ($before -as [string]))
+Set-ItemProperty -Path $key -Name HiberbootEnabled -Value 0 -Type DWord
+$after = (Get-ItemProperty -Path $key -Name HiberbootEnabled).HiberbootEnabled
+Write-Output ("HiberbootEnabled nachher: {0}" -f $after)
+if ($after -eq 0) {
+  Write-Output "Schnellstart ist deaktiviert. Wirkt ab dem naechsten vollstaendigen Herunterfahren."
+} else {
+  Write-Output "Warnung: Wert konnte nicht gesetzt werden."
+}
+""".strip()))
+
 SCRIPTS.append(("netzwerk-diagnose.ps1", "powershell", r"""
 # Schnelle Netzwerk-Diagnose: Adapter, Gateway-Ping, DNS-Test, oeffentl. Erreichbarkeit.
 Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway } |
