@@ -223,10 +223,13 @@ export interface Job {
 
 export type Shell = 'bash' | 'zsh' | 'powershell';
 
+export type ScriptOs = 'windows' | 'linux' | 'darwin' | 'any';
+
 export interface Script {
   id: number;
   name: string;
   shell: Shell;
+  os: ScriptOs;
   content: string;
   updated_by: string;
   updated_at: number;

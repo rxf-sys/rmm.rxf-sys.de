@@ -17,11 +17,17 @@ async def test_scripts_operator_only(client: AsyncClient):
 async def test_script_lifecycle(admin_client: AsyncClient):
     r = await admin_client.post(
         "/api/scripts",
-        json={"name": "Spooler-Reset", "shell": "powershell", "content": "Restart-Service spooler"},
+        json={
+            "name": "Spooler-Reset",
+            "shell": "powershell",
+            "os": "windows",
+            "content": "Restart-Service spooler",
+        },
     )
     assert r.status_code == 200
     script = r.json()["script"]
     assert script["name"] == "Spooler-Reset" and script["shell"] == "powershell"
+    assert script["os"] == "windows"
     sid = script["id"]
 
     r = await admin_client.get("/api/scripts")
@@ -35,6 +41,25 @@ async def test_script_lifecycle(admin_client: AsyncClient):
 
     assert (await admin_client.delete(f"/api/scripts/{sid}")).status_code == 200
     assert (await admin_client.delete(f"/api/scripts/{sid}")).status_code == 404
+
+
+async def test_script_os_field(admin_client: AsyncClient):
+    # Ungültiges OS wird abgelehnt.
+    assert (
+        await admin_client.post(
+            "/api/scripts", json={"name": "x", "shell": "bash", "os": "beos", "content": ""}
+        )
+    ).status_code == 422
+    # Default-OS ist 'any', wenn nichts angegeben.
+    r = await admin_client.post(
+        "/api/scripts", json={"name": "Cross", "shell": "bash", "content": "echo hi"}
+    )
+    assert r.json()["script"]["os"] == "any"
+    # Explizites OS bleibt erhalten.
+    r = await admin_client.post(
+        "/api/scripts", json={"name": "Win", "shell": "powershell", "os": "windows", "content": "x"}
+    )
+    assert r.json()["script"]["os"] == "windows"
 
 
 async def test_script_validation(admin_client: AsyncClient):
