@@ -55,6 +55,8 @@ export interface Device {
   online: boolean;
   /** Live WebSocket open right now (raw signal behind `online`). */
   connected: boolean;
+  /** Version of a newer signed agent release on the server, else null. */
+  agent_update_available: string | null;
 }
 
 export interface Person {

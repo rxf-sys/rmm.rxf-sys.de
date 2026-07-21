@@ -257,8 +257,17 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
                       <span style={{ color: 'var(--ok)', fontWeight: 700, fontSize: 11 }}>✓</span>
                     )}
                   </span>
-                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--tx2)' }}>
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--tx2)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                     {d.agent_version || '—'}
+                    {d.agent_update_available && (
+                      <span
+                        className="badge badge-warn"
+                        style={{ fontSize: 9.5 }}
+                        title={`Neue Agent-Version ${d.agent_update_available} verfügbar — Update im Gerät anstoßen`}
+                      >
+                        ⬆
+                      </span>
+                    )}
                   </span>
                   <span style={{ textAlign: 'right', fontWeight: 500, fontSize: 11, color: 'var(--tx3)' }}>
                     {formatRelative(d.last_seen_at)}
