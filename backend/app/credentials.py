@@ -163,6 +163,45 @@ async def update(
     return _row_public(row) if row else None
 
 
+async def upsert_by_label(
+    device_id: int, *, label: str, username: str, secret: str, notes: str, updated_by: str
+) -> tuple[dict[str, Any], bool]:
+    """Create or overwrite the credential with this (device, label) pair.
+
+    Used for script-reported secrets (BitLocker-Keys, rotierte Passwörter):
+    ein erneuter Lauf aktualisiert den bestehenden Eintrag, statt Duplikate
+    anzuhäufen. Returns (credential, created)."""
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id FROM device_credentials WHERE device_id = ?"
+            " AND label = ? COLLATE NOCASE",
+            (device_id, label.strip()),
+        ) as cur:
+            row = await cur.fetchone()
+    if row is not None:
+        updated = await update(
+            int(row["id"]),
+            device_id,
+            label=label,
+            username=username,
+            secret=secret,
+            notes=notes,
+            updated_by=updated_by,
+        )
+        assert updated is not None
+        return updated, False
+    created = await create(
+        device_id,
+        label=label,
+        username=username,
+        secret=secret,
+        notes=notes,
+        updated_by=updated_by,
+    )
+    return created, True
+
+
 async def reveal(cred_id: int, device_id: int) -> str | None:
     """Decrypt one secret. The caller audits the access."""
     assert _fernet is not None

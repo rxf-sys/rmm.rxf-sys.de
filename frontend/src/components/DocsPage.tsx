@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { api, apiErrorMessage } from '../api/client';
-import { IconCopy, IconDownload, IconKey, IconMonitor, IconShield, IconShieldCheck } from '../icons';
+import { IconCopy, IconDownload, IconFileCode, IconKey, IconMonitor, IconShield, IconShieldCheck } from '../icons';
 import type { RemoteConfig } from '../types';
 
 const SERVER = window.location.origin;
@@ -108,7 +108,7 @@ export function DocsPage() {
       <div className="page-head">
         <h1 className="page-title">Dokumentation</h1>
         <span className="muted">
-          Agent-Installer erzeugen &amp; ausrollen · Agent aktualisieren · RustDesk mit Clients verbinden
+          Agent-Installer erzeugen &amp; ausrollen · Agent aktualisieren · Secrets aus Skripten sichern · RustDesk verbinden
         </span>
       </div>
 
@@ -334,6 +334,57 @@ docker compose -f /opt/rxf-rmm/infrastructure/docker-compose.yml up -d backend`}
             Release ist <b>unsigniert</b> (Schnellweg <span className="mono">./build-agent.sh</span>):
             unsignierte Releases eignen sich nur für Erstinstallationen, nie für Updates. Nach
             jedem Manifest-Wechsel das Backend neu starten.
+          </div>
+        </Section>
+
+        {/* ----------------------------------------------------------------- */}
+        <Section
+          icon={<IconFileCode size={16} />}
+          title="Passwörter & Recovery-Keys aus Skripten sichern"
+          subtitle="BitLocker-Keys, rotierte Admin-Passwörter — automatisch in den Passwort-Tresor"
+        >
+          <p style={{ margin: 0 }}>
+            Skripte, die Secrets erzeugen oder auslesen (BitLocker aktivieren, Recovery-Keys
+            abfragen, Notfall-Admin-Passwörter rotieren), sollen diese <b>nicht im Job-Log</b>{' '}
+            hinterlassen — dort wären sie im Klartext lesbar. Stattdessen gibt das Skript eine
+            Marker-Zeile aus:
+          </p>
+          <Code>{`##RMM-CRED## {"label":"BitLocker C: Recovery-Key","username":"","secret":"123456-…","notes":"…"}`}</Code>
+          <p style={{ margin: 0 }}>
+            Der Server fängt solche Zeilen ab, <b>bevor</b> sie im Job-Log oder Live-Stream
+            landen, und legt sie <b>verschlüsselt in den Passwörtern des Geräts</b> ab
+            (Tab „Passwörter"). Im Output erscheint nur{' '}
+            <span className="mono">[✓ In Passwörtern gespeichert: …]</span>. Gleiche Labels werden
+            aktualisiert statt dupliziert — ein wöchentlich geplanter Rotations-Lauf erzeugt also
+            keine Duplikate. Jede Speicherung landet im Audit-Log.
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <li>
+              <b>Fertige Vorlagen:</b> In der Skript-Bibliothek bei „+ Neues Skript" über
+              „Vorlage einfügen…" — BitLocker aktivieren + Key sichern, alle Recovery-Keys
+              auslesen, lokalen Notfall-Admin rotieren (Windows) und root-Passwort rotieren
+              (Linux).
+            </li>
+            <li>
+              <b>Pflichtfelder</b> sind <span className="mono">label</span> und{' '}
+              <span className="mono">secret</span>; <span className="mono">username</span> und{' '}
+              <span className="mono">notes</span> sind optional. Die Zeile muss gültiges JSON
+              hinter dem Marker enthalten und für sich allein stehen.
+            </li>
+            <li>
+              <b>Abrufen:</b> Gerät öffnen → Tab „Passwörter" → „Aufdecken" (nur Admins; jedes
+              Aufdecken wird mit Benutzername im Audit-Log erfasst). So lässt sich z. B. ein
+              vergessenes Passwort oder der BitLocker-Key jederzeit wieder mitteilen.
+            </li>
+          </ul>
+          <div className="callout-note">
+            <b>PowerShell-Tipp:</b> Das JSON am einfachsten mit{' '}
+            <span className="mono">ConvertTo-Json -Compress</span> erzeugen — dann sind
+            Sonderzeichen im Secret automatisch korrekt escaped:
+            <div style={{ marginTop: 8 }}>
+              <Code>{`$json = @{ label = 'Mein Secret'; secret = $pw } | ConvertTo-Json -Compress
+Write-Output "##RMM-CRED## $json"`}</Code>
+            </div>
           </div>
         </Section>
 

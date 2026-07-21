@@ -23,7 +23,7 @@ from fastapi import (
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
-from .. import devices, jobs, metrics, patches, releases
+from .. import devices, job_secrets, jobs, metrics, patches, releases
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..config import get_settings
@@ -357,12 +357,27 @@ async def agent_ws(ws: WebSocket) -> None:
                 job_id = payload.get("job_id")
                 chunk = payload.get("chunk")
                 if isinstance(job_id, int) and isinstance(chunk, str):
-                    await jobs.append_output(job_id, chunk)
+                    # ##RMM-CRED##-Zeilen abfangen, bevor sie in DB oder
+                    # Live-Stream landen — Secrets gehören in den Tresor,
+                    # nicht ins Job-Log. Ein Agent kann nur Credentials
+                    # seines eigenen Geräts anlegen (device_id vom Socket).
+                    clean, found = job_secrets.extract(job_id, chunk)
+                    if found:
+                        await job_secrets.store(device_id, job_id, found)
+                    if clean:
+                        await jobs.append_output(job_id, clean)
             elif msg_type == "job_result" and isinstance(payload, dict):
                 job_id = payload.get("job_id")
                 result_status = payload.get("status")
                 exit_code = payload.get("exit_code")
                 if isinstance(job_id, int) and isinstance(result_status, str):
+                    # Zurückgehaltenes Zeilen-Fragment (Marker ohne
+                    # abschließenden Umbruch) noch verarbeiten.
+                    clean, found = job_secrets.flush(job_id)
+                    if found:
+                        await job_secrets.store(device_id, job_id, found)
+                    if clean:
+                        await jobs.append_output(job_id, clean)
                     await jobs.finish_job(
                         job_id,
                         result_status,
