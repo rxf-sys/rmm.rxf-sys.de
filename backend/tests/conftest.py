@@ -11,6 +11,7 @@ from app import (
     automation,
     credentials,
     devices,
+    job_secrets,
     jobs,
     metrics,
     patches,
@@ -63,6 +64,7 @@ async def client(settings: Settings):
     _agent_manager.reset_for_tests()
     _fleet_hub.reset_for_tests()
     releases.reset_for_tests(None, "")
+    job_secrets.reset_for_tests()
     auth_router.reset_rate_limiter_for_tests()
     app.dependency_overrides[get_settings] = lambda: settings
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:

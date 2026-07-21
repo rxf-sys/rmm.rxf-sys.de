@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 import time
 
-from .. import alerts, credentials, devices, jobs, metrics, patches, persons, wol
+from .. import alerts, credentials, devices, jobs, metrics, patches, persons, releases, wol
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..auth import device_visible, person_scope, require_operator, verify_session
@@ -27,6 +27,10 @@ def _with_connected(device: dict[str, Any]) -> dict[str, Any]:
     """Attach the live-socket flag. ``online`` (heartbeat recency) drives the
     UI status; ``connected`` is the raw 'socket open right now' signal."""
     device["connected"] = manager.is_connected(device["id"])
+    # Newer signed release available for this device's os/arch? The dashboard
+    # shows a hint + "Jetzt aktualisieren" button when this is set.
+    upd = releases.update_for(device["agent_version"], device["os"], device["arch"])
+    device["agent_update_available"] = upd["version"] if upd else None
     return device
 
 
@@ -202,6 +206,46 @@ async def wake_device(
         raise HTTPException(status_code=500, detail=f"WoL fehlgeschlagen: {e}") from e
     await audit_record("device.wake", user=user["username"], device_id=device_id, macs=len(macs))
     return {"ok": True, "sent": sent, "macs": macs}
+
+
+@router.post("/{device_id}/update-agent")
+async def update_agent(
+    device_id: int,
+    user: dict = Depends(require_operator),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Push the current signed release to a connected agent on demand.
+
+    The automatic offer fires only once per connection (first heartbeat);
+    this lets an operator re-trigger it from the dashboard. Same trust
+    model: the agent verifies SHA-256 + ed25519 signature before
+    installing — the server stays a delivery channel."""
+    device = await devices.get_device(device_id, settings.offline_after_s)
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    upd = releases.update_for(device["agent_version"], device["os"], device["arch"])
+    if upd is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Kein Update verfügbar — der Agent ist aktuell oder es liegt kein"
+            " signiertes Release für diese Plattform auf dem Server.",
+        )
+    if not manager.is_connected(device_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Gerät ist nicht verbunden — das Update wird beim nächsten"
+            " Verbinden automatisch angeboten.",
+        )
+    if not await manager.send(device_id, {"type": "update", "payload": upd}):
+        raise HTTPException(status_code=502, detail="Update konnte nicht an den Agent gesendet werden")
+    await audit_record(
+        "device.agent_update",
+        user=user["username"],
+        device_id=device_id,
+        version=upd["version"],
+        from_version=device["agent_version"],
+    )
+    return {"ok": True, "version": upd["version"]}
 
 
 class MaintenanceRequest(BaseModel):

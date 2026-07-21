@@ -97,6 +97,13 @@ export function DeviceDetail({
   const [tab, setTab] = useState<TabId>('overview');
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [agentUpdating, setAgentUpdating] = useState(false);
+  const [agentUpdateMsg, setAgentUpdateMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAgentUpdateMsg(null);
+    setAgentUpdating(false);
+  }, [deviceId]);
 
   const load = useCallback(
     (signal?: AbortSignal) =>
@@ -148,6 +155,21 @@ export function DeviceDetail({
       setError(`✓ Magic Packet an ${r.sent} MAC(s) gesendet — das Gerät sollte in Kürze hochfahren.`);
     } catch (e) {
       setError(apiErrorMessage(e));
+    }
+  };
+
+  const updateAgentNow = async () => {
+    setAgentUpdating(true);
+    setError(null);
+    try {
+      const r = await api.updateAgent(deviceId);
+      setAgentUpdateMsg(
+        `Update auf ${r.version} angestoßen — der Agent prüft die Signatur, tauscht sich aus und verbindet sich neu (typisch unter einer Minute).`,
+      );
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    } finally {
+      setAgentUpdating(false);
     }
   };
 
@@ -244,6 +266,29 @@ export function DeviceDetail({
       </div>
 
       {error && <p className="err">{error}</p>}
+
+      {d.agent_update_available && (
+        <div className="card card-pad row" style={{ gap: 10, flexWrap: 'wrap', borderColor: 'var(--accLine)' }}>
+          <span className="badge badge-accent" style={{ flex: 'none' }}>⬆ Agent-Update</span>
+          <span style={{ fontSize: 12.5 }}>
+            Neue Agent-Version <b>{d.agent_update_available}</b> verfügbar
+            {d.agent_version ? <> — installiert ist <span className="mono">{d.agent_version}</span></> : null}.
+          </span>
+          {agentUpdateMsg ? (
+            <span className="muted grow" style={{ fontSize: 11.5, marginLeft: 'auto', flex: 'none' }}>✓ {agentUpdateMsg}</span>
+          ) : isOperator ? (
+            <button
+              className="btn btn-primary btn-sm grow"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => void updateAgentNow()}
+              disabled={agentUpdating || !d.connected}
+              title={!d.connected ? 'Gerät ist nicht verbunden — das Update wird beim nächsten Verbinden automatisch angeboten.' : undefined}
+            >
+              {agentUpdating ? 'Wird angestoßen…' : 'Jetzt aktualisieren'}
+            </button>
+          ) : null}
+        </div>
+      )}
 
       <div className="tabs">
         {TABS.filter((t) => (!t.adminOnly || isAdmin) && (!t.operatorOnly || isOperator)).map((t) => (
@@ -553,7 +598,19 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
     ['Status', `${d.online ? 'online' : 'offline'}${d.connected ? ' · verbunden' : ''}`],
     ['Besitzer', d.owner_label || '—'],
     ['OS', `${osLabel(d.os)} ${d.os_version} (${d.arch})`],
-    ['Agent', d.agent_version || '—'],
+    [
+      'Agent',
+      d.agent_update_available ? (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {d.agent_version || '—'}
+          <span className="badge badge-warn" style={{ fontSize: 10 }} title="Neue Version auf dem Server verfügbar">
+            ⬆ {d.agent_update_available} verfügbar
+          </span>
+        </span>
+      ) : (
+        d.agent_version || '—'
+      ),
+    ],
   ];
   if (model) kv.push(['Modell', model]);
   if (typeof hw.serial === 'string' && hw.serial) {

@@ -110,6 +110,7 @@ export const api = {
     body: { owner_label?: string; tags?: string[]; rustdesk_id?: string; person_id?: number },
   ) => patch<{ device: Device }>(`/api/devices/${id}`, body),
   wakeDevice: (id: number) => post<{ ok: boolean; sent: number }>(`/api/devices/${id}/wake`),
+  updateAgent: (id: number) => post<{ ok: boolean; version: string }>(`/api/devices/${id}/update-agent`),
   setMaintenance: (id: number, minutes: number) =>
     post<{ device: Device }>(`/api/devices/${id}/maintenance`, { minutes }),
   deviceAlerts: (id: number, signal?: AbortSignal) =>

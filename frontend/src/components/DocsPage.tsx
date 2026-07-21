@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { api, apiErrorMessage } from '../api/client';
-import { IconCopy, IconDownload, IconKey, IconMonitor, IconShield } from '../icons';
+import { IconCopy, IconDownload, IconFileCode, IconKey, IconMonitor, IconShield, IconShieldCheck } from '../icons';
 import type { RemoteConfig } from '../types';
 
 const SERVER = window.location.origin;
@@ -104,15 +104,26 @@ export function DocsPage() {
     'rustdesk.exe --config "host=<RELAY>,key=<PUBKEY>"  # erst nach Konfiguration verfügbar';
 
   return (
-    <div className="screen" style={{ maxWidth: 960 }}>
+    <div className="screen">
       <div className="page-head">
         <h1 className="page-title">Dokumentation</h1>
-        <span className="muted">Agent-Installer erzeugen &amp; ausrollen · RustDesk mit Clients verbinden</span>
+        <span className="muted">
+          Agent-Installer erzeugen &amp; ausrollen · Agent aktualisieren · Secrets aus Skripten sichern · RustDesk verbinden
+        </span>
       </div>
 
       {error && <p className="err">{error}</p>}
 
-      <div className="card-col" style={{ gap: 16 }}>
+      {/* Two columns on wide screens, single column below ~1000px — the docs
+       * fill the whole content area instead of a narrow strip. */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(480px, 100%), 1fr))',
+          gap: 16,
+          alignItems: 'start',
+        }}
+      >
         {/* ----------------------------------------------------------------- */}
         <Section
           icon={<IconMonitor size={16} />}
@@ -270,6 +281,110 @@ docker compose -f /opt/rxf-rmm/infrastructure/docker-compose.yml up -d backend`}
             und Signatur. Der Agent prüft SHA-256 <b>und</b> ed25519-Signatur gegen den gepinnten
             Public Key, tauscht sich atomar aus (alte Binary als <span className="mono">.bak</span>)
             und startet neu. Der Server ist nur Auslieferung, nie Vertrauensanker.
+          </div>
+        </Section>
+
+        {/* ----------------------------------------------------------------- */}
+        <Section
+          icon={<IconShieldCheck size={16} />}
+          title="Agent aktualisieren"
+          subtitle="Neue Version ausrollen — automatisch oder per Klick im Dashboard"
+        >
+          <p style={{ margin: 0 }}>
+            Liegt auf dem Server ein <b>signiertes Release mit höherer Version</b> als auf einem
+            Gerät, zeigt das Dashboard das direkt an: In der Geräteliste erscheint ein{' '}
+            <span className="badge badge-warn" style={{ fontSize: 10 }}>⬆</span>-Badge neben der
+            Agent-Version, und auf der Geräteseite ein Hinweis-Banner „Neue Agent-Version …
+            verfügbar" mit dem Button <b>„Jetzt aktualisieren"</b>.
+          </p>
+          <Step n={1} title="Neue Version bauen und signieren">
+            <p className="muted" style={{ margin: 0 }}>
+              Mit <b>demselben Signaturschlüssel</b> wie beim ersten Release — die Agents prüfen
+              jedes Update gegen den gepinnten Public Key und lehnen fremde Signaturen ab.
+            </p>
+            <Code>{`cd agent
+make sign VERSION=0.3.0 AGENT_SIGN_KEY=<base64 privater key>`}</Code>
+          </Step>
+          <Step n={2} title="Release auf den Server legen und Backend neu starten">
+            <p className="muted" style={{ margin: 0 }}>
+              Der Server liest <span className="mono">manifest.json</span> nur beim Start — ohne
+              Neustart bleibt die alte Version aktiv.
+            </p>
+            <Code>{`scp dist/* root@192.168.2.211:/data/agent-releases/
+docker compose -f /opt/rxf-rmm/infrastructure/docker-compose.yml up -d backend`}</Code>
+          </Step>
+          <Step n={3} title="Im Dashboard aktualisieren">
+            <p className="muted" style={{ margin: 0 }}>
+              Beim Gerät auf <b>„Jetzt aktualisieren"</b> klicken (der Button ist nur bei
+              verbundenem Agent aktiv). Der Agent lädt die neue Binary, prüft <b>SHA-256 und
+              ed25519-Signatur</b>, tauscht sich atomar aus (alte Binary bleibt als{' '}
+              <span className="mono">.bak</span> liegen) und verbindet sich mit der neuen Version
+              neu — typisch unter einer Minute. Danach verschwindet der Hinweis von selbst.
+            </p>
+          </Step>
+          <div className="callout-note">
+            <b>Auch ohne Klick:</b> Jeder verbundene Agent bekommt das Update automatisch beim
+            ersten Heartbeat einer Verbindung angeboten. Offline-Geräte holen es sich beim
+            nächsten Verbinden — der Button ist nur die Abkürzung, um nicht darauf zu warten.
+            Jedes manuell angestoßene Update landet im Audit-Log.
+          </div>
+          <div className="callout-note">
+            <b>Kein Hinweis / „Kein Update verfügbar"?</b> Dann ist die Manifest-Version nicht
+            höher als die des Agenten, es fehlt ein Target für dessen OS/Architektur — oder das
+            Release ist <b>unsigniert</b> (Schnellweg <span className="mono">./build-agent.sh</span>):
+            unsignierte Releases eignen sich nur für Erstinstallationen, nie für Updates. Nach
+            jedem Manifest-Wechsel das Backend neu starten.
+          </div>
+        </Section>
+
+        {/* ----------------------------------------------------------------- */}
+        <Section
+          icon={<IconFileCode size={16} />}
+          title="Passwörter & Recovery-Keys aus Skripten sichern"
+          subtitle="BitLocker-Keys, rotierte Admin-Passwörter — automatisch in den Passwort-Tresor"
+        >
+          <p style={{ margin: 0 }}>
+            Skripte, die Secrets erzeugen oder auslesen (BitLocker aktivieren, Recovery-Keys
+            abfragen, Notfall-Admin-Passwörter rotieren), sollen diese <b>nicht im Job-Log</b>{' '}
+            hinterlassen — dort wären sie im Klartext lesbar. Stattdessen gibt das Skript eine
+            Marker-Zeile aus:
+          </p>
+          <Code>{`##RMM-CRED## {"label":"BitLocker C: Recovery-Key","username":"","secret":"123456-…","notes":"…"}`}</Code>
+          <p style={{ margin: 0 }}>
+            Der Server fängt solche Zeilen ab, <b>bevor</b> sie im Job-Log oder Live-Stream
+            landen, und legt sie <b>verschlüsselt in den Passwörtern des Geräts</b> ab
+            (Tab „Passwörter"). Im Output erscheint nur{' '}
+            <span className="mono">[✓ In Passwörtern gespeichert: …]</span>. Gleiche Labels werden
+            aktualisiert statt dupliziert — ein wöchentlich geplanter Rotations-Lauf erzeugt also
+            keine Duplikate. Jede Speicherung landet im Audit-Log.
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <li>
+              <b>Fertige Vorlagen:</b> In der Skript-Bibliothek bei „+ Neues Skript" über
+              „Vorlage einfügen…" — BitLocker aktivieren + Key sichern, alle Recovery-Keys
+              auslesen, lokalen Notfall-Admin rotieren (Windows) und root-Passwort rotieren
+              (Linux).
+            </li>
+            <li>
+              <b>Pflichtfelder</b> sind <span className="mono">label</span> und{' '}
+              <span className="mono">secret</span>; <span className="mono">username</span> und{' '}
+              <span className="mono">notes</span> sind optional. Die Zeile muss gültiges JSON
+              hinter dem Marker enthalten und für sich allein stehen.
+            </li>
+            <li>
+              <b>Abrufen:</b> Gerät öffnen → Tab „Passwörter" → „Aufdecken" (nur Admins; jedes
+              Aufdecken wird mit Benutzername im Audit-Log erfasst). So lässt sich z. B. ein
+              vergessenes Passwort oder der BitLocker-Key jederzeit wieder mitteilen.
+            </li>
+          </ul>
+          <div className="callout-note">
+            <b>PowerShell-Tipp:</b> Das JSON am einfachsten mit{' '}
+            <span className="mono">ConvertTo-Json -Compress</span> erzeugen — dann sind
+            Sonderzeichen im Secret automatisch korrekt escaped:
+            <div style={{ marginTop: 8 }}>
+              <Code>{`$json = @{ label = 'Mein Secret'; secret = $pw } | ConvertTo-Json -Compress
+Write-Output "##RMM-CRED## $json"`}</Code>
+            </div>
           </div>
         </Section>
 

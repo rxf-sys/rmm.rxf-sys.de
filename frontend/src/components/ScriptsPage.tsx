@@ -20,6 +20,108 @@ interface Draft {
 
 const EMPTY: Draft = { id: null, name: '', shell: 'bash', os: 'any', content: '' };
 
+/** Fertige Skripte für die häufigsten Aufgaben. Alle Secret-Vorlagen nutzen
+ * den ##RMM-CRED##-Marker: solche Output-Zeilen fängt der Server ab und
+ * speichert sie verschlüsselt in den Passwörtern des Geräts — sie erscheinen
+ * nie im Job-Log. */
+const TEMPLATES: { name: string; os: ScriptOs; shell: Shell; content: string }[] = [
+  {
+    name: 'BitLocker aktivieren + Recovery-Key sichern',
+    os: 'windows',
+    shell: 'powershell',
+    content: `# Aktiviert BitLocker auf C: (falls aus) und sichert den Recovery-Key
+# verschluesselt in den Passwoertern dieses Geraets (##RMM-CRED##-Zeile).
+$ErrorActionPreference = 'Stop'
+$vol = Get-BitLockerVolume -MountPoint 'C:'
+if ($vol.ProtectionStatus -ne 'On') {
+  Enable-BitLocker -MountPoint 'C:' -EncryptionMethod XtsAes256 \`
+    -RecoveryPasswordProtector -SkipHardwareTest | Out-Null
+  Write-Output 'BitLocker aktiviert - Verschluesselung laeuft im Hintergrund.'
+} elseif (-not ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'RecoveryPassword')) {
+  Add-BitLockerKeyProtector -MountPoint 'C:' -RecoveryPasswordProtector | Out-Null
+  Write-Output 'Recovery-Passwort-Protector ergaenzt.'
+} else {
+  Write-Output 'BitLocker ist bereits aktiv.'
+}
+$vol = Get-BitLockerVolume -MountPoint 'C:'
+foreach ($kp in ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'RecoveryPassword')) {
+  $json = @{
+    label    = 'BitLocker C: Recovery-Key'
+    username = "$($kp.KeyProtectorId)"
+    secret   = "$($kp.RecoveryPassword)"
+    notes    = "Automatisch gesichert am $(Get-Date -Format yyyy-MM-dd)"
+  } | ConvertTo-Json -Compress
+  Write-Output "##RMM-CRED## $json"
+}`,
+  },
+  {
+    name: 'BitLocker Recovery-Keys auslesen + sichern',
+    os: 'windows',
+    shell: 'powershell',
+    content: `# Liest die Recovery-Keys ALLER BitLocker-Volumes aus und sichert sie
+# verschluesselt in den Passwoertern dieses Geraets. Die Keys selbst
+# erscheinen nicht im Job-Log.
+$found = $false
+foreach ($vol in Get-BitLockerVolume) {
+  foreach ($kp in ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'RecoveryPassword')) {
+    $found = $true
+    $json = @{
+      label    = "BitLocker $($vol.MountPoint) Recovery-Key"
+      username = "$($kp.KeyProtectorId)"
+      secret   = "$($kp.RecoveryPassword)"
+      notes    = "Automatisch gesichert am $(Get-Date -Format yyyy-MM-dd)"
+    } | ConvertTo-Json -Compress
+    Write-Output "##RMM-CRED## $json"
+  }
+}
+if (-not $found) { Write-Output 'Keine BitLocker-Recovery-Keys gefunden.' }`,
+  },
+  {
+    name: 'Lokalen Notfall-Admin anlegen/rotieren',
+    os: 'windows',
+    shell: 'powershell',
+    content: `# Legt den lokalen Notfall-Admin 'rmm-admin' an bzw. rotiert dessen
+# Passwort und sichert das neue Passwort in den Passwoertern des Geraets.
+$ErrorActionPreference = 'Stop'
+$User = 'rmm-admin'
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+$bytes = New-Object byte[] 24
+$rng.GetBytes($bytes)
+$pw = [Convert]::ToBase64String($bytes)
+$sec = ConvertTo-SecureString $pw -AsPlainText -Force
+if (Get-LocalUser -Name $User -ErrorAction SilentlyContinue) {
+  Set-LocalUser -Name $User -Password $sec
+  Write-Output "Passwort von $User rotiert."
+} else {
+  New-LocalUser -Name $User -Password $sec -PasswordNeverExpires \`
+    -Description 'RMM Notfall-Admin' | Out-Null
+  # S-1-5-32-544 = lokale Administratoren-Gruppe (sprachunabhaengig)
+  Add-LocalGroupMember -SID 'S-1-5-32-544' -Member $User
+  Write-Output "$User angelegt und zur Admin-Gruppe hinzugefuegt."
+}
+$json = @{
+  label    = "Lokaler Admin $User"
+  username = $User
+  secret   = $pw
+  notes    = "Automatisch rotiert am $(Get-Date -Format yyyy-MM-dd)"
+} | ConvertTo-Json -Compress
+Write-Output "##RMM-CRED## $json"`,
+  },
+  {
+    name: 'root-Passwort rotieren + sichern',
+    os: 'linux',
+    shell: 'bash',
+    content: `#!/usr/bin/env bash
+# Rotiert das root-Passwort und sichert es verschluesselt in den
+# Passwoertern dieses Geraets (##RMM-CRED##-Zeile, nicht im Job-Log).
+set -euo pipefail
+PW="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)"
+echo "root:\${PW}" | chpasswd
+printf '##RMM-CRED## {"label":"root-Passwort","username":"root","secret":"%s","notes":"Automatisch rotiert am %s"}\\n' "$PW" "$(date +%F)"
+echo "root-Passwort rotiert und im RMM gespeichert."`,
+  },
+];
+
 const OS_META: Record<ScriptOs, { label: string; icon: React.ReactNode }> = {
   windows: { label: 'Windows', icon: <WindowsLogo size={11} /> },
   linux: { label: 'Linux', icon: <LinuxLogo size={11} /> },
@@ -297,6 +399,29 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
               <option value="powershell">powershell</option>
             </select>
           </div>
+          {draft.id === null && (
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              <select
+                className="input btn-sm"
+                style={{ padding: '5px 8px' }}
+                value=""
+                onChange={(e) => {
+                  const t = TEMPLATES[Number(e.target.value)];
+                  if (t) setDraft({ ...draft, name: t.name, os: t.os, shell: t.shell, content: t.content });
+                }}
+              >
+                <option value="">Vorlage einfügen…</option>
+                {TEMPLATES.map((t, i) => (
+                  <option key={t.name} value={i}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+              <span className="muted" style={{ fontSize: 11 }}>
+                BitLocker-Keys &amp; rotierte Passwörter landen automatisch verschlüsselt in den Passwörtern des Geräts.
+              </span>
+            </div>
+          )}
           <textarea
             className="code-area"
             value={draft.content}
@@ -305,6 +430,13 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
             rows={10}
             placeholder="#!/usr/bin/env bash"
           />
+          <p className="muted" style={{ fontSize: 11, margin: 0 }}>
+            Tipp: Gibt das Skript eine Zeile{' '}
+            <span className="mono">##RMM-CRED## {'{'}"label":"…","secret":"…"{'}'}</span> aus, wird
+            das Secret nicht im Job-Log gespeichert, sondern verschlüsselt in den{' '}
+            <b>Passwörtern</b> des Geräts abgelegt (Upsert per Label, Zugriff nur per
+            auditiertem Aufdecken).
+          </p>
           <div className="row" style={{ gap: 8 }}>
             <button className="btn btn-primary" onClick={() => void save()} disabled={!draft.name.trim()}>
               Speichern
@@ -320,7 +452,9 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
         <div className="empty">
           <h2>Noch keine Skripte</h2>
           <p className="muted">
-            Beispiele: Temp-Cleanup, Drucker-Spooler-Reset, Netzwerk-Diagnose, Windows-Update-Status.
+            Beim Anlegen stehen Vorlagen bereit — z. B. BitLocker-Recovery-Keys sichern oder
+            Notfall-Admin-Passwörter rotieren (Secrets landen automatisch in den Passwörtern des
+            Geräts). Weitere Ideen: Temp-Cleanup, Drucker-Spooler-Reset, Netzwerk-Diagnose.
           </p>
         </div>
       )}
