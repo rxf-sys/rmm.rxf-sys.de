@@ -1,6 +1,8 @@
 # Secrets — nur .env.example ist versioniert
 .env
 infrastructure/.env
+# Privater Update-Signaturschlüssel (aus ./build-agent.sh keygen)
+infrastructure/.agent-sign.env
 
 # Python
 __pycache__/
