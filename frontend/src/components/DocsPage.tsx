@@ -229,52 +229,40 @@ export function DocsPage() {
             ist die Ursache, wenn der Download „Konnte nicht heruntergeladen werden – keine Datei"
             meldet.
           </p>
-          <div className="callout-note">
-            <b>Schnellweg — nur Docker auf dem Server nötig</b> (kein Go/Make/npm). Baut alle Ziele
-            in einem Container, legt ein unsigniertes Manifest nach{' '}
-            <span className="mono">agent-releases/</span> und startet das Backend neu — Download und
-            Einzeiler funktionieren danach sofort:
-            <div style={{ marginTop: 8 }}>
-              <Code>{`cd /opt/rxf-rmm/infrastructure
-./build-agent.sh 0.1.0`}</Code>
-            </div>
-            Auf einer Build-Maschine <b>mit</b> Go/Make geht es auch direkt:
-            <span className="mono"> cd agent &amp;&amp; make dev-manifest VERSION=0.1.0</span>, dann
-            <span className="mono"> dist/*</span> nach <span className="mono">agent-releases/</span>{' '}
-            kopieren und das Backend neu starten. Auto-Update bleibt bei beiden aus.
-          </div>
           <p style={{ margin: 0 }}>
-            Für Produktion mit <b>Auto-Update</b> die Binaries signieren (Go + Make erforderlich):
+            Auf dem Server ist <b>nur Docker</b> nötig (kein Go/Make/npm) —{' '}
+            <span className="mono">build-agent.sh</span> erledigt alles im Container:
           </p>
           <Step n={1} title="Einmalig einen Signaturschlüssel erzeugen">
             <p className="muted" style={{ margin: 0 }}>
-              Den <b>öffentlichen</b> Teil in <span className="mono">agent/update.go</span>{' '}
-              (<span className="mono">updatePublicKey</span>) pinnen, den privaten Teil geheim
-              halten. Er signiert die Auto-Updates — ohne gültige Signatur installiert kein Agent
-              ein Update.
+              Legt <span className="mono">infrastructure/.agent-sign.env</span> an (nur root
+              lesbar, nie im Git). Der private Teil signiert künftige Updates, der öffentliche
+              wird beim Build in die Agents gepinnt — ohne gültige Signatur installiert kein
+              Agent ein Update. <b>Backup der Datei anlegen!</b>
             </p>
-            <Code>{`cd agent
-make keygen`}</Code>
+            <Code>{`cd /opt/rxf-rmm/infrastructure
+./build-agent.sh keygen`}</Code>
           </Step>
-          <Step n={2} title="Alle Ziele bauen und signieren">
+          <Step n={2} title="Release bauen — ein Befehl, fertig signiert">
             <p className="muted" style={{ margin: 0 }}>
-              Erzeugt <span className="mono">dist/rmm-agent-&lt;os&gt;-&lt;arch&gt;[.exe]</span> plus
-              <span className="mono"> dist/manifest.json</span>. CGO ist aus — jede Binary ist
-              statisch.
+              Baut alle Ziele im Container, pinnt den Public Key, signiert das Manifest, kopiert
+              alles nach <span className="mono">agent-releases/</span> und startet das Backend neu.
+              Liegt (noch) kein Schlüssel vor, entsteht ein unsigniertes Release — Download und
+              Einzeiler funktionieren dann trotzdem, nur Auto-Update bleibt aus.
             </p>
-            <Code>{`make sign VERSION=0.2.0 AGENT_SIGN_KEY=<base64 privater key>`}</Code>
+            <Code>{`./build-agent.sh 0.2.0`}</Code>
           </Step>
-          <Step n={3} title="Release auf den Server kopieren">
-            <p className="muted" style={{ margin: 0 }}>
-              Den Inhalt von <span className="mono">dist/</span> nach
-              <span className="mono"> AGENT_RELEASE_DIR</span> (Default
-              <span className="mono"> /data/agent-releases</span>) legen. Der Server liest
-              <span className="mono"> manifest.json</span> beim Start.
-            </p>
-            <Code>{`scp dist/* root@192.168.2.211:/data/agent-releases/
-# danach Backend neu starten, damit das Manifest geladen wird:
-docker compose -f /opt/rxf-rmm/infrastructure/docker-compose.yml up -d backend`}</Code>
-          </Step>
+          <div className="callout-note">
+            <b>Alternative — Build-Maschine mit Go/Make:</b>{' '}
+            <span className="mono">cd agent &amp;&amp; make keygen</span>, dann{' '}
+            <span className="mono">make sign VERSION=0.2.0 AGENT_SIGN_KEY=… AGENT_UPDATE_PUBKEY=…</span>{' '}
+            und <span className="mono">dist/*</span> nach{' '}
+            <span className="mono">/data/agent-releases/</span> auf den Server kopieren, Backend
+            neu starten. Dabei die <b>Platzhalter durch die echten base64-Schlüssel ersetzen</b> —
+            spitze Klammern wie <span className="mono">&lt;base64 key&gt;</span> sind nur
+            Doku-Schreibweise; wörtlich eingefügt quittiert die Shell das mit{' '}
+            <span className="mono">syntax error near unexpected token</span>.
+          </div>
           <div className="callout-note">
             <b>Auto-Update:</b> Meldet ein verbundener Agent eine ältere Version als im Manifest,
             schickt der Server eine <span className="mono">update</span>-Nachricht mit URL, SHA-256
@@ -297,23 +285,18 @@ docker compose -f /opt/rxf-rmm/infrastructure/docker-compose.yml up -d backend`}
             Agent-Version, und auf der Geräteseite ein Hinweis-Banner „Neue Agent-Version …
             verfügbar" mit dem Button <b>„Jetzt aktualisieren"</b>.
           </p>
-          <Step n={1} title="Neue Version bauen und signieren">
+          <Step n={1} title="Neue Version bauen — ein Befehl auf dem Server">
             <p className="muted" style={{ margin: 0 }}>
-              Mit <b>demselben Signaturschlüssel</b> wie beim ersten Release — die Agents prüfen
-              jedes Update gegen den gepinnten Public Key und lehnen fremde Signaturen ab.
+              Baut im Docker-Container, signiert mit dem <b>vorhandenen Schlüssel</b> aus{' '}
+              <span className="mono">.agent-sign.env</span> (die Agents prüfen jedes Update gegen
+              den gepinnten Public Key), kopiert das Release nach{' '}
+              <span className="mono">agent-releases/</span> und startet das Backend neu. Nur die
+              Versionsnummer erhöhen:
             </p>
-            <Code>{`cd agent
-make sign VERSION=0.3.0 AGENT_SIGN_KEY=<base64 privater key>`}</Code>
+            <Code>{`cd /opt/rxf-rmm/infrastructure
+./build-agent.sh 0.3.0`}</Code>
           </Step>
-          <Step n={2} title="Release auf den Server legen und Backend neu starten">
-            <p className="muted" style={{ margin: 0 }}>
-              Der Server liest <span className="mono">manifest.json</span> nur beim Start — ohne
-              Neustart bleibt die alte Version aktiv.
-            </p>
-            <Code>{`scp dist/* root@192.168.2.211:/data/agent-releases/
-docker compose -f /opt/rxf-rmm/infrastructure/docker-compose.yml up -d backend`}</Code>
-          </Step>
-          <Step n={3} title="Im Dashboard aktualisieren">
+          <Step n={2} title="Im Dashboard aktualisieren">
             <p className="muted" style={{ margin: 0 }}>
               Beim Gerät auf <b>„Jetzt aktualisieren"</b> klicken (der Button ist nur bei
               verbundenem Agent aktiv). Der Agent lädt die neue Binary, prüft <b>SHA-256 und
@@ -331,9 +314,11 @@ docker compose -f /opt/rxf-rmm/infrastructure/docker-compose.yml up -d backend`}
           <div className="callout-note">
             <b>Kein Hinweis / „Kein Update verfügbar"?</b> Dann ist die Manifest-Version nicht
             höher als die des Agenten, es fehlt ein Target für dessen OS/Architektur — oder das
-            Release ist <b>unsigniert</b> (Schnellweg <span className="mono">./build-agent.sh</span>):
-            unsignierte Releases eignen sich nur für Erstinstallationen, nie für Updates. Nach
-            jedem Manifest-Wechsel das Backend neu starten.
+            Release ist <b>unsigniert</b> (gebaut ohne Signaturschlüssel): unsignierte Releases
+            eignen sich nur für Erstinstallationen, nie für Updates. Und: Agents, die selbst noch
+            aus einem unsignierten Build stammen, haben <b>keinen Public Key gepinnt</b> und
+            lehnen jedes Update ab — solche Geräte einmal per Einzeiler neu installieren, danach
+            greift Auto-Update. Nach jedem Manifest-Wechsel das Backend neu starten.
           </div>
         </Section>
 
