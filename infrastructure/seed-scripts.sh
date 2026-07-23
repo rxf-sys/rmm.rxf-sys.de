@@ -127,57 +127,71 @@ Get-ScheduledTask | Where-Object {
 """.strip()))
 
 SCRIPTS.append(("bitlocker-schluessel-sichern.ps1", "powershell", r"""
-# BitLocker fuer das Systemlaufwerk sicherstellen und den Wiederherstellungs-
-# schluessel ausgeben.
+# BitLocker fuer das Systemlaufwerk sicherstellen und den Recovery-Key
+# verschluesselt in den Passwoertern dieses Geraets sichern (##RMM-CRED##-
+# Zeile — der Schluessel erscheint NICHT im Job-Log).
 #
-# - Ist BitLocker schon aktiv: nur den Recovery-Key auslesen.
-# - Ist es aus: BitLocker aktivieren (XTS-AES-256, TPM + Recovery-Password)
-#   und den frisch erzeugten Key ausgeben.
-#
-# WICHTIG: Der 48-stellige Schluessel erscheint unten im Job-Output. Ihn danach
-# im Geraet unter "Passwoerter" als Eintrag speichern (Label z.B.
-# "BitLocker C:") — der Job-Output wird nicht verschluesselt abgelegt.
+# Robust fuer alle Ausgangszustaende:
+# - komplett unverschluesselt   -> aktivieren (TPM + Recovery-Password)
+# - verschluesselt, Schutz aus  -> Schutz aktivieren (auch "wartet auf
+#   Aktivierung" bei ab Werk vorverschluesselten Geraeten)
+# - bereits aktiv               -> nur Key sichern
+# Vorhandene Protectoren werden wiederverwendet, nie doppelt angelegt —
+# vermeidet 0x80310031 ("nur eine Schutzvorrichtung dieses Typs zulaessig").
 $ErrorActionPreference = "Stop"
 $drive = $env:SystemDrive
-
-function Show-RecoveryKey($mount) {
-  $v = Get-BitLockerVolume -MountPoint $mount
-  $rp = $v.KeyProtector | Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' }
-  if (-not $rp) {
-    Write-Output "Kein Recovery-Password-Protector vorhanden — fuege einen hinzu..."
-    Add-BitLockerKeyProtector -MountPoint $mount -RecoveryPasswordProtector | Out-Null
-    $v = Get-BitLockerVolume -MountPoint $mount
-    $rp = $v.KeyProtector | Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' }
-  }
-  Write-Output ""
-  Write-Output "================ BITLOCKER WIEDERHERSTELLUNGSSCHLUESSEL ================"
-  Write-Output ("Laufwerk        : {0}" -f $mount)
-  Write-Output ("Schutzstatus    : {0}" -f $v.ProtectionStatus)
-  Write-Output ("Verschluesselung: {0}" -f $v.EncryptionMethod)
-  foreach ($p in $rp) {
-    Write-Output ("Recovery-Key-ID : {0}" -f $p.KeyProtectorId)
-    Write-Output ("SCHLUESSEL      : {0}" -f $p.RecoveryPassword)
-  }
-  Write-Output "=> Diesen Schluessel im Dashboard unter 'Passwoerter' speichern."
-  Write-Output "======================================================================="
-}
-
 $vol = Get-BitLockerVolume -MountPoint $drive
-if ($vol.ProtectionStatus -eq 'On' -or $vol.VolumeStatus -like 'Encrypt*') {
-  Write-Output "BitLocker ist auf $drive bereits aktiv ($($vol.VolumeStatus))."
-  Show-RecoveryKey $drive
-} else {
-  Write-Output "BitLocker ist auf $drive nicht aktiv — aktiviere..."
-  $tpm = Get-Tpm -ErrorAction SilentlyContinue
-  if (-not $tpm -or -not $tpm.TpmReady) {
-    throw "Kein einsatzbereites TPM gefunden — BitLocker muesste manuell mit anderem Protector eingerichtet werden. Abbruch."
-  }
-  Enable-BitLocker -MountPoint $drive -EncryptionMethod XtsAes256 -UsedSpaceOnly `
-    -TpmProtector -SkipHardwareTest | Out-Null
+
+# 1) Recovery-Password-Protector sicherstellen — dieser Schluessel landet
+#    im RMM-Tresor.
+if (-not ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'RecoveryPassword')) {
   Add-BitLockerKeyProtector -MountPoint $drive -RecoveryPasswordProtector | Out-Null
-  Write-Output "BitLocker aktiviert. Verschluesselung laeuft im Hintergrund weiter."
-  Show-RecoveryKey $drive
+  Write-Output "Recovery-Password-Protector ergaenzt."
+  $vol = Get-BitLockerVolume -MountPoint $drive
 }
+
+# 2) TPM-Protector nur ergaenzen, wenn noch keiner existiert.
+if (-not ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'Tpm')) {
+  $tpm = Get-Tpm -ErrorAction SilentlyContinue
+  if ($tpm -and $tpm.TpmReady) {
+    Add-BitLockerKeyProtector -MountPoint $drive -TpmProtector | Out-Null
+    Write-Output "TPM-Protector ergaenzt."
+  } elseif ($vol.VolumeStatus -eq 'FullyDecrypted') {
+    throw "Kein einsatzbereites TPM — BitLocker muesste manuell mit anderem Protector eingerichtet werden."
+  }
+  $vol = Get-BitLockerVolume -MountPoint $drive
+}
+
+# 3) Verschluesselung bzw. Schutz aktivieren — je nach Zustand.
+if ($vol.VolumeStatus -eq 'FullyDecrypted') {
+  # manage-bde nutzt die vorhandenen Protectoren, statt neue anzulegen.
+  manage-bde -on $drive -skiphardwaretest -usedspaceonly | Out-Null
+  Write-Output "BitLocker aktiviert - Verschluesselung laeuft im Hintergrund."
+} elseif ($vol.ProtectionStatus -ne 'On') {
+  try {
+    Resume-BitLocker -MountPoint $drive -ErrorAction Stop | Out-Null
+    Write-Output "BitLocker-Schutz war pausiert - wieder aktiviert."
+  } catch {
+    manage-bde -on $drive | Out-Null
+    Write-Output "BitLocker-Schutz aktiviert (war 'wartet auf Aktivierung')."
+  }
+} else {
+  Write-Output "BitLocker ist bereits aktiv ($($vol.VolumeStatus))."
+}
+
+# 4) Recovery-Keys in den Passwort-Tresor melden.
+$vol = Get-BitLockerVolume -MountPoint $drive
+$rp = @($vol.KeyProtector | Where-Object KeyProtectorType -eq 'RecoveryPassword')
+foreach ($kp in $rp) {
+  $json = @{
+    label    = "BitLocker $drive Recovery-Key"
+    username = "$($kp.KeyProtectorId)"
+    secret   = "$($kp.RecoveryPassword)"
+    notes    = "Automatisch gesichert am $(Get-Date -Format yyyy-MM-dd)"
+  } | ConvertTo-Json -Compress
+  Write-Output "##RMM-CRED## $json"
+}
+if (-not $rp) { Write-Output "WARNUNG: Kein Recovery-Password-Protector vorhanden." }
 """.strip()))
 
 SCRIPTS.append(("fastboot-deaktivieren.ps1", "powershell", r"""
