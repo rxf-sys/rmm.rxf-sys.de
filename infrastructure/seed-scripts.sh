@@ -2,15 +2,23 @@
 # ------------------------------------------------------------
 # seed-scripts.sh — nützliche Standard-Skripte in die Bibliothek einspielen
 #
-#   cd /opt/rxf-rmm/infrastructure && ./seed-scripts.sh
+#   cd /opt/rxf-rmm/infrastructure && ./seed-scripts.sh            # nur neue anlegen
+#   cd /opt/rxf-rmm/infrastructure && ./seed-scripts.sh --update   # + Seed-Skripte auffrischen
 #
 # Idempotent: Skripte werden nur angelegt, wenn noch KEIN Eintrag mit dem
-# Namen existiert — eigene Anpassungen werden nie überschrieben. Läuft über
-# Pythons sqlite3 im Backend-Container direkt gegen /data/rmm.db.
+# Namen existiert — eigene Anpassungen werden nie überschrieben. Mit
+# --update werden zusätzlich Skripte aktualisiert, die noch unverändert vom
+# Seeding stammen (updated_by = 'seed'); von Hand bearbeitete bleiben auch
+# dann unangetastet (im Dashboard löschen + neu seeden, falls gewollt).
+# Läuft über Pythons sqlite3 im Backend-Container direkt gegen /data/rmm.db.
 # ------------------------------------------------------------
 set -euo pipefail
 
-docker exec -i rxf-rmm-backend python - <<'PY'
+UPDATE=0
+if [[ "${1:-}" == "--update" || "${1:-}" == "-u" ]]; then UPDATE=1; fi
+
+docker exec -i -e "SEED_UPDATE=$UPDATE" rxf-rmm-backend python - <<'PY'
+import os
 import sqlite3
 import time
 
@@ -417,13 +425,28 @@ if "os" not in cols:
     db.execute("ALTER TABLE scripts ADD COLUMN os TEXT NOT NULL DEFAULT 'any'")
     db.execute("UPDATE scripts SET os = 'windows' WHERE shell = 'powershell'")
 
-created, skipped = 0, 0
+update_mode = os.environ.get("SEED_UPDATE") == "1"
+created, updated, skipped = 0, 0, 0
 for name, shell, content in SCRIPTS:
-    exists = db.execute("SELECT 1 FROM scripts WHERE name = ?", (name,)).fetchone()
-    if exists:
-        skipped += 1
-        continue
+    row = db.execute(
+        "SELECT id, content, updated_by FROM scripts WHERE name = ?", (name,)
+    ).fetchone()
     os_val = OS_OVERRIDE.get(name) or ("windows" if shell == "powershell" else "linux")
+    if row is not None:
+        script_id, old_content, updated_by = row
+        # Nur Skripte auffrischen, die noch unverändert vom Seeding stammen —
+        # sobald jemand im Dashboard gespeichert hat, steht dort sein Name.
+        if update_mode and updated_by == "seed" and old_content != content:
+            db.execute(
+                "UPDATE scripts SET shell = ?, os = ?, content = ?, updated_at = ?"
+                " WHERE id = ?",
+                (shell, os_val, content, now, script_id),
+            )
+            print(f"aktualisiert: {name}")
+            updated += 1
+        else:
+            skipped += 1
+        continue
     db.execute(
         "INSERT INTO scripts (name, shell, os, content, updated_by, updated_at)"
         " VALUES (?, ?, ?, ?, ?, ?)",
@@ -432,7 +455,9 @@ for name, shell, content in SCRIPTS:
     created += 1
 db.commit()
 db.close()
-print(f"Seed fertig: {created} Skripte angelegt, {skipped} existierten bereits.")
+print(f"Seed fertig: {created} angelegt, {updated} aktualisiert, {skipped} unverändert.")
+if not update_mode:
+    print("Hinweis: './seed-scripts.sh --update' frischt unveränderte Seed-Skripte auf den neuesten Stand auf.")
 PY
 
 echo "==> fertig. Die Skripte erscheinen sofort in der Skript-Bibliothek."
