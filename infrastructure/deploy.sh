@@ -2,7 +2,8 @@
 #
 # deploy.sh — Docker-Compose-Deploy für rmm.rxf-sys.de
 #
-# Wird von der CD-Pipeline (GitHub Actions via SSH) oder manuell aufgerufen.
+# Wird von der CD-Pipeline (GitHub Actions, Self-hosted Runner im LXC,
+# Label `rmm`) oder manuell aufgerufen.
 # Installationspfad: /opt/rxf-rmm/infrastructure/deploy.sh
 # Versioniert im Repo — Änderungen werden beim nächsten Deploy automatisch aktiv.
 #
