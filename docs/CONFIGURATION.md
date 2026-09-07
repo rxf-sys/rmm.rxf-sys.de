@@ -188,7 +188,8 @@ Bewusst hart kodiert, damit es keine unsicheren Kombinationen gibt:
 
 | Wert | Wo | Warum |
 |---|---|---|
-| Login-Rate-Limit 5 Versuche / 300 s | `backend/app/routers/auth.py:31` | Ein konfigurierbares Limit wird erfahrungsgemäß hochgedreht |
+| Login-Rate-Limit 5 Versuche / 300 s | `backend/app/routers/auth.py` | Ein konfigurierbares Limit wird erfahrungsgemäß hochgedreht |
+| Enrollment-Rate-Limit 20 Fehlversuche / 300 s | `backend/app/routers/agent.py` | Weiter als beim Login, weil ein echter Rollout legitim wiederholt; nur Fehlversuche zählen |
 | Mindestlänge Passwort 8 | `backend/app/routers/auth.py:25` | |
 | Argon2id-Parameter | `backend/app/accounts.py:39` (Bibliotheks-Defaults) | |
 | Cookie-Flags `httponly`, `samesite=lax` | `backend/app/routers/auth.py:85-94` | |

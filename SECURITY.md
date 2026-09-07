@@ -30,7 +30,7 @@ Was das System schützen soll, in absteigender Wichtigkeit:
 
 | Angreifer | Kann | Abwehr |
 |---|---|---|
-| Internet, unauthentifiziert | Nur `/api/health`, `/api/auth/login` und die Agent-Endpunkte erreichen | Alle anderen Endpunkte hinter Session-Auth; Login rate-limitiert (5 Versuche / 300 s pro IP) |
+| Internet, unauthentifiziert | Nur `/api/health`, `/api/auth/login` und die Agent-Endpunkte erreichen | Alle anderen Endpunkte hinter Session-Auth; Login rate-limitiert (5 Fehlversuche / 300 s pro IP), Enrollment- und Setup-Endpunkte ebenso (20 / 300 s) |
 | Besitzer eines Enrollment-Tokens | Genau ein Gerät anmelden | Token ist einmalig, läuft ab, ist widerrufbar; Verbrauch ist ein bedingtes UPDATE, also race-fest |
 | Kompromittierter Agent | Ausschließlich Daten für die eigene `device_id` melden | Bearer-Auth pro Gerät; kein Endpunkt erlaubt Zugriff auf fremde Geräte |
 | Angemeldeter `viewer` | Nur Geräte der eigenen Person lesen | Rollenprüfung **plus** Datenfilterung pro Endpunkt (`person_scope`, `device_visible`) |
@@ -51,7 +51,7 @@ Was das System schützen soll, in absteigender Wichtigkeit:
   Das Audit-Log macht es nachvollziehbar, nicht unmöglich.
 - **Kein Multi-Tenant-Modell.** Die Viewer-Rolle trennt Sicht, nicht
   Vertrauensbereiche.
-- **Kein DoS-Schutz** über das Login-Rate-Limit hinaus.
+- **Kein DoS-Schutz** über die Rate-Limits auf Login und Enrollment hinaus.
 - **RustDesk** bringt eigene Ports und ein eigenes Sicherheitsmodell mit, das
   hier nicht mitverantwortet wird.
 

@@ -42,6 +42,17 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - README neu strukturiert; die Beschreibung der CD-Pipeline entsprach nicht
   mehr der Realität (SSH statt Self-hosted Runner).
 
+### Sicherheit
+- Die Enrollment- und Setup-Endpunkte sind jetzt rate-limitiert (20
+  Fehlversuche pro IP in 300 s). Vorher war der einzige unauthentifizierte
+  Bereich neben dem Login unbegrenzt abfragbar.
+- Das Backend startet nicht mehr mit `--proxy-headers --forwarded-allow-ips "*"`.
+  Uvicorn hat damit `request.client` aus einem Header übernommen, den jeder
+  Aufrufer setzen kann — also genau den Wert, auf den das Login-Rate-Limit
+  zurückfällt, wenn `TRUST_PROXY_HEADERS` aus ist.
+- Das Dashboard bietet keinen kopierbaren Download-Link mit Token in der URL
+  mehr an. Beide verbleibenden Wege übergeben das Token im Header.
+
 ### Behoben
 - Der Live-Job-Stream blieb nach einem Verbindungsabbruch stumm stehen. Er
   verbindet jetzt mit Backoff neu und zeigt den Abbruch an.

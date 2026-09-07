@@ -88,10 +88,14 @@ export function EnrollModal({ onClose }: Props) {
     },
   };
   const installCmd = created ? commands[platform].cmd : '';
-  // Browser-Downloads können keine Header setzen — der kopierbare Link nutzt
-  // deshalb weiterhin den Query-Fallback.
-  const downloadUrl = created
-    ? `${SERVER_HINT}/api/agent/setup/download/windows-amd64?token=${created.token}`
+  // Deliberately no copyable ?token=… URL: that put a live enrollment token
+  // into the browser history, the clipboard and every access log on the way.
+  // The two paths that remain both carry it in a header — the in-app download
+  // below, and this command for getting the binary onto the target machine.
+  const downloadCmd = created
+    ? `irm -Headers @{'X-Enroll-Token'='${token}'} ` +
+      `'${SERVER_HINT}/api/agent/setup/download/windows-amd64' ` +
+      `-OutFile $env:TEMP\\rmm-agent.exe`
     : '';
 
   const copyText = async (text: string) => {
@@ -109,7 +113,7 @@ export function EnrollModal({ onClose }: Props) {
   // message here, instead of a browser download that silently fails and saves
   // the 404 body as "windows-amd64.json".
   const downloadBinary = async () => {
-    if (dlBusy || !downloadUrl) return;
+    if (dlBusy || !created) return;
     setDlError(null);
     setDlBusy(true);
     try {
@@ -213,8 +217,8 @@ export function EnrollModal({ onClose }: Props) {
                 >
                   <IconDownload size={13} /> {dlBusy ? 'Lädt…' : 'Windows-Agent herunterladen'}
                 </button>
-                <button className="btn btn-sm" onClick={() => void copyText(downloadUrl)}>
-                  Download-Link kopieren
+                <button className="btn btn-sm" onClick={() => void copyText(downloadCmd)}>
+                  Download-Befehl kopieren
                 </button>
               </>
             )}

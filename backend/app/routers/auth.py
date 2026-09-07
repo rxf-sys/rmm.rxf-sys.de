@@ -8,8 +8,6 @@ docs/TROUBLESHOOTING.md so nobody mistakes it for a bug.
 
 from __future__ import annotations
 
-import time
-
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
@@ -18,6 +16,7 @@ from .. import accounts
 from ..audit import record as audit_record
 from ..auth import verify_session
 from ..config import Settings, get_settings
+from ..ratelimit import SlidingWindowLimiter, client_ip
 
 log = structlog.get_logger("auth")
 
@@ -28,55 +27,30 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 # lives in the accounts module so every path is covered.
 MIN_PASSWORD_LEN = accounts.MIN_PASSWORD_LEN
 
-# --- Simple in-memory login rate limiter --------------------------------------
-# Keyed by client IP. Enough for a single-instance dashboard; resets on
-# restart. Not a substitute for a real WAF, just anti-brute-force hygiene.
-_MAX_FAILS = 5
-_WINDOW_S = 300
-_fails: dict[str, list[float]] = {}
+# --- Login rate limiter -------------------------------------------------------
+# Five failures per IP per five minutes. Deliberately not configurable: a
+# limit that can be tuned gets tuned upwards.
+_login_limiter = SlidingWindowLimiter(max_events=5, window_s=300)
 
 
 def _client_ip(request: Request, settings: Settings | None = None) -> str:
-    """Best-effort client-IP extraction for per-IP rate limiting.
-
-    When ``trust_proxy_headers`` is on we prefer headers a known reverse
-    proxy will set (CF-Connecting-IP from Cloudflare's tunnel, then the
-    first hop in X-Forwarded-For, then X-Real-IP). Otherwise we fall back
-    to the direct socket peer."""
-    s = settings or get_settings()
-    if s.trust_proxy_headers:
-        for header in ("cf-connecting-ip", "x-real-ip"):
-            v = request.headers.get(header)
-            if v:
-                return v.strip()
-        xff = request.headers.get("x-forwarded-for")
-        if xff:
-            return xff.split(",", 1)[0].strip()
-    return request.client.host if request.client else "unknown"
+    return client_ip(request, settings)
 
 
 def _rate_limited(ip: str) -> bool:
-    now = time.time()
-    recent = [t for t in _fails.get(ip, []) if now - t < _WINDOW_S]
-    if recent:
-        _fails[ip] = recent
-    else:
-        # Don't keep empty buckets around — otherwise the dict grows by one
-        # entry per unique client IP for the lifetime of the process.
-        _fails.pop(ip, None)
-    return len(recent) >= _MAX_FAILS
+    return _login_limiter.limited(ip)
 
 
 def _record_fail(ip: str) -> None:
-    _fails.setdefault(ip, []).append(time.time())
+    _login_limiter.hit(ip)
 
 
 def _clear_fails(ip: str) -> None:
-    _fails.pop(ip, None)
+    _login_limiter.clear(ip)
 
 
 def reset_rate_limiter_for_tests() -> None:
-    _fails.clear()
+    _login_limiter.reset()
 
 
 class LoginRequest(BaseModel):

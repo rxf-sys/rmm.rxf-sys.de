@@ -51,10 +51,10 @@ Aufklärungsfläche hinter einem öffentlichen Tunnel.
 
 | Methode | Pfad | Auth | Zweck |
 |---|---|---|---|
-| POST | `/api/agent/enroll` | Enrollment-Token im Body | Tauscht das Einmal-Token gegen `device_id` + `device_secret`. 403 bei ungültigem, abgelaufenem oder bereits verbrauchtem Token |
+| POST | `/api/agent/enroll` | Enrollment-Token im Body | Tauscht das Einmal-Token gegen `device_id` + `device_secret`. 403 bei ungültigem, abgelaufenem oder bereits verbrauchtem Token; 429 nach 20 Fehlversuchen pro IP in 300 s |
 | GET | `/api/agent/download/{target}` | Geräte-Credentials | Lädt die signierte Binary für `linux-amd64`, `windows-amd64` usw. |
 | GET | `/api/agent/setup/{platform}` | Enrollment-Token | Liefert das Installer-Skript (bash bzw. PowerShell) mit eingebettetem Token |
-| GET | `/api/agent/setup/download/{target}` | Enrollment-Token | Binary-Download für das Installer-Skript, Token verbraucht sich dabei nicht |
+| GET | `/api/agent/setup/download/{target}` | Enrollment-Token | Binary-Download für das Installer-Skript, Token verbraucht sich dabei nicht. Bevorzugt im Header `X-Enroll-Token`; die Query-Variante existiert nur noch als Notnagel und schreibt das Token in jedes Access-Log auf dem Weg |
 | WS | `/api/agent/ws` | Geräte-Credentials | Dauerverbindung, siehe unten |
 
 ## Geräte
