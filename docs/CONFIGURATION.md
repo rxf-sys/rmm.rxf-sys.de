@@ -32,7 +32,7 @@ Angriffsfläche · ⚪ funktional.
 |---|---|---|---|---|
 | `APP_ENV` | Alles außer `production` schaltet `/api/docs` und `/api/openapi.json` frei | `production` | nein | 🟡 |
 | `LOG_LEVEL` | structlog-Level (`DEBUG`…`ERROR`) | `INFO` | nein | ⚪ |
-| `CORS_ORIGINS` | JSON-Liste erlaubter Origins. Muss die eigene Dashboard-URL enthalten | `["https://rmm.rxf-sys.de"]` | **ja** | 🔴 |
+| `CORS_ORIGINS` | Erlaubte Origins. Akzeptiert JSON-Liste, kommagetrennte Liste oder eine einzelne Origin. Muss die eigene Dashboard-URL enthalten | `["https://rmm.rxf-sys.de"]` | **ja** | 🔴 |
 | `AUTH_ENABLED` | `false` macht **jeden** Request zu einem Admin-Request | `true` | nein | 🔴 |
 
 > `AUTH_ENABLED=false` ist ausschließlich ein Entwicklungsschalter

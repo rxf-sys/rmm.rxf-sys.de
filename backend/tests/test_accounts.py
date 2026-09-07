@@ -70,3 +70,29 @@ async def test_app_settings_roundtrip(client: AsyncClient):
     await accounts.set_app_setting("k", "v1")
     await accounts.set_app_setting("k", "v2")
     assert await accounts.get_app_setting("k") == "v2"
+
+
+async def test_bootstrap_admin_rejects_short_password(client: AsyncClient, settings: Settings):
+    """The password policy must survive the bootstrap path too.
+
+    MIN_PASSWORD_LEN used to live in the auth router, so a two-character
+    BOOTSTRAP_ADMIN_PASSWORD silently produced a working admin account on a
+    tool that runs shell commands as root on every managed device.
+    """
+    s = settings.model_copy(update={"bootstrap_admin_password": "short"})
+    await accounts.bootstrap_admin(s)
+    assert await accounts.count_users() == 0
+
+
+async def test_create_user_rejects_short_password(client: AsyncClient):
+    with pytest.raises(accounts.AccountError):
+        await accounts.create_user("kurz", "1234567", role="viewer")
+    assert await accounts.count_users() == 0
+
+
+async def test_set_password_rejects_short_password(client: AsyncClient):
+    user = await accounts.create_user("pwtest", "lang-genug-123", role="viewer")
+    with pytest.raises(accounts.AccountError):
+        await accounts.set_password(user["id"], "kurz")
+    # The old password still works.
+    assert await accounts.authenticate("pwtest", "lang-genug-123") is not None

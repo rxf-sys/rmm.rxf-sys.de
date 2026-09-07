@@ -217,9 +217,9 @@ wird, und gibt dann `docker compose ps` und die letzten 50 Logzeilen aus.
 
 Häufigste Ursachen in dieser Reihenfolge:
 
-1. **Syntaxfehler in `.env`** — z. B. `CORS_ORIGINS` ohne gültiges JSON.
-   Pydantic bricht beim Start ab. Im Log steht ein `ValidationError` mit dem
-   Feldnamen.
+1. **Fehler in `.env`** — Pydantic bricht beim Start ab; im Log steht ein
+   `ValidationError` mit dem Feldnamen. `CORS_ORIGINS` ist bewusst tolerant
+   und nimmt JSON-Liste, kommagetrennte Liste und einzelne Origin gleichermaßen.
 2. **Disk voll** — Build schlägt fehl. `df -h`, dann `docker system prune -a`
    (Vorsicht: entfernt ungenutzte Images).
 3. **Port 80 belegt** — nur `web` published einen Host-Port.

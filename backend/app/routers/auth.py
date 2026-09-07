@@ -24,7 +24,9 @@ log = structlog.get_logger("auth")
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # Minimum password length enforced on every password-setting path.
-MIN_PASSWORD_LEN = 8
+# Re-exported for the request models in accounts_admin; the policy itself
+# lives in the accounts module so every path is covered.
+MIN_PASSWORD_LEN = accounts.MIN_PASSWORD_LEN
 
 # --- Simple in-memory login rate limiter --------------------------------------
 # Keyed by client IP. Enough for a single-instance dashboard; resets on

@@ -29,6 +29,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   sie gesendet waren — der Task wird jetzt referenziert gehalten.
 - `assert`-Invarianten in Produktionscode (die unter `python -O` verschwinden)
   durch echte Fehlerpfade ersetzt.
+- Die Mindestpasswortlänge galt nur im Auth-Router. Ein zu kurzes
+  `BOOTSTRAP_ADMIN_PASSWORD` legte damit stillschweigend ein Admin-Konto mit
+  schwachem Passwort an. Die Regel gilt jetzt in `accounts`, also auf jedem
+  Weg; der Bootstrap lehnt ab und sagt warum.
+- `CORS_ORIGINS` akzeptiert jetzt auch eine kommagetrennte Liste oder eine
+  einzelne Origin. Vorher brach der Start mit einem `SettingsError` ohne
+  Hinweis auf die erwartete JSON-Schreibweise ab.
 - Der Passwort-Tresor legt einen Eintrag jetzt neu an, wenn er zwischen
   Suche und Aktualisierung gelöscht wurde, statt einen Fehler zu liefern.
 

@@ -76,6 +76,12 @@ _db_path: str = ""
 # ``viewer`` is read-only for family members watching their own device.
 ROLES = ("admin", "techniker", "viewer")
 
+# Enforced here rather than only in the router: create_user/set_password are
+# also reached from the startup bootstrap and from the automatic viewer
+# account for a new person. A policy that only lives in one request handler
+# is not a policy.
+MIN_PASSWORD_LEN = 8
+
 
 class AccountError(Exception):
     """Raised for expected, user-facing account errors (e.g. duplicate name)."""
@@ -127,6 +133,11 @@ async def _connect() -> AsyncIterator[aiosqlite.Connection]:
 # ---------------------------------------------------------------------------
 # Password hashing
 # ---------------------------------------------------------------------------
+
+
+def _check_password(password: str) -> None:
+    if len(password) < MIN_PASSWORD_LEN:
+        raise AccountError(f"Passwort muss mindestens {MIN_PASSWORD_LEN} Zeichen haben")
 
 
 def hash_password(plain: str) -> str:
@@ -197,6 +208,7 @@ async def create_user(
         raise AccountError("Benutzername darf nicht leer sein")
     if role not in ROLES:
         raise AccountError(f"Ungültige Rolle: {role}")
+    _check_password(password)
     now = int(time.time())
     try:
         async with _connect() as db:
@@ -232,6 +244,7 @@ async def list_users() -> list[dict[str, Any]]:
 
 
 async def set_password(user_id: int, new_password: str) -> None:
+    _check_password(new_password)
     async with _connect() as db:
         await db.execute(
             "UPDATE users SET password_hash = ? WHERE id = ?",
@@ -613,11 +626,21 @@ async def bootstrap_admin(settings: Settings) -> None:
             hint="set bootstrap_admin_password to create the first admin account",
         )
         return
-    await create_user(
-        settings.bootstrap_admin_user,
-        settings.bootstrap_admin_password,
-        role="admin",
-    )
+    try:
+        await create_user(
+            settings.bootstrap_admin_user,
+            settings.bootstrap_admin_password,
+            role="admin",
+        )
+    except AccountError as e:
+        # Starting without an admin is bad, but starting with a two-character
+        # admin password on a remote-command tool is worse. Refuse and say so.
+        log.error(
+            "accounts.bootstrap_rejected",
+            error=str(e),
+            hint="fix BOOTSTRAP_ADMIN_PASSWORD and restart; no admin was created",
+        )
+        return
     log.info("accounts.admin_bootstrapped", username=settings.bootstrap_admin_user)
 
 

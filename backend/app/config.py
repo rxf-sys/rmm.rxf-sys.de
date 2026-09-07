@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from functools import lru_cache
+from typing import Annotated
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -17,7 +19,13 @@ class Settings(BaseSettings):
     # ---- App ----
     app_env: str = "production"
     log_level: str = "INFO"
-    cors_origins: list[str] = Field(default_factory=lambda: ["https://rmm.rxf-sys.de"])
+    # NoDecode keeps pydantic-settings from JSON-decoding the raw env value, so
+    # the validator below sees the string the operator actually typed. Without
+    # it, CORS_ORIGINS=https://example.com fails during source parsing with an
+    # error that names no cause and offers no hint.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["https://rmm.rxf-sys.de"]
+    )
     # When False, all requests resolve to a synthetic admin identity (dev only).
     auth_enabled: bool = True
 
@@ -106,6 +114,24 @@ class Settings(BaseSettings):
     ntfy_base: str = ""
     ntfy_topic: str = "rxf-rmm"
     ntfy_token: str = ""
+
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, value: object) -> object:
+        """Accept a JSON array, a comma-separated list, or a single origin.
+
+        The JSON form is what .env.example shows; the other two are what people
+        type. All three end up as a list of trimmed origins.
+        """
+        if not isinstance(value, str):
+            return value
+        raw = value.strip()
+        if not raw:
+            return []
+        if raw.startswith("["):
+            return json.loads(raw)
+        return [part.strip() for part in raw.split(",") if part.strip()]
 
 
 @lru_cache(maxsize=1)
