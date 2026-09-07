@@ -35,6 +35,7 @@ from .routers import automation as automation_router
 from .routers import credentials as credentials_router
 from .routers import devices as devices_router
 from .routers import fleet as fleet_router
+from .routers import health as health_router
 from .routers import inventory as inventory_router
 from .routers import jobs as jobs_router
 from .routers import patches as patches_router
@@ -180,11 +181,7 @@ app.add_middleware(
 )
 
 
-@app.get("/api/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
+app.include_router(health_router.router)
 app.include_router(auth_router.router)
 app.include_router(devices_router.router)
 app.include_router(agent_router.router)

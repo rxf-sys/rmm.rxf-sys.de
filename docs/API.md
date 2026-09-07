@@ -43,7 +43,8 @@ Aufklärungsfläche hinter einem öffentlichen Tunnel.
 
 | Methode | Pfad | Auth | Zweck |
 |---|---|---|---|
-| GET | `/api/health` | — | Liveness-Probe, `{"status":"ok"}`. Vom Docker-Healthcheck genutzt |
+| GET | `/api/health` | — | Liveness: der Prozess antwortet. Fasst die Datenbank bewusst nicht an; daran hängt der Docker-Healthcheck |
+| GET | `/api/ready` | — | Readiness: Datenbank erreichbar und Kern-Tabellen vorhanden. 503 sonst. Daran hängt das Deploy-Gate |
 | POST | `/api/auth/login` | — | Anmeldung. Rate-Limit: 5 Fehlversuche / 300 s pro IP → 429 |
 | POST | `/api/auth/logout` | — | Widerruft die Session aus dem Cookie. Ohne Cookie ein No-op |
 

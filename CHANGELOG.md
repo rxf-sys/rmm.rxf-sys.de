@@ -8,6 +8,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- `/api/ready`: Readiness-Endpunkt, der die Datenbank prüft und sonst 503
+  liefert. `deploy.sh` gated darauf, nicht mehr nur auf den Liveness-Check.
+- Beide Anwendungscontainer laufen als uid 10001, ohne Capabilities und mit
+  `no-new-privileges`; der Web-Container hat jetzt ebenfalls einen
+  Healthcheck. **Achtung:** ein bestehendes Volume `rxf-rmm-data` braucht
+  einmalig einen `chown` — siehe `docs/OPERATIONS.md`.
+- `rustdesk/rustdesk-server` ist auf 1.1.16 gepinnt statt `:latest`.
 - Frontend-Lint-Gate (ESLint mit typescript-eslint, react-hooks und jsx-a11y)
   und Frontend-Tests (Vitest + Testing Library). Vorher gab es für das
   Dashboard weder das eine noch das andere.

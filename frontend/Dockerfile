@@ -13,4 +13,16 @@ RUN npm run build
 FROM caddy:2-alpine
 COPY --from=build /app/dist /srv
 COPY Caddyfile /etc/caddy/Caddyfile
-EXPOSE 80
+
+# Caddy needs writable state and config directories; hand them to the
+# unprivileged user so the container does not run as root.
+#
+# It listens on 8080 inside the container, not 80: binding a privileged port
+# as a non-root user depends on the host's ip_unprivileged_port_start, which
+# is not this repo's to assume. Compose maps host 80 -> container 8080.
+RUN adduser -S -u 10001 -D caddyrun \
+    && mkdir -p /data/caddy /config/caddy \
+    && chown -R 10001 /data /config /srv
+USER 10001
+
+EXPOSE 8080

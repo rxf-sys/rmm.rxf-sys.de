@@ -20,21 +20,51 @@ Einrichtung steht in
 | Prüfung | Kommando | Erwartung |
 |---|---|---|
 | Liveness | `curl -fsS https://rmm.rxf-sys.de/api/health` | `{"status":"ok"}` |
-| Container | `docker compose ps` | alle `Up`, Backend `healthy` |
+| Readiness | `curl -fsS https://rmm.rxf-sys.de/api/ready` | `{"status":"ready","checks":{"database":"ok"}}` |
+| Container | `docker compose ps` | alle `Up`, Backend und Web `healthy` |
 | Backend-Log | `docker compose logs --tail 100 backend` | keine Tracebacks |
 | Agents online | Dashboard → Übersicht | erwartete Gerätezahl |
 
-Der Compose-Healthcheck fragt `/api/health` alle 30 s ab
-(`infrastructure/docker-compose.yml:20-25`). `web` startet erst, wenn das
-Backend gesund ist (`depends_on: condition: service_healthy`).
+Die beiden Endpunkte beantworten unterschiedliche Fragen, und das ist Absicht:
 
-`/api/health` prüft **nur, dass der Prozess antwortet** — nicht, ob die
-Datenbank lesbar ist. Für einen tieferen Test:
+- **`/api/health`** sagt nur, dass der Prozess antwortet, und fasst die
+  Datenbank bewusst nicht an. Daran hängt der Compose-Healthcheck, also die
+  Neustart-Automatik — und ein Neustart repariert keine gesperrte oder kaputte
+  Datei. Ein Liveness-Check, der daran scheitert, erzeugt nur eine
+  Neustartschleife.
+- **`/api/ready`** prüft, ob die Datenbank erreichbar ist und die erwarteten
+  Tabellen trägt, und antwortet sonst mit 503. Daran hängt das Deploy-Gate in
+  `deploy.sh`: ein Container, der antwortet, aber seine eigene Datenbank nicht
+  lesen kann, darf nicht als erfolgreicher Deploy durchgehen.
+
+Für einen noch tieferen Test der Datei selbst:
 
 ```bash
 docker exec rxf-rmm-backend python -c \
   "import sqlite3; print(sqlite3.connect('/data/rmm.db').execute('PRAGMA integrity_check').fetchone()[0])"
 ```
+
+## Container-Härtung
+
+Beide Anwendungscontainer laufen als uid 10001, ohne Capabilities
+(`cap_drop: ALL`) und mit `no-new-privileges`. Caddy lauscht im Container auf
+8080 statt 80, damit dafür keine privilegierte Portbindung nötig ist; Compose
+bildet Host-80 darauf ab.
+
+> **Einmalig vor dem ersten Deploy dieser Images.** Ein bereits bestehendes
+> Volume `rxf-rmm-data` gehört root — der nicht privilegierte Prozess kann
+> darin nicht schreiben und der Container startet in einer Schleife. Vorher
+> auf dem Host:
+>
+> ```bash
+> cd /opt/rxf-rmm/infrastructure
+> docker compose down
+> docker run --rm -v rxf-rmm-data:/data alpine chown -R 10001:10001 /data
+> docker compose up -d --build
+> ```
+>
+> Bei einem frisch angelegten Volume entfällt das: ein neues Named Volume
+> übernimmt die Rechte von `/data` aus dem Image.
 
 ## Logs
 

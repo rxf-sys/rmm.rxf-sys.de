@@ -10,6 +10,21 @@ RUN pip install --upgrade pip && pip install .
 
 COPY app ./app
 
+# Run as an unprivileged user. The uid is fixed rather than auto-assigned so
+# the data volume's ownership stays predictable across rebuilds.
+#
+# A FRESH named volume inherits the ownership of /data from this image. An
+# EXISTING volume does not — it stays root-owned and the container will fail
+# to write. One-time fix on the host before the first deploy of this image:
+#
+#   docker run --rm -v rxf-rmm-data:/data alpine chown -R 10001:10001 /data
+#
+# See docs/OPERATIONS.md.
+RUN useradd --system --uid 10001 --create-home --home-dir /home/rmm rmm \
+    && mkdir -p /data \
+    && chown -R 10001:10001 /data /app
+USER 10001:10001
+
 EXPOSE 8080
 # Deliberately WITHOUT --proxy-headers.
 #
