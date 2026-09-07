@@ -33,7 +33,11 @@ done
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"   # linux | darwin
 arch="$(uname -m)"
-case "$arch" in x86_64|amd64) arch=amd64;; aarch64|arm64) arch=arm64;; esac
+case "$arch" in
+  x86_64|amd64)   arch=amd64;;
+  aarch64|arm64)  arch=arm64;;
+  *) echo "unsupported architecture: $arch (built targets: amd64, arm64)" >&2; exit 1;;
+esac
 
 bin=""
 for cand in "$here/rmm-agent-$os-$arch" "$here/rmm-agent" ; do
@@ -41,11 +45,24 @@ for cand in "$here/rmm-agent-$os-$arch" "$here/rmm-agent" ; do
 done
 [[ -n "$bin" ]] || { echo "no matching agent binary (rmm-agent-$os-$arch) next to install.sh" >&2; exit 1; }
 
+# Re-running over an existing install would hit "Text file busy" on Linux,
+# because the service still holds the binary open. Stop it first; a missing
+# service is not an error here.
+if [[ -x "$BINDIR/rmm-agent" ]]; then
+  echo "==> existing install found, stopping service"
+  "$BINDIR/rmm-agent" stop >/dev/null 2>&1 || true
+fi
+
 echo "==> installing binary to $BINDIR/rmm-agent"
 install -m 0755 "$bin" "$BINDIR/rmm-agent"
 
+# An explicit array beats "${LABEL:+--label \"$LABEL\"}" here: same result,
+# but it is obvious that a label with spaces stays one argument.
+enroll_args=(enroll --server "$SERVER" --token "$TOKEN")
+[[ -n "$LABEL" ]] && enroll_args+=(--label "$LABEL")
+
 echo "==> enrolling with $SERVER"
-"$BINDIR/rmm-agent" enroll --server "$SERVER" --token "$TOKEN" ${LABEL:+--label "$LABEL"}
+"$BINDIR/rmm-agent" "${enroll_args[@]}"
 
 echo "==> installing + starting service"
 "$BINDIR/rmm-agent" install

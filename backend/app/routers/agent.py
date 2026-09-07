@@ -105,6 +105,12 @@ LABEL=__LABEL__
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
 case "$arch" in x86_64|amd64) arch=amd64;; aarch64|arm64) arch=arm64;; *) echo "nicht unterstützte Architektur: $arch" >&2; exit 1;; esac
+# Ein laufender Dienst hält die Binary offen; curl -o scheitert dann mit
+# "Text file busy". Erst stoppen — ein fehlender Dienst ist hier kein Fehler.
+if [[ -x /usr/local/bin/rmm-agent ]]; then
+  echo "==> stoppe vorhandenen Dienst"
+  /usr/local/bin/rmm-agent stop >/dev/null 2>&1 || true
+fi
 echo "==> lade Agent ($os-$arch) von $SERVER"
 # Token im Header statt in der URL — bleibt aus Proxy-/Access-Logs raus.
 curl -fsSL -H "X-Enroll-Token: $TOKEN" "$SERVER/api/agent/setup/download/$os-$arch" -o /usr/local/bin/rmm-agent

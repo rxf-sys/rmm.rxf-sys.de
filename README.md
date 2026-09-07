@@ -32,6 +32,11 @@ Für die betreuten Personen selbst ist nichts zu tun außer einer einmaligen
 Installation; sie können optional einen `viewer`-Zugang bekommen, der
 ausschließlich ihre eigenen Geräte zeigt.
 
+Was auf einem betreuten Gerät passiert — und was ausdrücklich nicht —
+steht in einfachem Deutsch in [`docs/PRIVACY.md`](docs/PRIVACY.md). Diese
+Seite ist zum Weitergeben an die betreute Person gedacht, bevor der Agent
+installiert wird.
+
 ## Architektur
 
 ```

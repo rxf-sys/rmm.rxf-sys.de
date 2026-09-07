@@ -8,6 +8,8 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- `docs/PRIVACY.md`: was auf einem betreuten Gerät gemeldet wird und was
+  nicht, in einfachem Deutsch für die betreute Person geschrieben.
 - Dokumentation: `docs/ARCHITECTURE.md`, `docs/API.md`,
   `docs/CONFIGURATION.md`, `docs/OPERATIONS.md`, `docs/TROUBLESHOOTING.md`,
   `SECURITY.md`, `CONTRIBUTING.md`, dieses Changelog, `LICENSE` (Apache-2.0)
@@ -38,6 +40,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Hinweis auf die erwartete JSON-Schreibweise ab.
 - Der Passwort-Tresor legt einen Eintrag jetzt neu an, wenn er zwischen
   Suche und Aktualisierung gelöscht wurde, statt einen Fehler zu liefern.
+- Die Installer stoppen einen bereits laufenden Dienst, bevor sie die Binary
+  überschreiben. Unter Linux scheiterte ein zweiter Lauf sonst mit
+  „Text file busy"; der Windows-Installer machte das schon richtig.
+- `install.sh` bricht bei einer nicht unterstützten Architektur mit einer
+  aussagekräftigen Meldung ab statt mit „no matching agent binary".
 
 ---
 
