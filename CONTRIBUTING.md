@@ -38,13 +38,21 @@ sudo ./rmm-agent run          # im Vordergrund, ohne Dienstinstallation
 
 ## Checks
 
-Ein PR ist fertig, wenn diese drei Blöcke grün sind — es sind exakt die
-CI-Gates:
+Ein PR ist fertig, wenn diese Blöcke grün sind — es sind exakt die CI-Gates:
 
 ```bash
 cd backend  && ruff check . && pytest -v --cov=app --cov-fail-under=70
 cd frontend && npm run lint && npm test && npm run build
 cd agent    && make vet test
+```
+
+Dazu laufen in CI die Dependency-Audits (`pip-audit`, `npm audit`,
+`govulncheck`) als eigener Job. Lokal:
+
+```bash
+cd backend  && pip-audit --strict .
+cd frontend && npm audit --audit-level=high
+cd agent    && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 ```
 
 Die Coverage-Schwelle von 70 % ist eine Untergrenze, kein Ziel; der Ist-Stand

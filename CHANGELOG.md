@@ -8,6 +8,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- CI prüft jetzt auch Frontend-Lint und Frontend-Tests und hat einen eigenen
+  Audit-Job (`pip-audit`, `npm audit`, `govulncheck`). Vorher gab es
+  überhaupt kein Dependency-Gate.
+- Dependabot für pip, npm, Go, GitHub Actions und die Basis-Images.
 - `/api/ready`: Readiness-Endpunkt, der die Datenbank prüft und sonst 503
   liefert. `deploy.sh` gated darauf, nicht mehr nur auf den Liveness-Check.
 - Beide Anwendungscontainer laufen als uid 10001, ohne Capabilities und mit
