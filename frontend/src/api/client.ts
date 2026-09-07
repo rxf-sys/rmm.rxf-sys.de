@@ -26,17 +26,32 @@ import type {
 } from '../types';
 
 class ApiError extends Error {
-  constructor(public status: number, public body: string) {
+  constructor(
+    public status: number,
+    public body: string,
+  ) {
     super(`API ${status}: ${body}`);
   }
 }
 
+/**
+ * Fired once per 401 so the app can send the user back to the login page.
+ *
+ * Without it an expired session turned every screen into a permanent error
+ * banner: the pollers kept running, kept getting 401, and nothing ever
+ * concluded "you are logged out". `useAuth` listens for this.
+ */
+export const UNAUTHORIZED_EVENT = 'rmm:unauthorized';
+
+async function fail(r: Response): Promise<never> {
+  const text = await r.text().catch(() => '');
+  if (r.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+  throw new ApiError(r.status, text);
+}
+
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const r = await fetch(path, { credentials: 'include', signal });
-  if (!r.ok) {
-    const text = await r.text().catch(() => '');
-    throw new ApiError(r.status, text);
-  }
+  if (!r.ok) return fail(r);
   return r.json() as Promise<T>;
 }
 
@@ -51,10 +66,7 @@ async function send<T>(
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  if (!r.ok) {
-    const text = await r.text().catch(() => '');
-    throw new ApiError(r.status, text);
-  }
+  if (!r.ok) return fail(r);
   return r.json() as Promise<T>;
 }
 

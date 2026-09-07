@@ -365,9 +365,15 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
   const [tags, setTags] = useState(device.tags.join(', '));
   const [personId, setPersonId] = useState<number>(device.person_id ?? 0);
   const [persons, setPersons] = useState<Person[]>([]);
+  const [personsError, setPersonsError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.persons().then((r) => setPersons(r.persons)).catch(() => {});
+    // A failed person list must not silently look like "no persons exist" —
+    // the picker would then quietly offer nothing.
+    api
+      .persons()
+      .then((r) => setPersons(r.persons))
+      .catch((e) => setPersonsError(apiErrorMessage(e)));
   }, []);
 
   const save = async () => {
@@ -385,6 +391,7 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
   return (
     <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <span className="card-title">Gerät bearbeiten</span>
+      {personsError && <p className="err">Personenliste nicht geladen: {personsError}</p>}
       <label className="field">
         <span className="field-label">Besitzer / Bezeichnung</span>
         <input className="input" value={owner} onChange={(e) => setOwner(e.target.value)} />
@@ -719,7 +726,10 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
           lastScan: scanned,
         });
       })
-      .catch(() => {});
+      .catch(() => {
+        // Trend numbers are decoration on the overview tab; the tab itself
+        // still renders without them.
+      });
     return () => ctrl.abort();
   }, [d.id]);
   const secRow = (label: string, value: string | undefined): [string, ReactNode] => [
@@ -1234,7 +1244,10 @@ function RemoteTab({ device, isOperator, onSession, onChanged }: { device: Devic
   const outRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.scripts().then((r) => setScripts(r.scripts)).catch(() => {});
+    api
+      .scripts()
+      .then((r) => setScripts(r.scripts))
+      .catch((e) => setError(apiErrorMessage(e)));
   }, []);
   useEffect(() => {
     if (outRef.current) outRef.current.scrollTop = outRef.current.scrollHeight;
@@ -1508,12 +1521,19 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
 // ---------------------------------------------------------------------------
 function JobsTab({ deviceId }: { deviceId: number }) {
   const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [jobsError, setJobsError] = useState<string | null>(null);
   const [openJob, setOpenJob] = useState<number | null>(null);
   const stream = useJobStream(openJob);
 
   useEffect(() => {
     const ctrl = new AbortController();
-    const load = () => api.deviceJobs(deviceId, ctrl.signal).then((r) => setJobs(r.jobs)).catch(() => {});
+    const load = () =>
+      api
+        .deviceJobs(deviceId, ctrl.signal)
+        .then((r) => setJobs(r.jobs))
+        .catch((e) => {
+          if (!ctrl.signal.aborted) setJobsError(apiErrorMessage(e));
+        });
     void load();
     const timer = setInterval(load, 10_000);
     return () => { clearInterval(timer); ctrl.abort(); };
@@ -1521,6 +1541,7 @@ function JobsTab({ deviceId }: { deviceId: number }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {jobsError && <p className="err">{jobsError}</p>}
       <div className="card" style={{ overflow: 'hidden' }}>
         <div className="card-head"><span className="card-title-sm">Job-Verlauf</span></div>
         {jobs === null ? (

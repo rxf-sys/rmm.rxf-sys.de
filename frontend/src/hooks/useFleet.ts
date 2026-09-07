@@ -13,6 +13,10 @@ export interface Fleet {
 }
 
 const REFRESH_MS = 30_000;
+// Reconnect backoff for the fleet socket. A fixed 5 s meant that a backend
+// that stays down has every open tab knocking twelve times a minute, forever.
+const WS_RETRY_MIN_MS = 2_000;
+const WS_RETRY_MAX_MS = 60_000;
 
 /**
  * Polls the fleet-wide snapshot (devices + alerts + patch summary) used by the
@@ -61,15 +65,24 @@ export function useFleet(): Fleet {
 
     let closed = false;
     let debounce: ReturnType<typeof setTimeout> | undefined;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let delay = WS_RETRY_MIN_MS;
     const connect = () => {
       if (closed) return;
       let ws: WebSocket;
       try {
         ws = openFleetSocket();
       } catch {
+        // Constructing the socket threw (bad URL, blocked scheme). Retrying
+        // on the same schedule beats giving up silently for the tab's life.
+        retry = setTimeout(connect, delay);
+        delay = Math.min(delay * 2, WS_RETRY_MAX_MS);
         return;
       }
       wsRef.current = ws;
+      ws.onopen = () => {
+        delay = WS_RETRY_MIN_MS;
+      };
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
@@ -84,7 +97,10 @@ export function useFleet(): Fleet {
       };
       ws.onclose = () => {
         wsRef.current = null;
-        if (!closed) setTimeout(connect, 5000); // reconnect with a small delay
+        if (closed) return;
+        retry = setTimeout(connect, delay);
+        // Jitter-free is fine here: one browser tab, not a fleet of agents.
+        delay = Math.min(delay * 2, WS_RETRY_MAX_MS);
       };
       ws.onerror = () => ws.close();
     };
@@ -94,6 +110,7 @@ export function useFleet(): Fleet {
       closed = true;
       clearInterval(timer);
       clearTimeout(debounce);
+      clearTimeout(retry);
       wsRef.current?.close();
       ctrl.abort();
     };

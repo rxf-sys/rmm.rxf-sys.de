@@ -109,6 +109,7 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
               onClick={() =>
                 void navigator.clipboard
                   .writeText(`${createdLogin.username} / ${createdLogin.password}`)
+                  // Clipboard denied — the credentials are visible above.
                   .catch(() => {})
               }
             >

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../api/client';
+import { UNAUTHORIZED_EVENT, api } from '../api/client';
 import type { Account } from '../types';
 
 export type AuthStatus = 'loading' | 'authed' | 'anon';
@@ -40,6 +40,18 @@ export function useAuth(): AuthState {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // A session can expire while the tab is open. Any 401 from any request
+  // drops us back to the login page instead of leaving the dashboard sitting
+  // behind an error banner that never resolves.
+  useEffect(() => {
+    const onUnauthorized = () => {
+      setUser(null);
+      setStatus('anon');
+    };
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
   }, []);
 
   const login = useCallback(async (username: string, password: string, totpCode?: string) => {

@@ -77,6 +77,14 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Formularfelder hatten Beschriftungen ohne Zuordnung (`span` statt `label`).
 - Eine Erfolgsmeldung („Magic Packet gesendet") wurde als Fehler in Rot
   ausgegeben, weil sie durch den Fehlerkanal lief.
+- Eine abgelaufene Session ließ das Dashboard hinter einem Fehlerbanner
+  stehen, das nie aufging: die Poller liefen weiter gegen 401. Jeder 401
+  führt jetzt zurück zur Anmeldung.
+- Der Fleet-WebSocket verband sich mit festen 5 s neu — ein länger nicht
+  erreichbares Backend bekam damit von jedem offenen Tab zwölf Versuche pro
+  Minute. Jetzt exponentiell bis 60 s.
+- Vier Ladevorgänge verschluckten ihren Fehler kommentarlos; eine nicht
+  geladene Skript- oder Personenliste sah damit aus wie „es gibt keine".
 - Das Löschen eines Geräts räumte seine Alarme nicht mit ab. Die Zeilen
   blieben in der Historie stehen und verwiesen auf eine Geräte-ID, die es
   nicht mehr gab.

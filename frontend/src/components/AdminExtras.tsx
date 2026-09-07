@@ -130,6 +130,8 @@ function TotpCard({ user }: { user: Account }) {
             <button
               className="btn btn-sm"
               onClick={() => {
+                // Clipboard access can be denied; the codes stay on screen
+                // and can be selected by hand.
                 void navigator.clipboard.writeText(backupCodes.join('\n')).catch(() => {});
               }}
             >

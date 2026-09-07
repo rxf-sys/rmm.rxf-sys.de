@@ -35,7 +35,10 @@ export function ScheduledScripts({ schedules, devices, persons, isAdmin, onChang
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.scripts().then((r) => setScripts(r.scripts)).catch(() => {});
+    api
+      .scripts()
+      .then((r) => setScripts(r.scripts))
+      .catch((e) => setError(apiErrorMessage(e)));
   }, []);
 
   const allTags = Array.from(new Set(devices.flatMap((d) => d.tags))).sort();
