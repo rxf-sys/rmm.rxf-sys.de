@@ -13,9 +13,10 @@ Tables (same SQLite file as the device fleet, ``settings.storage_db_path``):
                      as a live cookie
 - ``app_settings`` — global key-value store for runtime-tunable settings
 
-Deliberately NOT ported (yet): API tokens and TOTP — the RMM dashboard has
-exactly one operator for now. Both can be lifted from the admin repo when
-needed.
+TOTP (with single-use backup codes) is implemented here as well; the columns
+``totp_secret`` and ``totp_backup_codes`` are added by the additive migration
+in ``ensure_schema``. API tokens are deliberately absent — every client is
+either a browser (session cookie) or an agent (per-device credentials).
 """
 
 from __future__ import annotations

@@ -1,7 +1,9 @@
-"""Login / logout / current-user endpoints for local account authentication.
+"""Login, logout, current user, TOTP self-service and session management.
 
-Port of the admin.rxf-sys.de auth router without the TOTP second factor —
-that can be lifted over once the RMM has more than one operator.
+Login is the only endpoint here that is rate-limited: five failures per IP
+within 300 seconds yield 429. The counter is in-memory, so a backend restart
+clears it — acceptable for a single-process deployment, and documented in
+docs/TROUBLESHOOTING.md so nobody mistakes it for a bug.
 """
 
 from __future__ import annotations

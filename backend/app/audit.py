@@ -2,9 +2,9 @@
 
 Every security- or fleet-relevant action (login, enrollment, job execution,
 device change, fired alert) lands here as one immutable row and also goes
-through structlog. Unlike the Phase-0 in-memory ring buffer this survives a
-restart, which matters for an RMM: the audit trail of "who ran what on whose
-machine" is not allowed to vanish when the container recycles.
+through structlog. Unlike an in-memory ring buffer this survives a restart,
+which matters for an RMM: the audit trail of "who ran what on whose machine"
+is not allowed to vanish when the container recycles.
 
 ``record`` is async because it writes SQLite; every caller already runs
 inside an async request handler or background loop.

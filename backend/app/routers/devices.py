@@ -1,8 +1,9 @@
 """Device fleet endpoints for the dashboard (session-authenticated).
 
-Reads are open to every logged-in account; everything that mints
-credentials or mutates devices requires the admin role and is written to
-the audit log.
+Reads are open to every logged-in account but scoped: a ``viewer`` only ever
+sees the devices of their own person. Everything that mints credentials or
+mutates a device requires the operator role (admin or techniker) and is
+written to the audit log.
 """
 
 from __future__ import annotations

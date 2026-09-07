@@ -3,7 +3,8 @@
 Scanning is a lightweight direct request to the agent (no job row); the
 report arrives asynchronously over the agent socket. Installing goes through
 the job engine so its streamed output and history behave like any other job.
-Both are admin-only and audited.
+Reading is session-authenticated and viewer-scoped; scanning and installing
+require the operator role (admin or techniker). All of it is audited.
 """
 
 from __future__ import annotations

@@ -88,7 +88,7 @@ async def ensure_schema(settings: Settings) -> None:
 
 
 async def _migrate_devices(db: aiosqlite.Connection) -> None:
-    """ALTER in columns added after the Phase-0 schema (SQLite's CREATE TABLE
+    """ALTER in columns added after the initial schema (SQLite's CREATE TABLE
     IF NOT EXISTS ignores new columns once the table exists)."""
     async with db.execute("PRAGMA table_info(devices)") as cur:
         cols = {row[1] for row in await cur.fetchall()}

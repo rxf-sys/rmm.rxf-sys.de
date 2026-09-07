@@ -1,6 +1,6 @@
 """Alert engine: evaluates device state on a fixed tick and pushes ntfy.
 
-Rules (Phase 2):
+Rules:
 
 - ``offline`` — device silent longer than ``offline_alert_after_s``.
   Resolves when a heartbeat arrives again.

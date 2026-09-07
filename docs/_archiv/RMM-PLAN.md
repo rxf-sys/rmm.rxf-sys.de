@@ -1,5 +1,15 @@
 # RMM-Tool für rxf-sys.de — Plan von Anfang bis Ende
 
+> **Archiviert am 07.09.2026.** Dieses Dokument beschreibt die Planung vor
+> der Umsetzung; alle acht Phasen sind inzwischen abgeschlossen. Es bleibt als
+> Entscheidungsdokumentation erhalten — für den aktuellen Stand gelten
+> [`../ARCHITECTURE.md`](../ARCHITECTURE.md) (Architektur und Datenmodell),
+> [`../API.md`](../API.md) (Endpunkte und WS-Protokoll) und
+> [`../ROADMAP.md`](../ROADMAP.md) (was noch offen ist).
+>
+> Die Liste unter „Roadmap nach v1" ist teilweise überholt: die `viewer`-Rolle
+> und Wake-on-LAN sind umgesetzt.
+
 Ein schlankes, selbst gehostetes RMM-Tool ("Remote Monitoring & Management") für
 den Eigenbedarf: eigene Server, eigener PC, Geräte der Familie. Vorbild sind
 Atera/NinjaOne — aber bewusst auf das reduziert, was ein Haushalt mit ~5–15

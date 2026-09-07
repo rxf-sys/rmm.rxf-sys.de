@@ -1,9 +1,9 @@
 """Browser-facing fleet event hub.
 
 The dashboard opens one WebSocket and receives lightweight "something
-changed, refetch" hints instead of polling four endpoints every 30 s. The
-server broadcasts a hint when an agent connects/disconnects, a heartbeat
-lands, an alert fires/resolves, or a patch scan updates. Hints carry no
+changed, refetch" hints on top of its 30 s poll. The server broadcasts a hint
+when an agent connects or disconnects, when an alert fires or resolves, and
+when a patch scan updates — not on every heartbeat. Hints carry no
 payload — the client re-reads the REST endpoints it already knows, which
 keeps this hub trivial and authorization in one place (the REST layer).
 """
