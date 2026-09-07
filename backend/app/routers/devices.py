@@ -281,5 +281,6 @@ async def delete_device(device_id: int, user: dict = Depends(require_operator)) 
     await jobs.delete_for_device(device_id)
     await patches.delete_for_device(device_id)
     await credentials.delete_for_device(device_id)
+    await alerts.delete_for_device(device_id)
     await audit_record("devices.deleted", user=user["username"], device_id=device_id)
     return {"ok": True}

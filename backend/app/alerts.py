@@ -16,8 +16,8 @@ on every tick, so a down ntfy server delays pushes instead of losing them.
 from __future__ import annotations
 
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
+from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +27,7 @@ import structlog
 from . import automation, devices, patches
 from .audit import record as audit_record
 from .config import Settings
+from .db import connect as db_connect
 
 log = structlog.get_logger("alerts")
 
@@ -70,10 +71,9 @@ async def ensure_schema(settings: Settings) -> None:
     log.info("alerts.ready", db=_db_path)
 
 
-@asynccontextmanager
-async def _connect() -> AsyncIterator[aiosqlite.Connection]:
-    async with aiosqlite.connect(_db_path) as db:
-        yield db
+def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
+    """Shared connection helper — see app/db.py."""
+    return db_connect(_db_path)
 
 
 async def _open_alerts() -> dict[tuple[int, str], dict[str, Any]]:
@@ -316,6 +316,21 @@ async def stats_for_device(device_id: int, days: int = 30) -> dict[str, Any]:
             row = await cur.fetchone()
             open_now = int(row[0]) if row else 0
     return {"days": days, "by_rule": by_rule, "total": sum(by_rule.values()), "open": open_now}
+
+
+async def delete_for_device(device_id: int) -> None:
+    """Drop a deleted device's alert history.
+
+    The evaluate loop already resolves open alerts whose device is gone, so
+    nothing stays "firing" — but the rows survived, kept appearing in the alert
+    history under an id that no longer resolves to a hostname, and skewed the
+    per-device statistics of any future device that reused the id. The four
+    other device-scoped tables (metrics, jobs, patches, credentials) are
+    cleaned up on delete; this one was simply missed.
+    """
+    async with _connect() as db:
+        await db.execute("DELETE FROM alerts WHERE device_id = ?", (device_id,))
+        await db.commit()
 
 
 def reset_for_tests(db_path: str) -> None:

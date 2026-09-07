@@ -24,8 +24,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +34,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 from .config import Settings
+from .db import connect as db_connect
 
 log = structlog.get_logger("accounts")
 
@@ -120,14 +120,9 @@ async def ensure_schema(settings: Settings) -> None:
     log.info("accounts.ready", db=_db_path)
 
 
-@asynccontextmanager
-async def _connect() -> AsyncIterator[aiosqlite.Connection]:
-    """Open a connection with foreign-key enforcement switched on (SQLite
-    defaults it to OFF per connection, which would disable the ON DELETE
-    CASCADE on sessions)."""
-    async with aiosqlite.connect(_db_path) as db:
-        await db.execute("PRAGMA foreign_keys = ON")
-        yield db
+def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
+    """Shared connection helper — see app/db.py."""
+    return db_connect(_db_path)
 
 
 # ---------------------------------------------------------------------------

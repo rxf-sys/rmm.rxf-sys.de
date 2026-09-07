@@ -5,7 +5,7 @@ import time
 import aiosqlite
 from httpx import AsyncClient
 
-from app import devices, releases
+from app import alerts, devices, releases
 from app.agents_ws import manager
 from app.config import Settings
 
@@ -147,3 +147,17 @@ async def test_update_agent_409_when_already_current(admin_client: AsyncClient):
 async def test_update_agent_404_for_unknown_device(admin_client: AsyncClient):
     r = await admin_client.post("/api/devices/9999/update-agent")
     assert r.status_code == 404
+
+
+async def test_delete_device_removes_its_alerts(client: AsyncClient, admin_client: AsyncClient):
+    """Alerts were the one device-scoped table nobody cleaned up on delete."""
+    raw, _ = await devices.create_enrollment_token(label="alertdev", ttl_hours=1)
+    creds = await devices.enroll_device(token=raw, hostname="alertdev", os="linux")
+    device_id = creds["device_id"]
+
+    await alerts._fire(device_id, "offline", "alertdev ist offline")
+    assert len(await alerts.for_device(device_id)) == 1
+
+    r = await admin_client.delete(f"/api/devices/{device_id}")
+    assert r.status_code == 200
+    assert await alerts.for_device(device_id) == []

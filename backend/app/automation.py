@@ -21,8 +21,7 @@ from __future__ import annotations
 import copy
 import json
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +32,7 @@ from . import devices, jobs, patches, wol
 from .agents_ws import manager
 from .audit import record as audit_record
 from .config import Settings
+from .db import connect as db_connect
 
 log = structlog.get_logger("automation")
 
@@ -134,10 +134,9 @@ async def _seed_default_rules() -> None:
     log.info("automation.rules_seeded")
 
 
-@asynccontextmanager
-async def _connect() -> AsyncIterator[aiosqlite.Connection]:
-    async with aiosqlite.connect(_db_path) as db:
-        yield db
+def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
+    """Shared connection helper — see app/db.py."""
+    return db_connect(_db_path)
 
 
 async def _get_raw(key: str) -> str | None:

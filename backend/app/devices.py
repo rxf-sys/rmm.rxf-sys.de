@@ -15,8 +15,7 @@ import hmac
 import json
 import secrets
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +23,7 @@ import aiosqlite
 import structlog
 
 from .config import Settings
+from .db import connect as db_connect
 
 log = structlog.get_logger("devices")
 
@@ -106,11 +106,9 @@ async def _migrate_devices(db: aiosqlite.Connection) -> None:
         log.info("devices.migrated", column="maintenance_until")
 
 
-@asynccontextmanager
-async def _connect() -> AsyncIterator[aiosqlite.Connection]:
-    async with aiosqlite.connect(_db_path) as db:
-        await db.execute("PRAGMA foreign_keys = ON")
-        yield db
+def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
+    """Shared connection helper — see app/db.py."""
+    return db_connect(_db_path)
 
 
 def _hash_token(token: str) -> str:

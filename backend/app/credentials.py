@@ -15,8 +15,7 @@ text file.
 from __future__ import annotations
 
 import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +24,7 @@ import structlog
 from cryptography.fernet import Fernet, InvalidToken
 
 from .config import Settings
+from .db import connect as db_connect
 
 log = structlog.get_logger("credentials")
 
@@ -83,10 +83,9 @@ async def ensure_schema(settings: Settings) -> None:
     log.info("credentials.ready", db=_db_path)
 
 
-@asynccontextmanager
-async def _connect() -> AsyncIterator[aiosqlite.Connection]:
-    async with aiosqlite.connect(_db_path) as db:
-        yield db
+def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
+    """Shared connection helper — see app/db.py."""
+    return db_connect(_db_path)
 
 
 def _row_public(row: aiosqlite.Row) -> dict[str, Any]:

@@ -202,14 +202,27 @@ Lifespan (`backend/app/main.py:115-126`).
 | `script_schedules` | Wöchentliche Skript-Läufe | `automation.py:54` |
 | `persons` | Betreute Personen ("Kunden"); Geräte hängen über `person_id` daran | `persons.py:24` |
 | `device_credentials` | Fernet-verschlüsselte Geheimnisse je Gerät | `credentials.py:31` |
+| `schema_meta` | Schema-Version der Datei (nur informativ) | `db.py` |
 
-**Migrationen**: Es gibt kein Alembic und keine Schema-Version. Das Schema
-wächst über `CREATE TABLE IF NOT EXISTS` plus additive
-`PRAGMA table_info(...)` → `ALTER TABLE ... ADD COLUMN`-Prüfungen an vier
-Stellen (`accounts.py:100`, `devices.py:89`, `alerts.py:63`,
-`scripts.py:56`). Spalten werden nie entfernt oder umbenannt. Für den
-Umfang dieses Projekts ist das tragfähig; ein Downgrade ist damit aber nicht
-vorgesehen — dafür gibt es das Backup
+**Verbindungen**: Alle Module öffnen die Datenbank über
+`app/db.py:connect()`. Das ist kein Selbstzweck — SQLite schaltet
+Fremdschlüssel **pro Verbindung** ab, und solange jedes Modul sein eigenes
+`_connect` hatte, hing es davon ab, welches Modul das DELETE ausführte, ob ein
+`ON DELETE CASCADE` überhaupt griff.
+
+**Migrationen**: Es gibt kein Alembic. Das Schema wächst über
+`CREATE TABLE IF NOT EXISTS` plus additive `PRAGMA table_info(...)` →
+`ALTER TABLE ... ADD COLUMN`-Prüfungen an vier Stellen (`accounts.py`,
+`devices.py`, `alerts.py`, `scripts.py`). Spalten werden nie entfernt oder
+umbenannt.
+
+`app/db.py:SCHEMA_VERSION` wird beim Start in der Tabelle `schema_meta`
+festgehalten. Der Wert blockiert nichts: Ist die Datei von einem neueren Build
+geschrieben worden — so sieht ein Rollback von hier aus —, gibt es eine
+Warnung im Log, aber keinen Startabbruch. Additive Migrationen bedeuten, dass
+der ältere Code weiterläuft und die zusätzlichen Spalten ignoriert; einen
+Rollback im Störfall zu blockieren würde mehr kosten als es bringt. Ein echtes
+Downgrade des Schemas gibt es nicht — dafür gibt es das Backup
 ([`OPERATIONS.md`](OPERATIONS.md)).
 
 ## 8. Hintergrundprozesse

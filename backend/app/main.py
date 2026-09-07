@@ -15,6 +15,7 @@ from . import (
     audit,
     automation,
     credentials,
+    db,
     devices,
     jobs,
     metrics,
@@ -113,6 +114,7 @@ async def lifespan(app: FastAPI):
     # Account auth is mandatory — its schema + first-admin bootstrap run
     # before anything else so the API is never up without a way to log in.
     await accounts.ensure_schema(_settings)
+    await db.record_schema_version(_settings.storage_db_path, structlog.get_logger("db"))
     await accounts.bootstrap_admin(_settings)
     await devices.ensure_schema(_settings)
     await metrics.ensure_schema(_settings)

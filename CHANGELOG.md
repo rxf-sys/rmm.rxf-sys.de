@@ -29,6 +29,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   `METRICS_RAW_RETENTION_H` und `METRICS_HOURLY_RETENTION_D`.
 
 ### Geändert
+- Alle Module öffnen die Datenbank über einen gemeinsamen Helfer
+  (`app/db.py`), der Fremdschlüssel einschaltet. Vorher taten das zwei von
+  zwölf, wodurch `ON DELETE CASCADE` davon abhing, welches Modul das DELETE
+  ausführte.
+- Die Schema-Version steht jetzt in der Datenbank (`schema_meta`). Läuft ein
+  älterer Build gegen eine neuere Datei, gibt es eine Warnung im Log statt
+  gar keines Hinweises.
 - Der ruff-Regelsatz ist explizit in `pyproject.toml` aufgeführt und die
   ruff-Version auf die 0.16er-Reihe gepinnt. Vorher hätte eine neue
   ruff-Version das Lint-Gate ohne Codeänderung rot gemacht.
@@ -43,6 +50,9 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Formularfelder hatten Beschriftungen ohne Zuordnung (`span` statt `label`).
 - Eine Erfolgsmeldung („Magic Packet gesendet") wurde als Fehler in Rot
   ausgegeben, weil sie durch den Fehlerkanal lief.
+- Das Löschen eines Geräts räumte seine Alarme nicht mit ab. Die Zeilen
+  blieben in der Historie stehen und verwiesen auf eine Geräte-ID, die es
+  nicht mehr gab.
 - Ein Fehler in einem der beiden Hintergrund-Loops wurde beim Herunterfahren
   stillschweigend verschluckt; er wird jetzt geloggt.
 - Fleet-Broadcasts konnten von der Garbage Collection abgeräumt werden, bevor
