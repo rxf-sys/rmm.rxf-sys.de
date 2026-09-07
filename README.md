@@ -181,6 +181,14 @@ curl -fsS https://rmm.rxf-sys.de/api/health
 Bedrohungsmodell, Secrets-Handling, Key-Rotation und Meldeweg:
 [`SECURITY.md`](SECURITY.md).
 
+## Audit
+
+Der letzte vollständige Audit-Durchlauf (Doku, acht Rollenperspektiven,
+Live-Readiness) liegt unter
+[`docs/audit/2026-09-07-audit-report.md`](docs/audit/2026-09-07-audit-report.md)
+— inklusive Go-Live-Checkliste und der Punkte, die bewusst offen geblieben
+sind.
+
 ## Mitarbeit
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) beschreibt Setup, Konventionen und die
