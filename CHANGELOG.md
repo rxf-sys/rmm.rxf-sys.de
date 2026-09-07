@@ -8,6 +8,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- Optionale `.pre-commit-config.yaml` (ruff, gofmt, go vet, eslint, tsc, plus
+  ein Riegel gegen versehentlich eingecheckte Secret-Dateien).
+- Agent-Tests von 4 auf 17: apt-Ausgabe-Parser (dafür aus der
+  Kommandoausführung herausgelöst), Log-Ringpuffer inkl. Nebenläufigkeit,
+  Shell-Auswahl und Timeout-Deckelung, Rechte der Konfigurationsdatei.
 - CI prüft jetzt auch Frontend-Lint und Frontend-Tests und hat einen eigenen
   Audit-Job (`pip-audit`, `npm audit`, `govulncheck`). Vorher gab es
   überhaupt kein Dependency-Gate.

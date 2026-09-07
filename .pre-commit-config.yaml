@@ -1,0 +1,54 @@
+# Optional, not required: CI is the authority and runs the same checks.
+# This only moves the fast ones earlier, so a typo does not cost a CI round.
+#
+#   pip install pre-commit && pre-commit install
+#
+# Everything here is local — no network, no downloads at commit time — so a
+# commit stays possible on a train.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff (backend)
+        entry: bash -c 'cd backend && ruff check "$@"' --
+        language: system
+        types: [python]
+        files: ^backend/
+        require_serial: true
+
+      - id: gofmt
+        name: gofmt (agent)
+        entry: bash -c 'cd agent && gofmt -l . | tee /dev/stderr | (! read)'
+        language: system
+        types: [go]
+        files: ^agent/
+        pass_filenames: false
+
+      - id: go-vet
+        name: go vet (agent)
+        entry: bash -c 'cd agent && go vet ./...'
+        language: system
+        types: [go]
+        files: ^agent/
+        pass_filenames: false
+
+      - id: eslint
+        name: eslint (frontend)
+        entry: bash -c 'cd frontend && npx eslint .'
+        language: system
+        files: ^frontend/src/.*\.tsx?$
+        pass_filenames: false
+
+      - id: tsc
+        name: tsc (frontend)
+        entry: bash -c 'cd frontend && npx tsc -b'
+        language: system
+        files: ^frontend/(src/.*\.tsx?|tsconfig\.json)$
+        pass_filenames: false
+
+      - id: no-secret-files
+        name: keine Secret-Dateien committen
+        entry: "bash -c 'echo \"abgelehnt: enthaelt Secrets und ist gitignored\" >&2; exit 1' --"
+        language: system
+        files: (^|/)\.env($|\.)|\.agent-sign\.env$
+        exclude: \.env\.example$

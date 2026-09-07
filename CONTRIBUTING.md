@@ -58,6 +58,17 @@ cd agent    && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 Die Coverage-Schwelle von 70 % ist eine Untergrenze, kein Ziel; der Ist-Stand
 liegt deutlich darüber. Neue Backend-Logik ohne Test wird nicht gemergt.
 
+### Optional: die schnellen Checks vor dem Commit
+
+```bash
+pip install pre-commit && pre-commit install
+```
+
+Führt ruff, gofmt, go vet, eslint und tsc auf den geänderten Dateien aus und
+verhindert, dass eine `.env` oder der Signaturschlüssel versehentlich
+eingecheckt wird. Alles läuft lokal, ohne Netz — ein Commit bleibt also auch
+im Zug möglich. Verbindlich ist trotzdem CI.
+
 ## Konventionen
 
 **Sprache.** Prosa (Doku, Commit-Bodies, UI-Texte, Fehlermeldungen für

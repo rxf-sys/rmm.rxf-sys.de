@@ -29,6 +29,15 @@ func scanPatchesOS(ctx context.Context) ([]patchItem, error) {
 		return nil, fmt.Errorf("apt-get simulate: %w", err)
 	}
 
+	return parseAptSimulate(out), nil
+}
+
+// parseAptSimulate turns `apt-get -s dist-upgrade` output into patch items.
+//
+// Split out from the command execution so the parsing — which is where the
+// bugs live — is testable without an apt on the machine. Only "Inst " lines
+// carry an upgrade; everything else (Conf, Remove, progress noise) is ignored.
+func parseAptSimulate(out []byte) []patchItem {
 	var items []patchItem
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	for sc.Scan() {
@@ -42,12 +51,15 @@ func scanPatchesOS(ctx context.Context) ([]patchItem, error) {
 		}
 		pkg := fields[1]
 		severity := "other"
+		// apt names the origin in brackets; the security pocket is the only
+		// signal available here, so a match is the closest thing to a
+		// severity that this OS gives us.
 		if strings.Contains(strings.ToLower(line), "security") {
 			severity = "important"
 		}
 		items = append(items, patchItem{PatchID: pkg, Title: pkg, Severity: severity})
 	}
-	return items, nil
+	return items
 }
 
 // installPatchesOS upgrades exactly the named packages. Empty list = all
