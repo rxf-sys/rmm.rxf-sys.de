@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
+import { useConfirm } from '../hooks/useConfirm';
 import type { Device, Person } from '../types';
 import { Dot } from '../ui';
 import { deviceState, stateColor } from '../deviceStatus';
@@ -23,6 +24,7 @@ interface Draft {
 const EMPTY: Draft = { id: null, name: '', email: '', phone: '', notes: '' };
 
 export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh }: Props) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [draft, setDraft] = useState<Draft | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   // One stable key per open form: "new", or the id being edited. Focus follows
@@ -65,12 +67,18 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
   };
 
   const remove = async (p: Person) => {
-    if (
-      !confirm(
-        `„${p.name}" wirklich löschen? Zugewiesene Geräte bleiben erhalten, das verknüpfte Betrachter-Konto wird mitgelöscht.`,
-      )
-    )
-      return;
+    const ok = await ask({
+      title: 'Person löschen',
+      body: (
+        <>
+          <strong>{p.name}</strong> wird entfernt. Zugewiesene Geräte bleiben erhalten und werden
+          nur entkoppelt; das verknüpfte Betrachter-Konto wird mitgelöscht.
+        </>
+      ),
+      confirmLabel: 'Person löschen',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.deletePerson(p.id);
       onRefresh();
@@ -81,6 +89,7 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
 
   return (
     <div className="screen">
+      {confirmDialog}
       {createdLogin && (
         <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={{ fontWeight: 800, fontSize: 13 }}>Betrachter-Konto angelegt</span>

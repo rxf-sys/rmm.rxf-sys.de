@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
+import { useConfirm } from '../hooks/useConfirm';
 import { formatRelative } from '../format';
 import { IconFileCode } from '../icons';
 import type { Device, Person, Script, ScriptSchedule, ScopeKind } from '../types';
@@ -25,6 +26,7 @@ interface Draft {
 }
 
 export function ScheduledScripts({ schedules, devices, persons, isAdmin, onChanged }: Props) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [scripts, setScripts] = useState<Script[]>([]);
   // Bound once so the "add schedule" button and its handler agree that a
   // script exists — scripts[0] on its own is possibly undefined.
@@ -84,7 +86,18 @@ export function ScheduledScripts({ schedules, devices, persons, isAdmin, onChang
   };
 
   const remove = async (s: ScriptSchedule) => {
-    if (!confirm(`Zeitplan für „${scriptName(s.script_id)}" entfernen?`)) return;
+    const ok = await ask({
+      title: 'Zeitplan entfernen',
+      body: (
+        <>
+          Das Skript <strong>{scriptName(s.script_id)}</strong> läuft danach nicht mehr
+          automatisch. Das Skript selbst bleibt in der Bibliothek.
+        </>
+      ),
+      confirmLabel: 'Zeitplan entfernen',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.deleteSchedule(s.id);
       onChanged();
@@ -95,6 +108,7 @@ export function ScheduledScripts({ schedules, devices, persons, isAdmin, onChang
 
   return (
     <div className="card" style={{ overflow: 'hidden' }}>
+      {confirmDialog}
       <div className="card-head">
         <span className="card-title">Geplante Skripte</span>
         <span className="muted" style={{ fontSize: 11 }}>{schedules.length}</span>

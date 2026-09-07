@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { formatBytes, formatRate, formatRelative, osLabel } from '../format';
+import { useConfirm } from '../hooks/useConfirm';
 import { useJobStream } from '../hooks/useJobStream';
 import type {
   Alert,
@@ -93,8 +94,12 @@ export function DeviceDetail({
   onBack,
   onDeleted,
 }: Props) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [detail, setDetail] = useState<DeviceDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Separate from `error`: a confirmation rendered in red as if it were a
+  // failure is worse than no confirmation at all.
+  const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<TabId>('overview');
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -135,7 +140,19 @@ export function DeviceDetail({
   }, [load]);
 
   const remove = async () => {
-    if (!confirm('Gerät wirklich entfernen? Der Agent verliert damit den Zugang.')) return;
+    const ok = await ask({
+      title: 'Gerät entfernen',
+      body: (
+        <>
+          <strong>{detail?.device.hostname ?? `Gerät ${deviceId}`}</strong> wird samt Verlauf, Inventar,
+          Alarmen und gespeicherten Passwörtern gelöscht. Der Agent auf dem Gerät verliert sofort
+          seinen Zugang und müsste neu enrollt werden.
+        </>
+      ),
+      confirmLabel: 'Endgültig entfernen',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.deleteDevice(deviceId);
       onDeleted();
@@ -155,17 +172,32 @@ export function DeviceDetail({
 
   const wake = async () => {
     setError(null);
+    setNotice(null);
     try {
       const r = await api.wakeDevice(deviceId);
-      setError(`✓ Magic Packet an ${r.sent} MAC(s) gesendet — das Gerät sollte in Kürze hochfahren.`);
+      setNotice(
+        `Magic Packet an ${r.sent} MAC(s) gesendet — das Gerät sollte in Kürze hochfahren.`,
+      );
     } catch (e) {
       setError(apiErrorMessage(e));
     }
   };
 
   const updateAgentNow = async () => {
+    const ok = await ask({
+      title: 'Agent aktualisieren',
+      body: (
+        <>
+          Der Agent lädt die neue Binary, prüft Signatur und Prüfsumme, tauscht sich aus und
+          startet neu. Laufende Jobs auf diesem Gerät brechen dabei ab.
+        </>
+      ),
+      confirmLabel: 'Update anstoßen',
+    });
+    if (!ok) return;
     setAgentUpdating(true);
     setError(null);
+    setNotice(null);
     try {
       const r = await api.updateAgent(deviceId);
       setAgentUpdateMsg(
@@ -197,6 +229,7 @@ export function DeviceDetail({
 
   return (
     <div className="screen" style={{ paddingTop: 18 }}>
+      {confirmDialog}
       <div className="row" style={{ gap: 12 }}>
         <button className="btn-icon sq30" onClick={onBack}>
           ←
@@ -271,6 +304,11 @@ export function DeviceDetail({
       </div>
 
       {error && <p className="err">{error}</p>}
+      {notice && (
+        <p style={{ color: 'var(--ok)', fontSize: 12.5, fontWeight: 600, margin: 0 }} role="status">
+          {notice}
+        </p>
+      )}
 
       {d.agent_update_available && (
         <div className="card card-pad row" style={{ gap: 10, flexWrap: 'wrap', borderColor: 'var(--accLine)' }}>
@@ -385,6 +423,7 @@ interface CredDraft {
 const EMPTY_CRED: CredDraft = { id: null, label: '', username: '', secret: '', notes: '' };
 
 function PasswordsTab({ deviceId }: { deviceId: number }) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [creds, setCreds] = useState<Credential[] | null>(null);
   const [draft, setDraft] = useState<CredDraft | null>(null);
   const labelRef = useRef<HTMLInputElement>(null);
@@ -472,7 +511,13 @@ function PasswordsTab({ deviceId }: { deviceId: number }) {
   };
 
   const remove = async (id: number) => {
-    if (!confirm('Passwort-Eintrag wirklich löschen?')) return;
+    const ok = await ask({
+      title: 'Passwort löschen',
+      body: 'Der verschlüsselte Eintrag wird entfernt. Das lässt sich nicht rückgängig machen.',
+      confirmLabel: 'Löschen',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.deleteCredential(deviceId, id);
       await load();
@@ -483,6 +528,7 @@ function PasswordsTab({ deviceId }: { deviceId: number }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {confirmDialog}
       <div className="row" style={{ gap: 8 }}>
         <span className="card-title">Passwörter {creds ? `(${creds.length})` : ''}</span>
         <span className="muted" style={{ fontSize: 11 }}>
@@ -1183,6 +1229,7 @@ function RemoteTab({ device, isOperator, onSession, onChanged }: { device: Devic
   const [shell, setShell] = useState<Shell>(device.os === 'windows' ? 'powershell' : 'bash');
   const [activeJob, setActiveJob] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { ask, dialog: confirmDialog } = useConfirm();
   const stream = useJobStream(activeJob);
   const outRef = useRef<HTMLDivElement>(null);
 
@@ -1195,6 +1242,20 @@ function RemoteTab({ device, isOperator, onSession, onChanged }: { device: Devic
 
   const runShell = async () => {
     if (!command.trim()) return;
+    const ok = await ask({
+      title: 'Befehl ausführen',
+      body: (
+        <>
+          Wird auf <strong>{device.hostname}</strong> mit vollen Systemrechten ausgeführt:
+          <pre className="mono" style={{ fontSize: 11.5, whiteSpace: 'pre-wrap', marginTop: 8 }}>
+            {command.trim()}
+          </pre>
+        </>
+      ),
+      confirmLabel: 'Ausführen',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const r = await api.createShellJob(device.id, command.trim(), shell);
       setActiveJob(r.job.id);
@@ -1218,6 +1279,7 @@ function RemoteTab({ device, isOperator, onSession, onChanged }: { device: Devic
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {confirmDialog}
       {device.rustdesk_id && (
         <div className="card card-pad row" style={{ gap: 10 }}>
           <span className="card-title-sm">Remote-Desktop</span>
@@ -1330,6 +1392,7 @@ function RemoteSetup({ device, onChanged }: { device: Device; onChanged: () => v
 // Updates tab (patches)
 // ---------------------------------------------------------------------------
 function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; connected: boolean; isOperator: boolean }) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [patches, setPatches] = useState<Patch[] | null>(null);
   const [installingJob, setInstallingJob] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1367,6 +1430,19 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
     } catch (e) { setError(apiErrorMessage(e)); } finally { setBusy(false); }
   };
   const install = async (securityOnly: boolean) => {
+    const ok = await ask({
+      title: securityOnly ? 'Sicherheitsupdates installieren' : 'Alle Updates installieren',
+      body: (
+        <>
+          Die Installation läuft auf dem Gerät und kann je nach Umfang lange dauern. Manche
+          Updates erzwingen einen Neustart — wer gerade davor sitzt, verliert ungespeicherte
+          Arbeit.
+        </>
+      ),
+      confirmLabel: 'Installation starten',
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const r = await api.installPatches(deviceId, { security_only: securityOnly });
@@ -1379,6 +1455,7 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {confirmDialog}
       <div className="row" style={{ gap: 8 }}>
         <span className="card-title">Updates {patches ? `(${patches.length})` : ''}</span>
         {isOperator && (

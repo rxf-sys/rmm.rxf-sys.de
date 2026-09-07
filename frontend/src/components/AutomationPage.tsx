@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
+import { useConfirm } from '../hooks/useConfirm';
 import { formatRelative } from '../format';
 import type { AlertRule, AutomationConfig, Device, Person, RuleType, ScopeKind } from '../types';
 import { Skeleton } from '../ui';
@@ -38,6 +39,7 @@ const EMPTY_RULE: RuleDraft = {
 };
 
 export function AutomationPage({ devices, persons, isAdmin }: Props) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [cfg, setCfg] = useState<AutomationConfig | null>(null);
   const [draft, setDraft] = useState<RuleDraft | null>(null);
   const [error, setError] = useState('');
@@ -108,7 +110,18 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
   };
 
   const removeRule = async (r: AlertRule) => {
-    if (!confirm(`Regel „${RULE_META[r.type].label}" (${scopeLabel(r)}) wirklich entfernen?`)) return;
+    const ok = await ask({
+      title: 'Alarmregel entfernen',
+      body: (
+        <>
+          Die Regel <strong>{RULE_META[r.type].label}</strong> ({scopeLabel(r)}) wird gelöscht.
+          Betroffene Geräte lösen danach keinen Alarm dieses Typs mehr aus.
+        </>
+      ),
+      confirmLabel: 'Regel entfernen',
+      danger: true,
+    });
+    if (!ok) return;
     setError('');
     try {
       await api.deleteRule(r.id);
@@ -146,6 +159,7 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
 
   return (
     <div className="screen">
+      {confirmDialog}
       <div className="page-head">
         <h1 className="page-title">Automatisierung</h1>
         <span className="muted">Alarm-Regeln, Zeitfenster und Zuweisungen</span>

@@ -13,6 +13,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Dashboard weder das eine noch das andere.
 - `components/Modal.tsx`: Dialoge mit Fokusfalle, Escape, Fokus-Rückgabe und
   `role="dialog"`.
+- Echte URLs (react-router): Geräteseiten sind verlinkbar, der Zurück-Button
+  funktioniert, ein Reload landet dort, wo man war.
+- Bestätigungsdialoge für Patch-Installation, Ad-hoc-Befehl und Agent-Update —
+  drei Aktionen, die vorher ohne Rückfrage liefen.
+- `ErrorBoundary`: ein Renderfehler zeigt eine Meldung statt einer weißen
+  Seite.
 - `docs/PRIVACY.md`: was auf einem betreuten Gerät gemeldet wird und was
   nicht, in einfachem Deutsch für die betreute Person geschrieben.
 - Dokumentation: `docs/ARCHITECTURE.md`, `docs/API.md`,
@@ -35,6 +41,8 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Dialoge waren für Tastatur und Screenreader nicht bedienbar: Klick-Handler
   auf `div`s, keine `role="dialog"`, Fokus blieb hinter dem Dialog.
 - Formularfelder hatten Beschriftungen ohne Zuordnung (`span` statt `label`).
+- Eine Erfolgsmeldung („Magic Packet gesendet") wurde als Fehler in Rot
+  ausgegeben, weil sie durch den Fehlerkanal lief.
 - Ein Fehler in einem der beiden Hintergrund-Loops wurde beim Herunterfahren
   stillschweigend verschluckt; er wird jetzt geloggt.
 - Fleet-Broadcasts konnten von der Garbage Collection abgeräumt werden, bevor
