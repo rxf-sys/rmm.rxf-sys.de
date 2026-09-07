@@ -8,6 +8,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- Frontend-Lint-Gate (ESLint mit typescript-eslint, react-hooks und jsx-a11y)
+  und Frontend-Tests (Vitest + Testing Library). Vorher gab es für das
+  Dashboard weder das eine noch das andere.
+- `components/Modal.tsx`: Dialoge mit Fokusfalle, Escape, Fokus-Rückgabe und
+  `role="dialog"`.
 - `docs/PRIVACY.md`: was auf einem betreuten Gerät gemeldet wird und was
   nicht, in einfachem Deutsch für die betreute Person geschrieben.
 - Dokumentation: `docs/ARCHITECTURE.md`, `docs/API.md`,
@@ -25,6 +30,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   mehr der Realität (SSH statt Self-hosted Runner).
 
 ### Behoben
+- Der Live-Job-Stream blieb nach einem Verbindungsabbruch stumm stehen. Er
+  verbindet jetzt mit Backoff neu und zeigt den Abbruch an.
+- Dialoge waren für Tastatur und Screenreader nicht bedienbar: Klick-Handler
+  auf `div`s, keine `role="dialog"`, Fokus blieb hinter dem Dialog.
+- Formularfelder hatten Beschriftungen ohne Zuordnung (`span` statt `label`).
 - Ein Fehler in einem der beiden Hintergrund-Loops wurde beim Herunterfahren
   stillschweigend verschluckt; er wird jetzt geloggt.
 - Fleet-Broadcasts konnten von der Garbage Collection abgeräumt werden, bevor

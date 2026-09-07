@@ -85,7 +85,7 @@ cd agent && make build && ./rmm-agent version
 
 ```bash
 cd backend  && ruff check . && pytest -v --cov=app --cov-fail-under=70
-cd frontend && npm run build   # tsc -b (strict) + vite build
+cd frontend && npm run lint && npm test && npm run build
 cd agent    && make vet test
 ```
 

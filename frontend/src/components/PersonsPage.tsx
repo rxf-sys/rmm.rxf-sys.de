@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import type { Device, Person } from '../types';
-import { Dot, deviceState, stateColor } from '../ui';
+import { Dot } from '../ui';
+import { deviceState, stateColor } from '../deviceStatus';
 
 interface Props {
   persons: Person[];
@@ -23,6 +24,14 @@ const EMPTY: Draft = { id: null, name: '', email: '', phone: '', notes: '' };
 
 export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh }: Props) {
   const [draft, setDraft] = useState<Draft | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  // One stable key per open form: "new", or the id being edited. Focus follows
+  // the form when it is revealed — the point autoFocus got right, without
+  // moving focus unexpectedly on page load.
+  const draftKey = draft ? String(draft.id ?? 'new') : null;
+  useEffect(() => {
+    if (draftKey !== null) nameRef.current?.focus();
+  }, [draftKey]);
   const [error, setError] = useState<string | null>(null);
   // Zugangsdaten des automatisch angelegten Betrachter-Kontos — erscheinen
   // genau einmal nach dem Anlegen (das Passwort ist danach nicht mehr abrufbar).
@@ -134,7 +143,8 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               placeholder="Name, z. B. Mama"
-              autoFocus
+              aria-label="Name der Person"
+              ref={nameRef}
             />
             <input
               className="input"

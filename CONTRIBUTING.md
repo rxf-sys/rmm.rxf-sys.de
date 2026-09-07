@@ -43,7 +43,7 @@ CI-Gates:
 
 ```bash
 cd backend  && ruff check . && pytest -v --cov=app --cov-fail-under=70
-cd frontend && npm run build          # tsc -b (strict) + vite build
+cd frontend && npm run lint && npm test && npm run build
 cd agent    && make vet test
 ```
 
@@ -65,9 +65,12 @@ Event-Namen im Schema `bereich.ereignis`. Jede Zustandsänderung an einem
 Gerät gehört ins Audit-Log. Jedes Modul bringt sein eigenes Schema mit und
 legt es in `ensure_schema()` an.
 
-**Frontend.** TypeScript strict, keine `any`-Fluchten. API-Aufrufe
-ausschließlich über `src/api/client.ts`. Fehler werden über
-`apiErrorMessage(e)` in Text übersetzt, nicht selbst zusammengebaut.
+**Frontend.** TypeScript strict inklusive `noUncheckedIndexedAccess`, keine
+`any`-Fluchten. API-Aufrufe ausschließlich über `src/api/client.ts`. Fehler
+werden über `apiErrorMessage(e)` in Text übersetzt, nicht selbst
+zusammengebaut. Dialoge laufen über `components/Modal.tsx` — der bringt
+Fokusfalle, Escape und die ARIA-Rollen mit. Module exportieren entweder
+Komponenten oder Hilfsfunktionen, nicht beides (sonst bricht Fast Refresh).
 
 **Agent.** `CGO_ENABLED=0`, damit jedes Target eine einzelne statische Binary
 bleibt. Plattformspezifisches gehört in `*_linux.go` / `*_windows.go` /
@@ -100,6 +103,9 @@ Dinge, die hier schon einmal Zeit gekostet haben:
   durchzuschieben.
 - **Der Agent lehnt jedes Update ab, wenn kein Public Key eingebrannt ist.**
   Lokale Builds über `make build` haben keinen — das ist kein Fehler.
+- **ESLint ist auf der 9er-Reihe gepinnt.** `eslint-plugin-jsx-a11y` hat noch
+  keine ESLint-10-Unterstützung, und die Accessibility-Regeln sind der Grund,
+  warum es das Gate überhaupt gibt.
 
 ## Struktur
 

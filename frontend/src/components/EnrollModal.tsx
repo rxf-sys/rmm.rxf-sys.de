@@ -3,6 +3,7 @@ import { api, apiErrorMessage } from '../api/client';
 import { formatDateTime } from '../format';
 import { IconDownload } from '../icons';
 import type { CreatedEnrollToken, EnrollToken } from '../types';
+import { Modal } from './Modal';
 
 interface Props {
   onClose: () => void;
@@ -145,130 +146,128 @@ export function EnrollModal({ onClose }: Props) {
   };
 
   return (
-    <div className="overlay modal-wrap" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="row">
-          <span style={{ fontWeight: 800, fontSize: 16 }}>Gerät hinzufügen</span>
-          <button className="modal-close" onClick={onClose} aria-label="Schließen">
-            ✕
+    <Modal
+      title="Gerät hinzufügen"
+      onClose={onClose}
+      headerExtra={
+        <button className="modal-close" onClick={onClose} aria-label="Schließen">
+          ✕
+        </button>
+      }
+    >
+      {!created ? (
+        <>
+          <span className="muted" style={{ lineHeight: 1.6 }}>
+            Erzeugt ein Einmal-Token (24 h gültig). Damit meldet sich der Agent auf dem Zielgerät
+            an und installiert sich als Dienst.
+          </span>
+          <label className="field">
+            <span className="field-label">Besitzer / Bezeichnung (optional)</span>
+            <input
+              className="input"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="z. B. Laptop Mama"
+            />
+          </label>
+          <button
+            className="btn btn-primary"
+            style={{ alignSelf: 'flex-start' }}
+            onClick={() => void mint()}
+            disabled={busy}
+          >
+            {busy ? 'Erzeuge…' : 'Token erzeugen'}
           </button>
-        </div>
-
-        {!created ? (
-          <>
-            <span className="muted" style={{ lineHeight: 1.6 }}>
-              Erzeugt ein Einmal-Token (24 h gültig). Damit meldet sich der Agent auf dem Zielgerät
-              an und installiert sich als Dienst.
-            </span>
-            <div className="field">
-              <span className="field-label">Besitzer / Bezeichnung (optional)</span>
-              <input
-                className="input"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="z. B. Laptop Mama"
-                autoFocus
-              />
-            </div>
-            <button
-              className="btn btn-primary"
-              style={{ alignSelf: 'flex-start' }}
-              onClick={() => void mint()}
-              disabled={busy}
-            >
-              {busy ? 'Erzeuge…' : 'Token erzeugen'}
-            </button>
-          </>
-        ) : (
-          <>
-            <span className="muted" style={{ lineHeight: 1.6 }}>
-              Token erzeugt{created.label ? ` für „${created.label}“` : ''}. Befehl auf dem
-              Zielgerät ausführen — er lädt den Agenten herunter, enrollt das Gerät und
-              installiert den Dienst:
-            </span>
-            <div className="row" style={{ gap: 6 }}>
-              {(Object.keys(commands) as ('windows' | 'linux' | 'darwin')[]).map((p) => (
-                <button
-                  key={p}
-                  className={platform === p ? 'btn btn-accent btn-sm' : 'btn btn-sm'}
-                  onClick={() => setPlatform(p)}
-                >
-                  {commands[p].label}
-                </button>
-              ))}
-            </div>
-            <pre className="pre-box" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{installCmd}</pre>
-            <span className="muted" style={{ fontSize: 11 }}>{commands[platform].hint}</span>
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn btn-accent btn-sm" onClick={() => void copyCmd()}>
-                {copied ? 'Kopiert ✓' : 'CLI-Befehl kopieren'}
-              </button>
-              {platform === 'windows' && (
-                <>
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => void downloadBinary()}
-                    disabled={dlBusy}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                  >
-                    <IconDownload size={13} /> {dlBusy ? 'Lädt…' : 'Windows-Agent herunterladen'}
-                  </button>
-                  <button className="btn btn-sm" onClick={() => void copyText(downloadUrl)}>
-                    Download-Link kopieren
-                  </button>
-                </>
-              )}
-              <button className="btn btn-sm" onClick={() => setCreated(null)}>
-                Weiteres Token
-              </button>
-            </div>
-            {dlError && (
-              <p className="err" role="alert" style={{ margin: 0 }}>
-                {dlError}
-              </p>
-            )}
-            <span className="muted" style={{ fontSize: 10.5 }}>
-              Voraussetzung: ein Agent-Release liegt auf dem Server (agent-releases/) — sonst meldet
-              der Download „kein Release hinterlegt". Siehe Tab „Dokumentation" → Release erzeugen.
-            </span>
-            <span style={{ fontWeight: 600, fontSize: 11, color: 'var(--warn)' }}>
-              ⚠ Das Token wird nur einmal angezeigt und ist {formatDateTime(created.expires_at)}{' '}
-              gültig.
-            </span>
-          </>
-        )}
-
-        {error && (
-          <p className="err" role="alert">
-            {error}
-          </p>
-        )}
-
-        {tokens.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <div className="sidebar-label" style={{ margin: '4px 0 4px', padding: 0 }}>
-              Offene Tokens
-            </div>
-            {tokens.map((t) => (
-              <div
-                key={t.id}
-                className="row"
-                style={{ padding: '6px 0', borderTop: '1px solid var(--line2)', fontSize: 12 }}
+        </>
+      ) : (
+        <>
+          <span className="muted" style={{ lineHeight: 1.6 }}>
+            Token erzeugt{created.label ? ` für „${created.label}“` : ''}. Befehl auf dem
+            Zielgerät ausführen — er lädt den Agenten herunter, enrollt das Gerät und
+            installiert den Dienst:
+          </span>
+          <div className="row" style={{ gap: 6 }}>
+            {(Object.keys(commands) as ('windows' | 'linux' | 'darwin')[]).map((p) => (
+              <button
+                key={p}
+                className={platform === p ? 'btn btn-accent btn-sm' : 'btn btn-sm'}
+                onClick={() => setPlatform(p)}
               >
-                <span style={{ flex: 1 }}>
-                  {t.label || <em style={{ color: 'var(--tx3)' }}>ohne Bezeichnung</em>}
-                </span>
-                <span className="muted" style={{ fontSize: 11 }}>
-                  bis {formatDateTime(t.expires_at)}
-                </span>
-                <button className="btn btn-danger btn-sm" onClick={() => void revoke(t.id)}>
-                  Widerrufen
-                </button>
-              </div>
+                {commands[p].label}
+              </button>
             ))}
           </div>
-        )}
-      </div>
-    </div>
+          <pre className="pre-box" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{installCmd}</pre>
+          <span className="muted" style={{ fontSize: 11 }}>{commands[platform].hint}</span>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-accent btn-sm" onClick={() => void copyCmd()}>
+              {copied ? 'Kopiert ✓' : 'CLI-Befehl kopieren'}
+            </button>
+            {platform === 'windows' && (
+              <>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => void downloadBinary()}
+                  disabled={dlBusy}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  <IconDownload size={13} /> {dlBusy ? 'Lädt…' : 'Windows-Agent herunterladen'}
+                </button>
+                <button className="btn btn-sm" onClick={() => void copyText(downloadUrl)}>
+                  Download-Link kopieren
+                </button>
+              </>
+            )}
+            <button className="btn btn-sm" onClick={() => setCreated(null)}>
+              Weiteres Token
+            </button>
+          </div>
+          {dlError && (
+            <p className="err" role="alert" style={{ margin: 0 }}>
+              {dlError}
+            </p>
+          )}
+          <span className="muted" style={{ fontSize: 10.5 }}>
+            Voraussetzung: ein Agent-Release liegt auf dem Server (agent-releases/) — sonst meldet
+            der Download „kein Release hinterlegt". Siehe Tab „Dokumentation" → Release erzeugen.
+          </span>
+          <span style={{ fontWeight: 600, fontSize: 11, color: 'var(--warn)' }}>
+            ⚠ Das Token wird nur einmal angezeigt und ist {formatDateTime(created.expires_at)}{' '}
+            gültig.
+          </span>
+        </>
+      )}
+
+      {error && (
+        <p className="err" role="alert">
+          {error}
+        </p>
+      )}
+
+      {tokens.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div className="sidebar-label" style={{ margin: '4px 0 4px', padding: 0 }}>
+            Offene Tokens
+          </div>
+          {tokens.map((t) => (
+            <div
+              key={t.id}
+              className="row"
+              style={{ padding: '6px 0', borderTop: '1px solid var(--line2)', fontSize: 12 }}
+            >
+              <span style={{ flex: 1 }}>
+                {t.label || <em style={{ color: 'var(--tx3)' }}>ohne Bezeichnung</em>}
+              </span>
+              <span className="muted" style={{ fontSize: 11 }}>
+                bis {formatDateTime(t.expires_at)}
+              </span>
+              <button className="btn btn-danger btn-sm" onClick={() => void revoke(t.id)}>
+                Widerrufen
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
   );
 }

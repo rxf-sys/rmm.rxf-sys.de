@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { osLabel } from '../format';
 import type { Device, PatchSummary, Person } from '../types';
-import { Dot, deviceState, stateColor } from '../ui';
+import { Dot } from '../ui';
+import { deviceState, stateColor } from '../deviceStatus';
 import type { ReactNode } from 'react';
 import { AppleLogo, LinuxLogo, ServerRack, WindowsLogo } from '../icons';
 

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -8,6 +9,13 @@ export default defineConfig({
     // 'self', und Vites Default (4 KB) hatte kleine Font-Subsets als
     // data:font/woff2 in die CSS gepackt — die der Browser dann blockt.
     assetsInlineLimit: 0,
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
+    coverage: { provider: 'v8', reporter: ['text', 'lcov'] },
   },
   server: {
     proxy: {

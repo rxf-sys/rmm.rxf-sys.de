@@ -18,7 +18,8 @@ import type {
   Severity,
   Shell,
 } from '../types';
-import { Dot, deviceState, diskColor, stateColor } from '../ui';
+import { Dot } from '../ui';
+import { deviceState, diskColor, stateColor } from '../deviceStatus';
 import { IconKey, IconPower, IconTerminal, IconWrench, OsIcon } from '../icons';
 // (osShort available via ../format if needed by future tab work)
 
@@ -100,10 +101,14 @@ export function DeviceDetail({
   const [agentUpdating, setAgentUpdating] = useState(false);
   const [agentUpdateMsg, setAgentUpdateMsg] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Reset during render instead of in an effect: an effect would show the
+  // previous device's update message for one frame after switching devices.
+  const [seenDeviceId, setSeenDeviceId] = useState(deviceId);
+  if (deviceId !== seenDeviceId) {
+    setSeenDeviceId(deviceId);
     setAgentUpdateMsg(null);
     setAgentUpdating(false);
-  }, [deviceId]);
+  }
 
   const load = useCallback(
     (signal?: AbortSignal) =>
@@ -342,11 +347,11 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
   return (
     <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <span className="card-title">Gerät bearbeiten</span>
-      <div className="field">
+      <label className="field">
         <span className="field-label">Besitzer / Bezeichnung</span>
         <input className="input" value={owner} onChange={(e) => setOwner(e.target.value)} />
-      </div>
-      <div className="field">
+      </label>
+      <label className="field">
         <span className="field-label">Zugewiesene Person</span>
         <select className="input" value={personId} onChange={(e) => setPersonId(Number(e.target.value))}>
           <option value={0}>— keine —</option>
@@ -354,11 +359,11 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
-      </div>
-      <div className="field">
+      </label>
+      <label className="field">
         <span className="field-label">Tags (kommagetrennt)</span>
         <input className="input" value={tags} onChange={(e) => setTags(e.target.value)} />
-      </div>
+      </label>
       <div className="row" style={{ gap: 8 }}>
         <button className="btn btn-primary" onClick={() => void save()}>Speichern</button>
         <button className="btn" onClick={onClose}>Abbrechen</button>
@@ -382,6 +387,13 @@ const EMPTY_CRED: CredDraft = { id: null, label: '', username: '', secret: '', n
 function PasswordsTab({ deviceId }: { deviceId: number }) {
   const [creds, setCreds] = useState<Credential[] | null>(null);
   const [draft, setDraft] = useState<CredDraft | null>(null);
+  const labelRef = useRef<HTMLInputElement>(null);
+  // One stable key per open form: "new", or the id being edited. Focus follows
+  // the form when it appears, without autoFocus's page-load surprise.
+  const draftKey = draft ? String(draft.id ?? 'new') : null;
+  useEffect(() => {
+    if (draftKey !== null) labelRef.current?.focus();
+  }, [draftKey]);
   const [revealed, setRevealed] = useState<Record<number, string>>({});
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -488,7 +500,7 @@ function PasswordsTab({ deviceId }: { deviceId: number }) {
         <div className="card card-pad" style={{ borderColor: 'var(--accLine)', display: 'flex', flexDirection: 'column', gap: 9 }}>
           <span className="card-title-sm">{draft.id === null ? 'Neuer Eintrag' : 'Eintrag bearbeiten'}</span>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <input className="input" style={{ flex: '1 1 150px' }} value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder="Bezeichnung, z. B. Windows-Login" autoFocus />
+            <input className="input" style={{ flex: '1 1 150px' }} value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder="Bezeichnung, z. B. Windows-Login" aria-label="Bezeichnung" ref={labelRef} />
             <input className="input" style={{ flex: '1 1 130px' }} value={draft.username} onChange={(e) => setDraft({ ...draft, username: e.target.value })} placeholder="Benutzername (optional)" />
             <input
               className="input"
@@ -960,17 +972,29 @@ function HistoryTab({ deviceId }: { deviceId: number }) {
 
   const W = 600;
   const H = 220;
+  // `samples.length < 2` already rules out an empty array; the explicit
+  // first/last bindings make that visible to the compiler as well.
+  const bounds = () => {
+    if (!samples || samples.length < 2) return null;
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    if (!first || !last) return null;
+    return { t0: first.ts, t1: Math.max(last.ts, first.ts + 1) };
+  };
   const line = (key: 'cpu_pct' | 'mem_pct' | 'disk_max_pct') => {
-    if (!samples || samples.length < 2) return '';
-    const t0 = samples[0].ts;
-    const t1 = Math.max(samples[samples.length - 1].ts, t0 + 1);
+    const b = bounds();
+    if (!b || !samples) return '';
     return samples
-      .map((s) => `${(((s.ts - t0) / (t1 - t0)) * W).toFixed(1)},${(H - (s[key] / 100) * H).toFixed(1)}`)
+      .map(
+        (s) =>
+          `${(((s.ts - b.t0) / (b.t1 - b.t0)) * W).toFixed(1)},${(H - (s[key] / 100) * H).toFixed(1)}`,
+      )
       .join(' ');
   };
   const tsLabel = (frac: number) => {
-    if (!samples || samples.length < 2) return '';
-    const t = samples[0].ts + frac * (samples[samples.length - 1].ts - samples[0].ts);
+    const b = bounds();
+    if (!b) return '';
+    const t = b.t0 + frac * (b.t1 - b.t0);
     return new Date(t * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   };
 

@@ -3,9 +3,10 @@ import { api } from '../api/client';
 import { formatRate, formatRelative } from '../format';
 import type { Account, AuditEvent, Device } from '../types';
 import type { Fleet } from '../hooks/useFleet';
-import { describeAudit } from './AuditPage';
+import { describeAudit } from '../auditText';
 import type { PageId } from './Sidebar';
-import { Dot, Skeleton, deviceState, diskColor, stateColor } from '../ui';
+import { Dot, Skeleton } from '../ui';
+import { deviceState, diskColor, stateColor } from '../deviceStatus';
 import { OsIcon } from '../icons';
 
 interface Props {

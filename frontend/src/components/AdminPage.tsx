@@ -3,6 +3,7 @@ import { api, apiErrorMessage } from '../api/client';
 import { formatRelative } from '../format';
 import type { Account } from '../types';
 import { AdminExtras } from './AdminExtras';
+import { Modal } from './Modal';
 
 interface Props {
   currentUser: Account;
@@ -96,7 +97,7 @@ export function AdminPage({ currentUser }: Props) {
               value={draft.username}
               onChange={(e) => setDraft({ ...draft, username: e.target.value })}
               placeholder="Benutzername"
-              autoFocus
+              aria-label="Benutzername"
             />
             <input
               className="input"
@@ -240,32 +241,33 @@ export function AdminPage({ currentUser }: Props) {
       <AdminExtras currentUser={currentUser} />
 
       {resetFor !== null && (
-        <div className="overlay modal-wrap" onClick={() => setResetFor(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <span style={{ fontWeight: 800, fontSize: 15 }}>
-              Passwort zurücksetzen — {accounts?.find((a) => a.id === resetFor)?.username}
-            </span>
+        <Modal
+          title={`Passwort zurücksetzen — ${accounts?.find((a) => a.id === resetFor)?.username ?? ''}`}
+          onClose={() => setResetFor(null)}
+        >
+          <label className="field" htmlFor="reset-pw">
+            <span className="field-label">Neues Passwort (min. 8 Zeichen)</span>
             <input
+              id="reset-pw"
               className="input"
               type="password"
+              autoComplete="new-password"
               value={resetPw}
               onChange={(e) => setResetPw(e.target.value)}
-              placeholder="Neues Passwort (min. 8 Zeichen)"
-              autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && resetPw.length >= 8) void doReset();
               }}
             />
-            <div className="row" style={{ gap: 8 }}>
-              <button className="btn btn-primary" onClick={() => void doReset()} disabled={resetPw.length < 8}>
-                Setzen
-              </button>
-              <button className="btn" onClick={() => setResetFor(null)}>
-                Abbrechen
-              </button>
-            </div>
+          </label>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn btn-primary" onClick={() => void doReset()} disabled={resetPw.length < 8}>
+              Setzen
+            </button>
+            <button className="btn" onClick={() => setResetFor(null)}>
+              Abbrechen
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

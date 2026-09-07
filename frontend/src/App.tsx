@@ -115,7 +115,14 @@ export default function App() {
 
   return (
     <div className={navOpen ? 'app-shell nav-open' : 'app-shell'}>
-      {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
+      {navOpen && (
+        <button
+          type="button"
+          className="nav-backdrop"
+          aria-label="Navigation schließen"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
       <Sidebar
         page={page}
         onNavigate={goPage}

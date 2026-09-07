@@ -26,6 +26,9 @@ interface Draft {
 
 export function ScheduledScripts({ schedules, devices, persons, isAdmin, onChanged }: Props) {
   const [scripts, setScripts] = useState<Script[]>([]);
+  // Bound once so the "add schedule" button and its handler agree that a
+  // script exists — scripts[0] on its own is possibly undefined.
+  const firstScript = scripts[0];
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState('');
 
@@ -95,12 +98,12 @@ export function ScheduledScripts({ schedules, devices, persons, isAdmin, onChang
       <div className="card-head">
         <span className="card-title">Geplante Skripte</span>
         <span className="muted" style={{ fontSize: 11 }}>{schedules.length}</span>
-        {isAdmin && !draft && scripts.length > 0 && (
+        {isAdmin && !draft && firstScript && (
           <button
             className="btn btn-primary btn-sm grow"
             style={{ marginLeft: 'auto' }}
             onClick={() =>
-              setDraft({ id: null, script_id: scripts[0].id, weekday: 6, hour: 3, scope_kind: 'all', scope_value: '' })
+              setDraft({ id: null, script_id: firstScript.id, weekday: 6, hour: 3, scope_kind: 'all', scope_value: '' })
             }
           >
             + Zeitplan

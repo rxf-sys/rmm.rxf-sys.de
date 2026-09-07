@@ -16,7 +16,12 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    /* Indexing an array or a Record can return undefined; without this the
+       compiler pretends it cannot. Every access is checked explicitly. */
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
   "include": ["src"]
 }

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { formatRelative } from '../format';
-import { osShort } from '../ui';
+import { osShort } from '../deviceStatus';
 import { OsIcon } from '../icons';
 import type { Device, InventoryMatch, PatchSummary, Person } from '../types';
-import { Dot, Skeleton, deviceState, diskColor, stateColor } from '../ui';
+import { Dot, Skeleton } from '../ui';
+import { deviceState, diskColor, stateColor } from '../deviceStatus';
 
 interface Props {
   devices: Device[];
@@ -23,10 +24,9 @@ function SoftwareSearch({ onOpenDevice }: { onOpenDevice: (id: number) => void }
 
   useEffect(() => {
     const query = q.trim();
-    if (query.length < 2) {
-      setResults(null);
-      return;
-    }
+    // Clearing happens in onChange below — an effect that resets state
+    // synchronously just causes an extra render pass.
+    if (query.length < 2) return;
     const ctrl = new AbortController();
     const t = setTimeout(() => {
       api
@@ -50,8 +50,15 @@ function SoftwareSearch({ onOpenDevice }: { onOpenDevice: (id: number) => void }
           className="input btn-sm grow"
           style={{ marginLeft: 'auto', width: 260, flex: 'none' }}
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => {
+            setQ(e.target.value);
+            if (e.target.value.trim().length < 2) {
+              setResults(null);
+              setError('');
+            }
+          }}
           placeholder="Paketname, z. B. java, openssl, firefox…"
+          aria-label="Software über alle Geräte suchen"
         />
       </div>
       {error && <p className="err">{error}</p>}
