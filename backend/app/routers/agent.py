@@ -298,8 +298,10 @@ async def agent_ws(ws: WebSocket) -> None:
     if stale is not None:
         try:
             await stale.close(code=1000, reason="superseded by new connection")
-        except Exception:  # noqa: BLE001 - stale socket is usually already dead
-            pass
+        except Exception as e:  # noqa: BLE001 - any transport error is terminal here
+            # The superseded socket is usually already dead; it has been
+            # replaced in the registry regardless, so this only gets logged.
+            log.debug("agent.stale_close_failed", device_id=device_id, error=str(e))
     if not was_connected:
         fleet_hub.broadcast("device_online")
 

@@ -7,12 +7,11 @@ the audit log.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-
-import time
 
 from .. import alerts, credentials, devices, jobs, metrics, patches, persons, releases, wol
 from ..agents_ws import manager
@@ -166,9 +165,8 @@ async def update_device(
     user: dict = Depends(require_operator),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    if body.person_id:
-        if await persons.get_person(body.person_id) is None:
-            raise HTTPException(status_code=422, detail="Person nicht gefunden")
+    if body.person_id and await persons.get_person(body.person_id) is None:
+        raise HTTPException(status_code=422, detail="Person nicht gefunden")
     device = await devices.update_device(
         device_id,
         owner_label=body.owner_label,

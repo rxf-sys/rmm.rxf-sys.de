@@ -16,9 +16,10 @@ on every tick, so a down ntfy server delays pushes instead of losing them.
 from __future__ import annotations
 
 import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncIterator, Awaitable, Callable
+from typing import Any
 
 import aiosqlite
 import structlog
@@ -115,11 +116,10 @@ async def _mark_notified(alert_id: int) -> None:
 async def device_id_of(alert_id: int) -> int | None:
     """Device an alert belongs to, or None for unknown ids (viewer scoping
     checks this BEFORE acking so foreign alerts stay untouched)."""
-    async with _connect() as db:
-        async with db.execute(
-            "SELECT device_id FROM alerts WHERE id = ?", (alert_id,)
-        ) as cur:
-            row = await cur.fetchone()
+    async with _connect() as db, db.execute(
+        "SELECT device_id FROM alerts WHERE id = ?", (alert_id,)
+    ) as cur:
+        row = await cur.fetchone()
     return int(row[0]) if row else None
 
 

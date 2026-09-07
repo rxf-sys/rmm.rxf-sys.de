@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 import socket
+
 import structlog
 
 log = structlog.get_logger("wol")

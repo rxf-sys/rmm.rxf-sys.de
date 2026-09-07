@@ -149,7 +149,13 @@ async def test_schedule_crud_and_validation(admin_client: AsyncClient):
 
     r = await admin_client.post(
         "/api/automation/schedules",
-        json={"script_id": script["id"], "weekday": 6, "hour": 3, "scope_kind": "tag", "scope_value": "familie"},
+        json={
+            "script_id": script["id"],
+            "weekday": 6,
+            "hour": 3,
+            "scope_kind": "tag",
+            "scope_value": "familie",
+        },
     )
     assert r.status_code == 200
     sched = r.json()["schedule"]

@@ -6,8 +6,8 @@ import aiosqlite
 from httpx import AsyncClient
 
 from app import devices, releases
-from app.config import Settings
 from app.agents_ws import manager
+from app.config import Settings
 
 
 async def _insert_device(settings: Settings, hostname: str, last_seen_at: int | None) -> None:

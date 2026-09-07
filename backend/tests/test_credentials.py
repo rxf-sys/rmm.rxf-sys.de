@@ -63,9 +63,11 @@ async def test_secret_is_encrypted_at_rest(admin_client: AsyncClient, settings: 
         f"/api/devices/{device_id}/credentials",
         json={"label": "x", "secret": "super-geheim-123"},
     )
-    async with aiosqlite.connect(settings.storage_db_path) as db:
-        async with db.execute("SELECT secret_enc FROM device_credentials") as cur:
-            row = await cur.fetchone()
+    async with (
+        aiosqlite.connect(settings.storage_db_path) as db,
+        db.execute("SELECT secret_enc FROM device_credentials") as cur,
+    ):
+        row = await cur.fetchone()
     assert row is not None
     assert b"super-geheim-123" not in bytes(row[0])
 

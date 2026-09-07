@@ -15,9 +15,10 @@ import hmac
 import json
 import secrets
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiosqlite
 import structlog
@@ -136,15 +137,18 @@ def _row_to_device(row: aiosqlite.Row, offline_after_s: int) -> dict[str, Any]:
         "agent_version": row["agent_version"],
         "tags": [t for t in str(row["tags"]).split(",") if t],
         "heartbeat": heartbeat if isinstance(heartbeat, dict) else {},
-        "rustdesk_id": row["rustdesk_id"] if "rustdesk_id" in row.keys() else "",
+        # `in row.keys()` is deliberate: sqlite3.Row.__contains__ tests VALUES,
+        # not column names, so SIM118's rewrite would break these fallbacks for
+        # rows read before the corresponding ALTER TABLE ran.
+        "rustdesk_id": row["rustdesk_id"] if "rustdesk_id" in row.keys() else "",  # noqa: SIM118
         "person_id": (
             int(row["person_id"])
-            if "person_id" in row.keys() and row["person_id"] is not None
+            if "person_id" in row.keys() and row["person_id"] is not None  # noqa: SIM118
             else None
         ),
         "maintenance_until": (
             int(row["maintenance_until"])
-            if "maintenance_until" in row.keys()
+            if "maintenance_until" in row.keys()  # noqa: SIM118
             and row["maintenance_until"] is not None
             and int(row["maintenance_until"]) > time.time()
             else None
@@ -439,7 +443,7 @@ async def update_device(
     if sets:
         params.append(device_id)
         async with _connect() as db:
-            await db.execute(f"UPDATE devices SET {', '.join(sets)} WHERE id = ?", params)
+            await db.execute(f"UPDATE devices SET {', '.join(sets)} WHERE id = ?", params)  # noqa: S608 - literal columns
             await db.commit()
     return await get_device(device_id, offline_after_s=1)
 
@@ -500,21 +504,19 @@ async def in_maintenance_ids() -> set[int]:
     """Device ids whose maintenance window is currently open (for the alert
     engine, which reads this once per tick)."""
     now = int(time.time())
-    async with _connect() as db:
-        async with db.execute(
-            "SELECT id FROM devices WHERE maintenance_until IS NOT NULL AND maintenance_until > ?",
-            (now,),
-        ) as cur:
-            return {int(r[0]) for r in await cur.fetchall()}
+    async with _connect() as db, db.execute(
+        "SELECT id FROM devices WHERE maintenance_until IS NOT NULL AND maintenance_until > ?",
+        (now,),
+    ) as cur:
+        return {int(r[0]) for r in await cur.fetchall()}
 
 
 async def device_ids_for_person(person_id: int) -> set[int]:
     """Ids of the devices assigned to a person (viewer scoping)."""
-    async with _connect() as db:
-        async with db.execute(
-            "SELECT id FROM devices WHERE person_id = ?", (person_id,)
-        ) as cur:
-            return {int(r[0]) for r in await cur.fetchall()}
+    async with _connect() as db, db.execute(
+        "SELECT id FROM devices WHERE person_id = ?", (person_id,)
+    ) as cur:
+        return {int(r[0]) for r in await cur.fetchall()}
 
 
 async def device_macs(device_id: int) -> list[str]:

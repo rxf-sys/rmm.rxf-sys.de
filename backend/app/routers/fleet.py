@@ -31,7 +31,7 @@ async def fleet_ws(ws: WebSocket) -> None:
         while True:
             try:
                 await asyncio.wait_for(ws.receive_text(), timeout=30)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await ws.send_json({"type": "ping"})
     except WebSocketDisconnect:
         pass

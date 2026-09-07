@@ -23,9 +23,10 @@ from __future__ import annotations
 import hashlib
 import secrets
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiosqlite
 import structlog
@@ -176,10 +177,9 @@ def _row_to_user(row: aiosqlite.Row) -> dict[str, Any]:
 
 
 async def count_users() -> int:
-    async with _connect() as db:
-        async with db.execute("SELECT COUNT(*) FROM users") as cur:
-            row = await cur.fetchone()
-            return int(row[0]) if row else 0
+    async with _connect() as db, db.execute("SELECT COUNT(*) FROM users") as cur:
+        row = await cur.fetchone()
+        return int(row[0]) if row else 0
 
 
 async def create_user(
@@ -210,7 +210,8 @@ async def create_user(
         raise AccountError("Benutzername bereits vergeben") from e
     log.info("accounts.user_created", username=username, role=role)
     user = await get_user_by_id(int(user_id or 0))
-    assert user is not None
+    if user is None:
+        raise AccountError("Benutzer konnte nach dem Anlegen nicht gelesen werden")
     return user
 
 
@@ -271,7 +272,7 @@ async def update_user(
     if sets:
         params.append(user_id)
         async with _connect() as db:
-            await db.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = ?", params)
+            await db.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = ?", params)  # noqa: S608 - literal columns
             if disabled:
                 await db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
             await db.commit()
@@ -298,12 +299,11 @@ async def users_for_person(person_id: int) -> list[dict[str, Any]]:
 
 
 async def count_active_admins() -> int:
-    async with _connect() as db:
-        async with db.execute(
-            "SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled = 0"
-        ) as cur:
-            row = await cur.fetchone()
-            return int(row[0]) if row else 0
+    async with _connect() as db, db.execute(
+        "SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled = 0"
+    ) as cur:
+        row = await cur.fetchone()
+        return int(row[0]) if row else 0
 
 
 # ---------------------------------------------------------------------------
@@ -312,9 +312,11 @@ async def count_active_admins() -> int:
 
 
 async def get_totp_secret(user_id: int) -> str | None:
-    async with _connect() as db:
-        async with db.execute("SELECT totp_secret FROM users WHERE id = ?", (user_id,)) as cur:
-            row = await cur.fetchone()
+    async with (
+        _connect() as db,
+        db.execute("SELECT totp_secret FROM users WHERE id = ?", (user_id,)) as cur,
+    ):
+        row = await cur.fetchone()
     return str(row[0]) if row and row[0] else None
 
 
@@ -388,11 +390,10 @@ async def consume_backup_code(user_id: int, code: str) -> bool:
 async def backup_codes_left(user_id: int) -> int:
     import json as _json
 
-    async with _connect() as db:
-        async with db.execute(
-            "SELECT totp_backup_codes FROM users WHERE id = ?", (user_id,)
-        ) as cur:
-            row = await cur.fetchone()
+    async with _connect() as db, db.execute(
+        "SELECT totp_backup_codes FROM users WHERE id = ?", (user_id,)
+    ) as cur:
+        row = await cur.fetchone()
     if not row or not row[0]:
         return 0
     try:
@@ -573,10 +574,12 @@ async def cleanup_expired_sessions() -> int:
 async def get_app_setting(key: str) -> str | None:
     if not _db_path:
         return None
-    async with _connect() as db:
-        async with db.execute("SELECT value FROM app_settings WHERE key = ?", (key,)) as cur:
-            row = await cur.fetchone()
-            return str(row[0]) if row else None
+    async with (
+        _connect() as db,
+        db.execute("SELECT value FROM app_settings WHERE key = ?", (key,)) as cur,
+    ):
+        row = await cur.fetchone()
+        return str(row[0]) if row else None
 
 
 async def set_app_setting(key: str, value: str) -> None:

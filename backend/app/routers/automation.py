@@ -62,9 +62,10 @@ class RuleRequest(BaseModel):
 async def _validate_scope(body: RuleRequest) -> None:
     if body.scope_kind == "tag" and not body.scope_value.strip():
         raise HTTPException(status_code=422, detail="Tag darf nicht leer sein")
-    if body.scope_kind == "person":
-        if not body.scope_value.isdigit() or await persons.get_person(int(body.scope_value)) is None:
-            raise HTTPException(status_code=422, detail="Person nicht gefunden")
+    if body.scope_kind == "person" and (
+        not body.scope_value.isdigit() or await persons.get_person(int(body.scope_value)) is None
+    ):
+        raise HTTPException(status_code=422, detail="Person nicht gefunden")
 
 
 async def _full_state() -> dict:
@@ -96,9 +97,10 @@ async def _validate_schedule(body: ScheduleRequest) -> None:
         raise HTTPException(status_code=422, detail="Skript nicht gefunden")
     if body.scope_kind == "tag" and not body.scope_value.strip():
         raise HTTPException(status_code=422, detail="Tag darf nicht leer sein")
-    if body.scope_kind == "person":
-        if not body.scope_value.isdigit() or await persons.get_person(int(body.scope_value)) is None:
-            raise HTTPException(status_code=422, detail="Person nicht gefunden")
+    if body.scope_kind == "person" and (
+        not body.scope_value.isdigit() or await persons.get_person(int(body.scope_value)) is None
+    ):
+        raise HTTPException(status_code=422, detail="Person nicht gefunden")
 
 
 @router.get("")

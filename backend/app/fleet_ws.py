@@ -22,6 +22,10 @@ class FleetHub:
     def __init__(self) -> None:
         self._subs: set[WebSocket] = set()
         self._lock = asyncio.Lock()
+        # asyncio only keeps a weak reference to a running task. Without a
+        # strong one here a broadcast can be garbage-collected mid-send and
+        # the hint silently disappears.
+        self._tasks: set[asyncio.Task[None]] = set()
 
     async def subscribe(self, ws: WebSocket) -> None:
         async with self._lock:
@@ -38,7 +42,9 @@ class FleetHub:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
-        loop.create_task(self._broadcast(kind))
+        task = loop.create_task(self._broadcast(kind))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     async def _broadcast(self, kind: str) -> None:
         if not self._subs:
@@ -56,6 +62,9 @@ class FleetHub:
 
     def reset_for_tests(self) -> None:
         self._subs.clear()
+        for task in self._tasks:
+            task.cancel()
+        self._tasks.clear()
 
 
 hub = FleetHub()

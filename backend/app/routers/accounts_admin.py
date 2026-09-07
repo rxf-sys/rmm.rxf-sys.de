@@ -52,11 +52,10 @@ def _forbid_self(actor: dict, user_id: int, action: str) -> None:
 
 
 async def _forbid_last_admin(target: dict, action: str) -> None:
-    if target["role"] == "admin" and not target["disabled"]:
-        if await accounts.count_active_admins() <= 1:
-            raise HTTPException(
-                status_code=409, detail=f"Der letzte aktive Admin kann nicht {action} werden"
-            )
+    if target["role"] == "admin" and not target["disabled"] and await accounts.count_active_admins() <= 1:
+        raise HTTPException(
+            status_code=409, detail=f"Der letzte aktive Admin kann nicht {action} werden"
+        )
 
 
 @router.get("")
@@ -95,9 +94,8 @@ async def update_account(
     if body.disabled is True:
         _forbid_self(user, user_id, "deaktiviert")
         await _forbid_last_admin(target, "deaktiviert")
-    if body.person_id:
-        if await persons.get_person(body.person_id) is None:
-            raise HTTPException(status_code=422, detail="Person nicht gefunden")
+    if body.person_id and await persons.get_person(body.person_id) is None:
+        raise HTTPException(status_code=422, detail="Person nicht gefunden")
 
     updated = await accounts.update_user(
         user_id,

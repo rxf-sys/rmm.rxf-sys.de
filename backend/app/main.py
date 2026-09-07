@@ -25,19 +25,19 @@ from . import (
     scripts,
 )
 from .config import get_settings
+from .routers import accounts_admin as accounts_admin_router
 from .routers import agent as agent_router
 from .routers import alerts as alerts_router
 from .routers import audit as audit_router
 from .routers import auth as auth_router
-from .routers import accounts_admin as accounts_admin_router
 from .routers import automation as automation_router
 from .routers import credentials as credentials_router
-from .routers import persons as persons_router
 from .routers import devices as devices_router
 from .routers import fleet as fleet_router
 from .routers import inventory as inventory_router
 from .routers import jobs as jobs_router
 from .routers import patches as patches_router
+from .routers import persons as persons_router
 from .routers import remote as remote_router
 from .routers import scripts as scripts_router
 from .routers import settings as settings_router
@@ -129,8 +129,8 @@ async def lifespan(app: FastAPI):
     releases.load(_settings)
 
     tasks = [
-        asyncio.create_task(_cleanup_loop()),
-        asyncio.create_task(_alert_loop()),
+        asyncio.create_task(_cleanup_loop(), name="cleanup_loop"),
+        asyncio.create_task(_alert_loop(), name="alert_loop"),
     ]
     structlog.get_logger().info(
         "notify.ntfy", enabled=bool(_settings.ntfy_base), topic=_settings.ntfy_topic
@@ -140,10 +140,17 @@ async def lifespan(app: FastAPI):
     finally:
         for task in tasks:
             task.cancel()
-            try:
-                await task
-            except (asyncio.CancelledError, Exception):
-                pass
+        # CancelledError derives from BaseException, so gather() reports the
+        # expected cancellation as a non-Exception result. Anything that *is*
+        # an Exception means a background loop died on its own — worth a log
+        # line instead of a silent shutdown.
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        shutdown_log = structlog.get_logger()
+        for task, result in zip(tasks, results, strict=True):
+            if isinstance(result, Exception):
+                shutdown_log.warning(
+                    "lifespan.task_failed", task=task.get_name(), error=str(result)
+                )
 
 
 # Interactive docs + OpenAPI schema are dev conveniences: in production the

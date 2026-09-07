@@ -9,9 +9,10 @@ never deletes devices — they just become unassigned.
 from __future__ import annotations
 
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiosqlite
 import structlog
@@ -60,7 +61,8 @@ def _row_to_person(row: aiosqlite.Row) -> dict[str, Any]:
         "phone": row["phone"],
         "notes": row["notes"],
         "created_at": int(row["created_at"]),
-        "device_count": int(row["device_count"]) if "device_count" in row.keys() else 0,
+        # sqlite3.Row.__contains__ tests values, not column names — see devices.py.
+        "device_count": int(row["device_count"]) if "device_count" in row.keys() else 0,  # noqa: SIM118
     }
 
 
@@ -97,7 +99,8 @@ async def create_person(
         await db.commit()
         person_id = int(cur.lastrowid or 0)
     person = await get_person(person_id)
-    assert person is not None
+    if person is None:
+        raise RuntimeError(f"person {person_id} vanished between insert and read")
     return person
 
 
@@ -118,7 +121,7 @@ async def update_person(
     if sets:
         params.append(person_id)
         async with _connect() as db:
-            await db.execute(f"UPDATE persons SET {', '.join(sets)} WHERE id = ?", params)
+            await db.execute(f"UPDATE persons SET {', '.join(sets)} WHERE id = ?", params)  # noqa: S608 - literal columns
             await db.commit()
     return await get_person(person_id)
 

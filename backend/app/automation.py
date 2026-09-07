@@ -21,9 +21,10 @@ from __future__ import annotations
 import copy
 import json
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiosqlite
 import structlog
@@ -105,9 +106,8 @@ async def _seed_default_rules() -> None:
     stock rule set. Offline pages only for devices tagged ``server`` —
     a family laptop being shut down is normal life, not an incident.
     Enabled flags from the legacy config are carried over."""
-    async with _connect() as db:
-        async with db.execute("SELECT COUNT(*) FROM alert_rules") as cur:
-            row = await cur.fetchone()
+    async with _connect() as db, db.execute("SELECT COUNT(*) FROM alert_rules") as cur:
+        row = await cur.fetchone()
     if row and int(row[0]) > 0:
         return
     legacy: dict[str, Any] = {}
@@ -141,9 +141,8 @@ async def _connect() -> AsyncIterator[aiosqlite.Connection]:
 
 
 async def _get_raw(key: str) -> str | None:
-    async with _connect() as db:
-        async with db.execute("SELECT value FROM automation WHERE key = ?", (key,)) as cur:
-            row = await cur.fetchone()
+    async with _connect() as db, db.execute("SELECT value FROM automation WHERE key = ?", (key,)) as cur:
+        row = await cur.fetchone()
     return str(row[0]) if row else None
 
 
@@ -233,7 +232,8 @@ async def create_rule(
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM alert_rules WHERE id = ?", (rule_id,)) as sel:
             row = await sel.fetchone()
-    assert row is not None
+    if row is None:
+        raise RuntimeError(f"alert rule {rule_id} vanished between insert and read")
     return _row_to_rule(row)
 
 
@@ -335,7 +335,7 @@ async def run_patch_window(settings: Settings, now: float | None = None) -> list
                 try:
                     wol.wake(macs, settings.wol_broadcast)
                     log.info("automation.patch_window_wake", device_id=d["id"])
-                except OSError as e:  # noqa: BLE001 - one bad NIC shouldn't abort
+                except OSError as e:
                     log.warning("automation.wake_failed", device_id=d["id"], error=str(e))
 
     created: list[int] = []
@@ -417,7 +417,8 @@ async def create_schedule(
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM script_schedules WHERE id = ?", (sched_id,)) as sel:
             row = await sel.fetchone()
-    assert row is not None
+    if row is None:
+        raise RuntimeError(f"script schedule {sched_id} vanished between insert and read")
     return _row_to_schedule(row)
 
 
