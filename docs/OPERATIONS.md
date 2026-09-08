@@ -53,10 +53,16 @@ docker exec rxf-rmm-backend python -c \
 
 ## Container-Härtung
 
-Beide Anwendungscontainer laufen als uid 10001, ohne Capabilities
-(`cap_drop: ALL`) und mit `no-new-privileges`. Caddy lauscht im Container auf
-8080 statt 80, damit dafür keine privilegierte Portbindung nötig ist; Compose
-bildet Host-80 darauf ab.
+Beide Anwendungscontainer laufen als uid 10001, mit `cap_drop: ALL` und
+`no-new-privileges`. Caddy lauscht im Container auf 8080 statt 80, damit dafür
+keine privilegierte Portbindung nötig ist; Compose bildet Host-80 darauf ab.
+
+Der Web-Container behält als einzige Capability `NET_BIND_SERVICE` — nicht
+weil Caddy einen privilegierten Port bindet (tut es nicht), sondern weil
+`/usr/bin/caddy` die Datei-Capability `cap_net_bind_service=ep` trägt. Fehlt
+sie im Bounding-Set, verweigert der Kernel bereits den `execve`, und der
+Container startet gar nicht: `exec /usr/bin/caddy: operation not permitted`,
+Exit 255, Neustartschleife.
 
 > **Einmalig vor dem ersten Deploy dieser Images.** Ein bereits bestehendes
 > Datenvolumen gehört root — der nicht privilegierte Prozess kann darin nicht

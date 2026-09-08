@@ -74,21 +74,29 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
 
 ### Behoben
+- Der `web`-Container startete nach der Härtung überhaupt nicht mehr:
+  `exec /usr/bin/caddy: operation not permitted`, Exit 255, Neustartschleife,
+  Port 80 tot. Ursache ist nicht ein Schreibrecht, sondern `execve` selbst:
+  `/usr/bin/caddy` trägt die Datei-Capability `cap_net_bind_service=ep`, und
+  ein gesetztes *effective*-Bit bei fehlender Capability im Bounding-Set lässt
+  den Kernel den Exec verweigern. `cap_drop: ALL` allein macht den Container
+  damit unstartbar. `cap_add: NET_BIND_SERVICE` bringt genau diese eine
+  Capability ins Bounding-Set zurück; alles andere bleibt entzogen.
 - `deploy.sh` meldete einen erfolgreichen Deploy, während der `web`-Container
   in `Restarting (255)` hing und Port 80 nichts beantwortete. Die Gates
   prüften nur das Backend — `web` ist aber der einzige Dienst mit Host-Port.
   Neues drittes Gate: `curl http://127.0.0.1/api/ready` über den
   veröffentlichten Port, also die Strecke, die Browser und Cloudflare Tunnel
   tatsächlich nehmen.
-- Der Web-Container startete nach der Umstellung auf uid 10001 nicht mehr:
-  Port 80 verweigerte die Verbindung. Das Basis-Image `caddy:2-alpine`
-  deklariert `VOLUME /data` und `VOLUME /config` und legt Caddys
-  `XDG_DATA_HOME`/`XDG_CONFIG_HOME` dorthin. Docker verwirft Änderungen, die
-  ein späterer Build-Schritt unterhalb eines vom Basis-Image deklarierten
-  Volumes macht — der `chown` im `frontend/Dockerfile` war damit wirkungslos,
-  und Caddy konnte als uid 10001 seinen Zustand nicht schreiben. Die
-  XDG-Verzeichnisse liegen jetzt unter `/caddyhome`, einem Pfad, der zum Image
-  gehört.
+- Caddys `XDG_DATA_HOME`/`XDG_CONFIG_HOME` liegen jetzt unter `/caddyhome`.
+  Das Basis-Image `caddy:2-alpine` deklariert `VOLUME /data` und
+  `VOLUME /config` und legt die beiden Verzeichnisse dorthin; Docker verwirft
+  aber, was ein späterer Build-Schritt unterhalb eines vom Basis-Image
+  deklarierten Volumes schreibt, sodass der `chown` im `frontend/Dockerfile`
+  wirkungslos blieb und Caddy als uid 10001 seinen Zustand nicht hätte
+  schreiben können. (Der Ausfall des Web-Containers kam **nicht** daher — das
+  war die fehlende Capability, siehe oben. Diese Änderung ist trotzdem
+  richtig: der wirkungslose `chown` war ein echter Defekt.)
 - Der dokumentierte Besitzerwechsel für das Datenvolumen war an zwei Stellen
   falsch und hat den ersten Deploy nach der Umstellung auf uid 10001
   scheitern lassen. Erstens nannte er den Compose-Schlüssel statt des
