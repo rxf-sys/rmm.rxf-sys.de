@@ -37,6 +37,13 @@ Die beiden Endpunkte beantworten unterschiedliche Fragen, und das ist Absicht:
   `deploy.sh`: ein Container, der antwortet, aber seine eigene Datenbank nicht
   lesen kann, darf nicht als erfolgreicher Deploy durchgehen.
 
+`deploy.sh` prüft `/api/ready` zweimal: einmal im Backend-Container und
+danach noch einmal von außen über den veröffentlichten Port 80. Nur der
+zweite Weg deckt die Strecke ab, die Browser und Cloudflare Tunnel wirklich
+nehmen — `web` ist der einzige Dienst mit Host-Port, und ein stehender
+`web`-Container macht das Dashboard unerreichbar, egal wie gesund das Backend
+ist.
+
 Für einen noch tieferen Test der Datei selbst:
 
 ```bash

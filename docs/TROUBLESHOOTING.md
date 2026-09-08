@@ -212,8 +212,10 @@ heißt abgelaufene Session — neu anmelden.
 
 ## Deploy schlägt fehl
 
-`deploy.sh` endet mit Exit 1, wenn das Backend nicht binnen ~60 s gesund
-wird, und gibt dann `docker compose ps` und die letzten 50 Logzeilen aus.
+`deploy.sh` endet mit Exit 1, wenn eines der drei Gates nicht durchläuft —
+Backend gesund (~60 s), Backend ready (~20 s), Antwort auf dem
+veröffentlichten Port 80 (~30 s) — und gibt dann `docker compose ps` und die
+letzten 50 Logzeilen des betroffenen Dienstes aus.
 
 Häufigste Ursachen in dieser Reihenfolge:
 

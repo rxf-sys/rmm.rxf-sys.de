@@ -74,6 +74,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
 
 ### Behoben
+- `deploy.sh` meldete einen erfolgreichen Deploy, während der `web`-Container
+  in `Restarting (255)` hing und Port 80 nichts beantwortete. Die Gates
+  prüften nur das Backend — `web` ist aber der einzige Dienst mit Host-Port.
+  Neues drittes Gate: `curl http://127.0.0.1/api/ready` über den
+  veröffentlichten Port, also die Strecke, die Browser und Cloudflare Tunnel
+  tatsächlich nehmen.
 - Der Web-Container startete nach der Umstellung auf uid 10001 nicht mehr:
   Port 80 verweigerte die Verbindung. Das Basis-Image `caddy:2-alpine`
   deklariert `VOLUME /data` und `VOLUME /config` und legt Caddys
