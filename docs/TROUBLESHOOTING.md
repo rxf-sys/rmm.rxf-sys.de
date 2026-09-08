@@ -233,6 +233,16 @@ Häufigste Ursachen in dieser Reihenfolge:
    (`infrastructure_rxf-rmm-data`), und der `chown` muss über ein einfaches
    `docker run` laufen — über `docker compose run` erbt er `cap_drop: ALL`
    und scheitert mit „Operation not permitted".
+6. **`web` startet, aber Port 80 verweigert die Verbindung** — der
+   Container ist wieder ausgestiegen, damit ist auch die Portfreigabe weg.
+   `docker compose ps -a` zeigt ihn als `Exited`/`Restarting`,
+   `docker compose logs --tail 40 web` nennt den Grund. Bekannter Fall:
+   Caddy kann seinen Zustand nicht schreiben, weil `/data` bzw. `/config`
+   root gehören — beides deklariert das Basis-Image als `VOLUME`, weshalb
+   ein `chown` im Dockerfile dort folgenlos bleibt. Behoben, indem
+   `XDG_CONFIG_HOME`/`XDG_DATA_HOME` auf `/caddyhome` zeigen
+   (`frontend/Dockerfile`). Nach einem `git pull` neu bauen:
+   `docker compose up -d --build web`.
 
 ## Nichts hilft: Zustand sammeln
 

@@ -74,6 +74,15 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
 
 ### Behoben
+- Der Web-Container startete nach der Umstellung auf uid 10001 nicht mehr:
+  Port 80 verweigerte die Verbindung. Das Basis-Image `caddy:2-alpine`
+  deklariert `VOLUME /data` und `VOLUME /config` und legt Caddys
+  `XDG_DATA_HOME`/`XDG_CONFIG_HOME` dorthin. Docker verwirft Änderungen, die
+  ein späterer Build-Schritt unterhalb eines vom Basis-Image deklarierten
+  Volumes macht — der `chown` im `frontend/Dockerfile` war damit wirkungslos,
+  und Caddy konnte als uid 10001 seinen Zustand nicht schreiben. Die
+  XDG-Verzeichnisse liegen jetzt unter `/caddyhome`, einem Pfad, der zum Image
+  gehört.
 - Der dokumentierte Besitzerwechsel für das Datenvolumen war an zwei Stellen
   falsch und hat den ersten Deploy nach der Umstellung auf uid 10001
   scheitern lassen. Erstens nannte er den Compose-Schlüssel statt des
