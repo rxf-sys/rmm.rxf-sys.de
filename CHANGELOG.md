@@ -59,6 +59,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   mehr der Realität (SSH statt Self-hosted Runner).
 
 ### Sicherheit
+- Go-Toolchain für den Agent von 1.25.0 auf 1.25.14 angehoben. `govulncheck`
+  meldete 25 erreichbare Schwachstellen in der Standardbibliothek — betroffen
+  waren TLS-Handshake, URL-Parsing und Cookie-Verarbeitung im WebSocket-Dialer,
+  also Code, den jeder ausgelieferte Agent ausführt.
 - Die Enrollment- und Setup-Endpunkte sind jetzt rate-limitiert (20
   Fehlversuche pro IP in 300 s). Vorher war der einzige unauthentifizierte
   Bereich neben dem Login unbegrenzt abfragbar.

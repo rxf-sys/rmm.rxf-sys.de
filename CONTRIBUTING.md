@@ -2,7 +2,7 @@
 
 ## Setup in unter 15 Minuten
 
-Voraussetzungen: Python ≥ 3.11, Node ≥ 22, Go ≥ 1.25, Git.
+Voraussetzungen: Python ≥ 3.11, Node ≥ 22, Go ≥ 1.25.14, Git.
 
 ```bash
 git clone https://github.com/rxf-sys/rmm.rxf-sys.de.git
@@ -52,7 +52,7 @@ Dazu laufen in CI die Dependency-Audits (`pip-audit`, `npm audit`,
 ```bash
 cd backend  && pip-audit --strict .
 cd frontend && npm audit --audit-level=high
-cd agent    && go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+cd agent    && go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
 ```
 
 Die Coverage-Schwelle von 70 % ist eine Untergrenze, kein Ziel; der Ist-Stand
@@ -125,6 +125,11 @@ Dinge, die hier schon einmal Zeit gekostet haben:
 - **ESLint ist auf der 9er-Reihe gepinnt.** `eslint-plugin-jsx-a11y` hat noch
   keine ESLint-10-Unterstützung, und die Accessibility-Regeln sind der Grund,
   warum es das Gate überhaupt gibt.
+- **Die `go`-Direktive in `agent/go.mod` ist eine Sicherheitsangabe, keine
+  Formalität.** `actions/setup-go` installiert über `go-version-file` exakt
+  diese Fassung, und `govulncheck` misst die Standardbibliothek daran. Eine
+  alte Patch-Version dort heißt: die ausgelieferten Agent-Binaries tragen die
+  Lücken der alten Standardbibliothek.
 
 ## Struktur
 

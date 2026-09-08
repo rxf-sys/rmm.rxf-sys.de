@@ -55,7 +55,7 @@ Details, Datenfluss und Datenmodell: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.
 
 ## Quickstart (lokale Entwicklung)
 
-Voraussetzungen: Python ≥ 3.11, Node ≥ 22, Go ≥ 1.25.
+Voraussetzungen: Python ≥ 3.11, Node ≥ 22, Go ≥ 1.25.14.
 
 ```bash
 # Backend auf http://127.0.0.1:8080
