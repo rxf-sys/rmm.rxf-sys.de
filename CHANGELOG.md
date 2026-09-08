@@ -74,6 +74,15 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
 
 ### Behoben
+- Der dokumentierte Besitzerwechsel für das Datenvolumen war an zwei Stellen
+  falsch und hat den ersten Deploy nach der Umstellung auf uid 10001
+  scheitern lassen. Erstens nannte er den Compose-Schlüssel statt des
+  Volumenamens — Compose stellt den Projektnamen voran
+  (`infrastructure_rxf-rmm-data`), sodass ein neues leeres Volume angelegt und
+  das echte nicht angefasst wurde. Zweitens lief der Ersatzbefehl über
+  `docker compose run` und erbte damit `cap_drop: ALL`, worauf `chown` auch
+  als root an fehlendem `CAP_CHOWN` scheiterte. Beides korrigiert, mit
+  Prüfschritt und Begründung in `docs/OPERATIONS.md`.
 - Der Live-Job-Stream blieb nach einem Verbindungsabbruch stumm stehen. Er
   verbindet jetzt mit Backoff neu und zeigt den Abbruch an.
 - Dialoge waren für Tastatur und Screenreader nicht bedienbar: Klick-Handler

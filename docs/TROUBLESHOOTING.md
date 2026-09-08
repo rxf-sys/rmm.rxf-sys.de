@@ -225,6 +225,14 @@ Häufigste Ursachen in dieser Reihenfolge:
 3. **Port 80 belegt** — nur `web` published einen Host-Port.
 4. **Datenbank defekt** — der Container startet in einer Neustartschleife.
    `integrity_check` fahren (siehe oben), im Zweifel Restore.
+5. **`attempt to write a readonly database`** — das Datenvolumen gehört noch
+   root, der Container läuft aber als uid 10001. Der einmalige
+   Besitzerwechsel steht in
+   [`OPERATIONS.md`](OPERATIONS.md#container-härtung). Zwei Details, an denen
+   er scheitert: der echte Volumename trägt den Projektpräfix
+   (`infrastructure_rxf-rmm-data`), und der `chown` muss über ein einfaches
+   `docker run` laufen — über `docker compose run` erbt er `cap_drop: ALL`
+   und scheitert mit „Operation not permitted".
 
 ## Nichts hilft: Zustand sammeln
 

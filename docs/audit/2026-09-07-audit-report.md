@@ -219,13 +219,21 @@ Was **du** noch manuell tun musst. Die ersten drei sind blockierend.
 ### Blockierend
 
 - [ ] **Datenvolumen umschreiben**, bevor die neuen Images deployt werden —
-      sonst startet das Backend in einer Neustartschleife:
+      sonst startet das Backend in einer Neustartschleife
+      (`attempt to write a readonly database`):
       ```bash
       cd /opt/rxf-rmm/infrastructure
       docker compose down
-      docker run --rm -v rxf-rmm-data:/data alpine chown -R 10001:10001 /data
+      docker volume ls --filter name=rxf-rmm-data      # Namen prüfen
+      docker run --rm -v infrastructure_rxf-rmm-data:/data alpine \
+        sh -c 'chown -R 10001:10001 /data && ls -lan /data'
       docker compose up -d --build
       ```
+      Zwei Fallen, beide beim ersten Versuch zugeschnappt: das Volume trägt
+      den Projektpräfix (`infrastructure_rxf-rmm-data`), und der Schritt darf
+      **nicht** über `docker compose run` laufen, weil der Service
+      `cap_drop: ALL` setzt und `chown` dann auch als root scheitert. Details
+      in [`../OPERATIONS.md`](../OPERATIONS.md#container-härtung).
 - [ ] **`TRUSTED_PROXY_CIDR`** in `infrastructure/.env` auf die IP des
       cloudflared-Hosts (CT 104) setzen. Beim Default `127.0.0.1/32` sieht das
       Backend nur die Container-IP und das Login-Rate-Limit greift faktisch
