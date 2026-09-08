@@ -15,7 +15,7 @@ import {
   IconTerminal,
   IconUsers,
 } from '../icons';
-import { deviceState, stateColor } from '../ui';
+import { deviceState, stateColor } from '../deviceStatus';
 
 export type PageId =
   | 'overview'

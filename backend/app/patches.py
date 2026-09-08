@@ -16,14 +16,15 @@ source of "in progress", which avoids a whole class of stuck-state bugs.
 from __future__ import annotations
 
 import time
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiosqlite
 import structlog
 
 from .config import Settings
+from .db import connect as db_connect
 
 log = structlog.get_logger("patches")
 
@@ -60,10 +61,9 @@ async def ensure_schema(settings: Settings) -> None:
     log.info("patches.ready", db=_db_path)
 
 
-@asynccontextmanager
-async def _connect() -> AsyncIterator[aiosqlite.Connection]:
-    async with aiosqlite.connect(_db_path) as db:
-        yield db
+def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
+    """Shared connection helper — see app/db.py."""
+    return db_connect(_db_path)
 
 
 def _norm_severity(value: Any) -> str:
@@ -88,7 +88,8 @@ async def apply_scan(device_id: int, items: list[dict[str, Any]]) -> int:
         if reported:
             placeholders = ",".join("?" for _ in reported)
             await db.execute(
-                f"DELETE FROM patches WHERE device_id = ? AND patch_id NOT IN ({placeholders})",
+                # `placeholders` is a run of "?" — the ids themselves are bound.
+                f"DELETE FROM patches WHERE device_id = ? AND patch_id NOT IN ({placeholders})",  # noqa: S608
                 (device_id, *reported.keys()),
             )
         else:
@@ -153,7 +154,8 @@ async def oldest_pending_security(device_id: int) -> int | None:
     async with _connect() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            f"SELECT MIN(detected_at) AS oldest FROM patches"
+            # `placeholders` is a run of "?" — the severities themselves are bound.
+            "SELECT MIN(detected_at) AS oldest FROM patches"  # noqa: S608
             f" WHERE device_id = ? AND severity IN ({placeholders})",
             (device_id, *SECURITY_SEVERITIES),
         ) as cur:

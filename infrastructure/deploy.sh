@@ -2,7 +2,8 @@
 #
 # deploy.sh — Docker-Compose-Deploy für rmm.rxf-sys.de
 #
-# Wird von der CD-Pipeline (GitHub Actions via SSH) oder manuell aufgerufen.
+# Wird von der CD-Pipeline (GitHub Actions, Self-hosted Runner im LXC,
+# Label `rmm`) oder manuell aufgerufen.
 # Installationspfad: /opt/rxf-rmm/infrastructure/deploy.sh
 # Versioniert im Repo — Änderungen werden beim nächsten Deploy automatisch aktiv.
 #
@@ -29,11 +30,41 @@ docker compose up -d --build
 # Fail the deploy (and the CD run) when the backend never turns healthy —
 # a green pipeline must mean the API actually answers, not just that the
 # containers were started.
+#
+# Two gates, in order: the container healthcheck (liveness, /api/health) and
+# then /api/ready, which verifies the database is reachable and carries the
+# expected tables. A container that answers but cannot read its own database
+# is exactly the failure a deploy must not wave through.
 echo "[deploy] Waiting for backend health..."
+healthy=""
 for i in $(seq 1 30); do
     state="$(docker inspect --format '{{.State.Health.Status}}' rxf-rmm-backend 2>/dev/null || echo unknown)"
     if [[ "$state" == "healthy" ]]; then
         echo "[deploy] Backend healthy after ~$((i * 2))s"
+        healthy=1
+        break
+    fi
+    sleep 2
+done
+
+if [[ -z "$healthy" ]]; then
+    echo "[deploy] FAILED — backend did not become healthy (last state: ${state})" >&2
+    docker compose ps >&2
+    docker compose logs --tail 50 backend >&2
+    exit 1
+fi
+
+echo "[deploy] Checking readiness..."
+for i in $(seq 1 10); do
+    if docker exec rxf-rmm-backend python -c "
+import sys, json, urllib.request
+try:
+    with urllib.request.urlopen('http://127.0.0.1:8080/api/ready') as r:
+        sys.exit(0 if json.load(r).get('status') == 'ready' else 1)
+except Exception:
+    sys.exit(1)
+"; then
+        echo "[deploy] Backend ready after ~$((i * 2))s"
         echo "[deploy] OK — HEAD $(git rev-parse --short HEAD): $(git log -1 --format=%s)"
         docker compose ps
         exit 0
@@ -41,7 +72,11 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-echo "[deploy] FAILED — backend did not become healthy (last state: ${state})" >&2
+echo "[deploy] FAILED — backend is up but not ready (database unreachable or schema incomplete)" >&2
+docker exec rxf-rmm-backend python -c "
+import urllib.request
+print(urllib.request.urlopen('http://127.0.0.1:8080/api/ready').read().decode())
+" >&2 || true
 docker compose ps >&2
 docker compose logs --tail 50 backend >&2
 exit 1

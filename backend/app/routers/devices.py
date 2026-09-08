@@ -1,18 +1,18 @@
 """Device fleet endpoints for the dashboard (session-authenticated).
 
-Reads are open to every logged-in account; everything that mints
-credentials or mutates devices requires the admin role and is written to
-the audit log.
+Reads are open to every logged-in account but scoped: a ``viewer`` only ever
+sees the devices of their own person. Everything that mints credentials or
+mutates a device requires the operator role (admin or techniker) and is
+written to the audit log.
 """
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-
-import time
 
 from .. import alerts, credentials, devices, jobs, metrics, patches, persons, releases, wol
 from ..agents_ws import manager
@@ -166,9 +166,8 @@ async def update_device(
     user: dict = Depends(require_operator),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    if body.person_id:
-        if await persons.get_person(body.person_id) is None:
-            raise HTTPException(status_code=422, detail="Person nicht gefunden")
+    if body.person_id and await persons.get_person(body.person_id) is None:
+        raise HTTPException(status_code=422, detail="Person nicht gefunden")
     device = await devices.update_device(
         device_id,
         owner_label=body.owner_label,
@@ -282,5 +281,6 @@ async def delete_device(device_id: int, user: dict = Depends(require_operator)) 
     await jobs.delete_for_device(device_id)
     await patches.delete_for_device(device_id)
     await credentials.delete_for_device(device_id)
+    await alerts.delete_for_device(device_id)
     await audit_record("devices.deleted", user=user["username"], device_id=device_id)
     return {"ok": True}

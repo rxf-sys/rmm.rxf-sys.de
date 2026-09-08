@@ -130,6 +130,8 @@ function TotpCard({ user }: { user: Account }) {
             <button
               className="btn btn-sm"
               onClick={() => {
+                // Clipboard access can be denied; the codes stay on screen
+                // and can be selected by hand.
                 void navigator.clipboard.writeText(backupCodes.join('\n')).catch(() => {});
               }}
             >
@@ -296,16 +298,16 @@ function NtfyCard() {
       </span>
       {error && <p className="err">{error}</p>}
       {msg && <span style={{ color: 'var(--ok)', fontSize: 11.5, fontWeight: 600 }}>{msg}</span>}
-      <div className="field">
+      <label className="field">
         <span className="field-label">Server-URL</span>
         <input className="input" value={base} onChange={(e) => setBase(e.target.value)} placeholder="https://ntfy.sh" />
-      </div>
+      </label>
       <div className="row" style={{ gap: 8 }}>
-        <div className="field grow" style={{ flex: 1 }}>
+        <label className="field grow" style={{ flex: 1 }}>
           <span className="field-label">Topic</span>
           <input className="input" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="rxf-rmm" />
-        </div>
-        <div className="field grow" style={{ flex: 1 }}>
+        </label>
+        <label className="field grow" style={{ flex: 1 }}>
           <span className="field-label">Token (optional)</span>
           <input
             className="input"
@@ -314,7 +316,7 @@ function NtfyCard() {
             onChange={(e) => setToken(e.target.value)}
             placeholder={cfg?.has_token ? '•••••• (gespeichert)' : 'leer'}
           />
-        </div>
+        </label>
       </div>
       <div className="row" style={{ gap: 8 }}>
         <button className="btn btn-primary btn-sm" onClick={() => void save()}>

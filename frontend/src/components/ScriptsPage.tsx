@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
+import { useConfirm } from '../hooks/useConfirm';
 import { formatRelative } from '../format';
 import { AppleLogo, LinuxLogo, WindowsLogo } from '../icons';
 import type { Device, Script, ScriptOs, Shell } from '../types';
@@ -292,6 +293,7 @@ function ScriptRow({
 }
 
 export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [scripts, setScripts] = useState<Script[] | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -329,7 +331,13 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
   };
 
   const remove = async (id: number) => {
-    if (!confirm('Skript wirklich löschen?')) return;
+    const ok = await ask({
+      title: 'Skript löschen',
+      body: 'Das Skript wird aus der Bibliothek entfernt. Bereits gelaufene Jobs bleiben im Verlauf.',
+      confirmLabel: 'Skript löschen',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.deleteScript(id);
       await load();
@@ -354,6 +362,7 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
 
   return (
     <div className="screen">
+      {confirmDialog}
       <div className="page-head center">
         <h1 className="page-title">Skript-Bibliothek</h1>
         <span className="muted">{scripts?.length ?? ''}</span>

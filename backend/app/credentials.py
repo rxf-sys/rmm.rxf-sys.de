@@ -15,15 +15,16 @@ text file.
 from __future__ import annotations
 
 import time
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiosqlite
 import structlog
 from cryptography.fernet import Fernet, InvalidToken
 
 from .config import Settings
+from .db import connect as db_connect
 
 log = structlog.get_logger("credentials")
 
@@ -43,6 +44,18 @@ CREATE INDEX IF NOT EXISTS idx_credentials_device ON device_credentials (device_
 
 _db_path: str = ""
 _fernet: Fernet | None = None
+
+
+def _vault() -> Fernet:
+    """The Fernet instance, or a loud failure.
+
+    ``ensure_schema`` sets it during startup. Reaching a credential operation
+    without it means the lifespan never ran — encrypting or decrypting with a
+    half-initialised module would silently corrupt the vault, so refuse.
+    """
+    if _fernet is None:
+        raise RuntimeError("credential vault is not initialised (ensure_schema not run)")
+    return _fernet
 
 
 def _load_or_create_key(db_path: str) -> Fernet:
@@ -70,10 +83,9 @@ async def ensure_schema(settings: Settings) -> None:
     log.info("credentials.ready", db=_db_path)
 
 
-@asynccontextmanager
-async def _connect() -> AsyncIterator[aiosqlite.Connection]:
-    async with aiosqlite.connect(_db_path) as db:
-        yield db
+def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
+    """Shared connection helper — see app/db.py."""
+    return db_connect(_db_path)
 
 
 def _row_public(row: aiosqlite.Row) -> dict[str, Any]:
@@ -102,7 +114,6 @@ async def list_for_device(device_id: int) -> list[dict[str, Any]]:
 async def create(
     device_id: int, *, label: str, username: str, secret: str, notes: str, updated_by: str
 ) -> dict[str, Any]:
-    assert _fernet is not None
     async with _connect() as db:
         cur = await db.execute(
             "INSERT INTO device_credentials"
@@ -112,7 +123,7 @@ async def create(
                 device_id,
                 label.strip(),
                 username.strip(),
-                _fernet.encrypt(secret.encode("utf-8")),
+                _vault().encrypt(secret.encode("utf-8")),
                 notes.strip(),
                 updated_by,
                 int(time.time()),
@@ -125,7 +136,8 @@ async def create(
             "SELECT * FROM device_credentials WHERE id = ?", (cred_id,)
         ) as sel:
             row = await sel.fetchone()
-    assert row is not None
+    if row is None:
+        raise RuntimeError(f"credential {cred_id} vanished between insert and read")
     return _row_public(row)
 
 
@@ -140,16 +152,16 @@ async def update(
     updated_by: str,
 ) -> dict[str, Any] | None:
     """Update a credential; ``secret=None`` keeps the stored secret."""
-    assert _fernet is not None
     sets = ["label = ?", "username = ?", "notes = ?", "updated_by = ?", "updated_at = ?"]
     params: list[Any] = [label.strip(), username.strip(), notes.strip(), updated_by, int(time.time())]
     if secret is not None:
         sets.append("secret_enc = ?")
-        params.append(_fernet.encrypt(secret.encode("utf-8")))
+        params.append(_vault().encrypt(secret.encode("utf-8")))
     params.extend([cred_id, device_id])
     async with _connect() as db:
         cur = await db.execute(
-            f"UPDATE device_credentials SET {', '.join(sets)} WHERE id = ? AND device_id = ?",
+            # Safe interpolation: `sets` holds literal column names only.
+            f"UPDATE device_credentials SET {', '.join(sets)} WHERE id = ? AND device_id = ?",  # noqa: S608
             params,
         )
         await db.commit()
@@ -189,8 +201,12 @@ async def upsert_by_label(
             notes=notes,
             updated_by=updated_by,
         )
-        assert updated is not None
-        return updated, False
+        # ``None`` means the row was deleted between the SELECT and the UPDATE
+        # (a second admin, or a parallel job reporting the same label). Fall
+        # through and create it — the caller asked for the secret to be stored,
+        # not for a specific row id.
+        if updated is not None:
+            return updated, False
     created = await create(
         device_id,
         label=label,
@@ -204,7 +220,6 @@ async def upsert_by_label(
 
 async def reveal(cred_id: int, device_id: int) -> str | None:
     """Decrypt one secret. The caller audits the access."""
-    assert _fernet is not None
     async with _connect() as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -215,7 +230,7 @@ async def reveal(cred_id: int, device_id: int) -> str | None:
     if row is None:
         return None
     try:
-        return _fernet.decrypt(bytes(row["secret_enc"])).decode("utf-8")
+        return _vault().decrypt(bytes(row["secret_enc"])).decode("utf-8")
     except (InvalidToken, ValueError):
         log.error("credentials.decrypt_failed", cred_id=cred_id)
         return None

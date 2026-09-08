@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AdminPage } from './components/AdminPage';
 import { AlertsPage } from './components/AlertsPage';
 import { AuditPage } from './components/AuditPage';
@@ -18,19 +19,7 @@ import { Sidebar, type PageId } from './components/Sidebar';
 import { useAuth } from './hooks/useAuth';
 import { useFleet } from './hooks/useFleet';
 import { useTheme } from './hooks/useTheme';
-
-const PAGE_LABEL: Record<PageId, string> = {
-  overview: 'Übersicht',
-  devices: 'Geräte',
-  persons: 'Personen',
-  alerts: 'Alarm-Center',
-  patches: 'Patch-Management',
-  scripts: 'Skripte',
-  automation: 'Automatisierung',
-  docs: 'Dokumentation',
-  audit: 'Audit-Log',
-  admin: 'Administration',
-};
+import { PAGE_LABEL, PAGE_PATH, devicePath, pageForPath } from './routes';
 
 const FAV_KEY = 'ryntra-favorites';
 
@@ -43,13 +32,61 @@ function loadFavorites(): number[] {
   }
 }
 
+/** A page the current role may not open. The API refuses it anyway; this makes
+ *  a hand-typed or bookmarked URL say so instead of rendering a broken page. */
+function Forbidden() {
+  return (
+    <div className="empty">
+      <h2>Kein Zugriff</h2>
+      <p className="muted">Diese Seite ist für deine Rolle nicht freigegeben.</p>
+    </div>
+  );
+}
+
+/** Route element for a device page — the id comes from the URL.
+ *  Defined at module scope: a component created inside App would be a new
+ *  type on every render, remounting the device page and losing its tab. */
+function DeviceRoute({
+  isAdmin,
+  isOperator,
+  favorites,
+  onToggleFavorite,
+  onLeave,
+  onDeleted,
+  onLogout,
+}: {
+  isAdmin: boolean;
+  isOperator: boolean;
+  favorites: number[];
+  onToggleFavorite: (id: number) => void;
+  onLeave: () => void;
+  onDeleted: () => void;
+  onLogout: () => Promise<void> | void;
+}) {
+  const { deviceId } = useParams();
+  const id = Number(deviceId);
+  if (!Number.isInteger(id) || id <= 0) return <Navigate to={PAGE_PATH.devices} replace />;
+  return (
+    <DeviceDetail
+      deviceId={id}
+      isAdmin={isAdmin}
+      isOperator={isOperator}
+      favorite={favorites.includes(id)}
+      onToggleFavorite={() => onToggleFavorite(id)}
+      onBack={onLeave}
+      onDeleted={onDeleted}
+      onLogout={onLogout}
+    />
+  );
+}
+
 export default function App() {
   const { user, status, login, logout } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
   const fleet = useFleet();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const [page, setPage] = useState<PageId>('overview');
-  const [detailId, setDetailId] = useState<number | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
@@ -69,18 +106,15 @@ export default function App() {
   const refresh = fleet.refresh;
   useEffect(() => {
     if (userId !== null) refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, refresh]);
 
-  // ⌘K / Ctrl+K toggles the palette; Esc closes overlays.
+  // ⌘K / Ctrl+K toggles the palette. Escape is handled inside the dialogs
+  // themselves (components/Modal.tsx), so it is not intercepted here.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((o) => !o);
-      } else if (e.key === 'Escape') {
-        setPaletteOpen(false);
-        setEnrollOpen(false);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -93,29 +127,44 @@ export default function App() {
   const isAdmin = user.role === 'admin';
   // Techniker: hands-on device work (jobs, scripts, patches, remote, enrollment).
   const isOperator = isAdmin || user.role === 'techniker';
-  const goPage = (p: PageId) => {
-    setPage(p);
-    setDetailId(null);
+
+  // Navigation closes the transient overlays: leaving the palette or the mobile
+  // drawer hanging over the new page is the one thing they must never do.
+  const closeOverlays = () => {
     setPaletteOpen(false);
     setNavOpen(false);
+  };
+  const goPage = (p: PageId) => {
+    closeOverlays();
+    navigate(PAGE_PATH[p]);
   };
   const openDevice = (id: number) => {
-    setDetailId(id);
-    setPage('devices');
-    setPaletteOpen(false);
-    setNavOpen(false);
+    closeOverlays();
+    navigate(devicePath(id));
   };
 
+  const page = pageForPath(location.pathname);
   const openAlerts = fleet.alerts.filter((a) => a.resolved_at === null).length;
   const openPatches = Object.values(fleet.patchSummary).reduce((a, s) => a + s.pending, 0);
 
+  const detailMatch = /^\/devices\/(\d+)/.exec(location.pathname);
+  const detailIdRaw = detailMatch?.[1];
+  const detailId = detailIdRaw ? Number(detailIdRaw) : null;
   const detailDevice = detailId !== null ? fleet.devices.find((d) => d.id === detailId) : undefined;
-  const crumbCur = detailId !== null ? (detailDevice?.hostname ?? `Gerät ${detailId}`) : PAGE_LABEL[page];
+  const crumbCur =
+    detailId !== null ? (detailDevice?.hostname ?? `Gerät ${detailId}`) : PAGE_LABEL[page];
   const crumbPre = detailId !== null ? 'Vulpexa / Geräte / ' : 'Vulpexa / ';
 
   return (
     <div className={navOpen ? 'app-shell nav-open' : 'app-shell'}>
-      {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
+      {navOpen && (
+        <button
+          type="button"
+          className="nav-backdrop"
+          aria-label="Navigation schließen"
+          onClick={() => setNavOpen(false)}
+        />
+      )}
       <Sidebar
         page={page}
         onNavigate={goPage}
@@ -141,70 +190,113 @@ export default function App() {
           onToggleNav={() => setNavOpen((o) => !o)}
         />
         <div className="content">
-          {detailId !== null ? (
-            <DeviceDetail
-              deviceId={detailId}
-              isAdmin={isAdmin}
-              isOperator={isOperator}
-              favorite={favorites.includes(detailId)}
-              onToggleFavorite={() => toggleFavorite(detailId)}
-              onBack={() => setDetailId(null)}
-              onDeleted={() => {
-                setDetailId(null);
-                fleet.refresh();
-              }}
-              onLogout={logout}
+          <Routes>
+            <Route
+              path={PAGE_PATH.overview}
+              element={
+                <OverviewPage
+                  fleet={fleet}
+                  user={user}
+                  onOpenDevice={openDevice}
+                  onNavigate={goPage}
+                  onOpenEnroll={() => setEnrollOpen(true)}
+                  canEnroll={isOperator}
+                />
+              }
             />
-          ) : page === 'overview' ? (
-            <OverviewPage
-              fleet={fleet}
-              user={user}
-              onOpenDevice={openDevice}
-              onNavigate={goPage}
-              onOpenEnroll={() => setEnrollOpen(true)}
-              canEnroll={isOperator}
+            <Route
+              path={PAGE_PATH.devices}
+              element={
+                <DevicesPage
+                  devices={fleet.devices}
+                  patchSummary={fleet.patchSummary}
+                  persons={fleet.persons}
+                  loading={fleet.loading}
+                  onOpenDevice={openDevice}
+                />
+              }
             />
-          ) : page === 'devices' ? (
-            <DevicesPage
-              devices={fleet.devices}
-              patchSummary={fleet.patchSummary}
-              persons={fleet.persons}
-              loading={fleet.loading}
-              onOpenDevice={openDevice}
+            <Route
+              path={`${PAGE_PATH.devices}/:deviceId`}
+              element={
+                <DeviceRoute
+                  isAdmin={isAdmin}
+                  isOperator={isOperator}
+                  favorites={favorites}
+                  onToggleFavorite={toggleFavorite}
+                  onLeave={() => navigate(PAGE_PATH.devices)}
+                  onDeleted={() => {
+                    navigate(PAGE_PATH.devices);
+                    fleet.refresh();
+                  }}
+                  onLogout={logout}
+                />
+              }
             />
-          ) : page === 'persons' ? (
-            <PersonsPage
-              persons={fleet.persons}
-              devices={fleet.devices}
-              isAdmin={isAdmin}
-              onOpenDevice={openDevice}
-              onRefresh={fleet.refresh}
+            <Route
+              path={PAGE_PATH.persons}
+              element={
+                <PersonsPage
+                  persons={fleet.persons}
+                  devices={fleet.devices}
+                  isAdmin={isAdmin}
+                  onOpenDevice={openDevice}
+                  onRefresh={fleet.refresh}
+                />
+              }
             />
-          ) : page === 'alerts' ? (
-            <AlertsPage
-              alerts={fleet.alerts}
-              devices={fleet.devices}
-              onOpenDevice={openDevice}
-              onRefresh={fleet.refresh}
+            <Route
+              path={PAGE_PATH.alerts}
+              element={
+                <AlertsPage
+                  alerts={fleet.alerts}
+                  devices={fleet.devices}
+                  onOpenDevice={openDevice}
+                  onRefresh={fleet.refresh}
+                />
+              }
             />
-          ) : page === 'patches' ? (
-            <PatchesPage
-              devices={fleet.devices}
-              patchSummary={fleet.patchSummary}
-              persons={fleet.persons}
-              onOpenDevice={openDevice}
+            <Route
+              path={PAGE_PATH.patches}
+              element={
+                <PatchesPage
+                  devices={fleet.devices}
+                  patchSummary={fleet.patchSummary}
+                  persons={fleet.persons}
+                  onOpenDevice={openDevice}
+                />
+              }
             />
-          ) : page === 'scripts' ? (
-            <ScriptsPage canManage={isOperator} devices={fleet.devices} onOpenDevice={openDevice} />
-          ) : page === 'automation' ? (
-            <AutomationPage devices={fleet.devices} persons={fleet.persons} isAdmin={isAdmin} />
-          ) : page === 'docs' ? (
-            <DocsPage />
-          ) : page === 'admin' ? (
-            <AdminPage currentUser={user} />
-          ) : (
-            <AuditPage />
-          )}
+            <Route
+              path={PAGE_PATH.scripts}
+              element={
+                isOperator ? (
+                  <ScriptsPage
+                    canManage={isOperator}
+                    devices={fleet.devices}
+                    onOpenDevice={openDevice}
+                  />
+                ) : (
+                  <Forbidden />
+                )
+              }
+            />
+            <Route
+              path={PAGE_PATH.automation}
+              element={
+                <AutomationPage devices={fleet.devices} persons={fleet.persons} isAdmin={isAdmin} />
+              }
+            />
+            <Route path={PAGE_PATH.docs} element={<DocsPage />} />
+            <Route path={PAGE_PATH.audit} element={isAdmin ? <AuditPage /> : <Forbidden />} />
+            <Route
+              path={PAGE_PATH.admin}
+              element={isAdmin ? <AdminPage currentUser={user} /> : <Forbidden />}
+            />
+            {/* An unknown path is a typo or a stale bookmark, not something
+                that deserves a page of its own. */}
+            <Route path="*" element={<Navigate to={PAGE_PATH.overview} replace />} />
+          </Routes>
         </div>
       </div>
 

@@ -21,7 +21,7 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=5.0",
-    "ruff>=0.7",
+    "ruff>=0.16.6,<0.17",
 ]
 
 [build-system]
@@ -34,6 +34,54 @@ include = ["app*"]
 [tool.ruff]
 line-length = 110
 target-version = "py311"
+
+[tool.ruff.lint]
+# The rule set is listed explicitly on purpose. Ruff's implicit default set has
+# grown between releases before, which turned CI red on commits that changed
+# nothing — pinning the selection (together with the minor-version pin above)
+# keeps the lint gate a property of this repo, not of the ruff release train.
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # import order
+    "UP",     # pyupgrade
+    "B",      # bugbear
+    "C4",     # comprehensions
+    "SIM",    # simplify
+    "S",      # bandit-style security checks
+    "ASYNC",  # async pitfalls (blocking calls in coroutines)
+    "BLE",    # blind except
+    "RUF",    # ruff-specific
+]
+# German prose uses typographic characters that ruff flags as confusable with
+# their ASCII lookalikes; they are intentional here.
+allowed-confusables = ["×", "–", "—"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency injection puts Depends()/Query()/... in parameter
+# defaults. Those are immutable marker objects, not shared mutable state, so
+# B008 does not apply to them.
+extend-immutable-calls = [
+    "fastapi.Body",
+    "fastapi.Cookie",
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Header",
+    "fastapi.Path",
+    "fastapi.Query",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert (S101), carry throwaway credentials for fixtures (S105/S106),
+# use literal paths that are never touched on disk (S108), and pass this
+# project's own `shell="bash"` job field, which S604 mistakes for
+# subprocess(shell=True).
+"tests/*" = ["S101", "S105", "S106", "S108", "S604"]
+# The bash/PowerShell installer templates are embedded verbatim as string
+# constants. Wrapping their lines would change the scripts they emit.
+"app/routers/agent.py" = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

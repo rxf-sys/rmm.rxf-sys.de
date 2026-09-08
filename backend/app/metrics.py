@@ -9,14 +9,15 @@ read raw for short windows and hourly for anything longer.
 from __future__ import annotations
 
 import time
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiosqlite
 import structlog
 
 from .config import Settings
+from .db import connect as db_connect
 
 log = structlog.get_logger("metrics")
 
@@ -58,10 +59,9 @@ async def ensure_schema(settings: Settings) -> None:
     log.info("metrics.ready", db=_db_path)
 
 
-@asynccontextmanager
-async def _connect() -> AsyncIterator[aiosqlite.Connection]:
-    async with aiosqlite.connect(_db_path) as db:
-        yield db
+def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
+    """Shared connection helper — see app/db.py."""
+    return db_connect(_db_path)
 
 
 async def record(device_id: int, cpu_pct: float, mem_pct: float, disk_max_pct: float) -> None:

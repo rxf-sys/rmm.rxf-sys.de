@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { Device } from '../types';
 import { IconSearch } from '../icons';
-import { deviceState, osShort, stateColor } from '../ui';
+import { deviceState, osShort, stateColor } from '../deviceStatus';
 import type { PageId } from './Sidebar';
+import { Modal } from './Modal';
 
 interface Result {
   id: string;
@@ -119,54 +120,58 @@ export function CommandPalette({
   };
 
   return (
-    <div className="overlay palette-wrap" onClick={onClose}>
-      <div className="palette" onClick={(e) => e.stopPropagation()}>
-        <div className="palette-input-row">
-          <span style={{ color: 'var(--tx3)', display: 'inline-flex' }}><IconSearch size={14} /></span>
-          <input
-            className="palette-input"
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setSel(0);
-            }}
-            onKeyDown={onKey}
-            placeholder="Seite, Gerät oder Aktion…"
-            autoFocus
-          />
-          <span className="kbd" style={{ margin: 0 }}>
-            esc
-          </span>
-        </div>
-        <div className="palette-list">
-          {results.map((r, i) => (
-            <button
-              key={r.id}
-              className={i === clampedSel ? 'palette-item sel' : 'palette-item'}
-              onClick={r.run}
-              onMouseEnter={() => setSel(i)}
-            >
-              <span className="palette-ico" style={{ color: r.iconColor ?? 'var(--tx2)' }}>
-                {r.icon}
-              </span>
-              <span style={{ fontWeight: 700, fontSize: 12.5 }}>{r.label}</span>
-              <span style={{ marginLeft: 'auto', fontWeight: 500, fontSize: 10.5, color: 'var(--tx3)' }}>
-                {r.hint}
-              </span>
-            </button>
-          ))}
-          {results.length === 0 && (
-            <div style={{ padding: '14px 11px', color: 'var(--tx3)', fontSize: 12.5 }}>
-              Keine Treffer.
-            </div>
-          )}
-        </div>
-        <div className="palette-foot">
-          <span>↵ öffnen</span>
-          <span>esc schließen</span>
-          <span style={{ marginLeft: 'auto' }}>{results.length} Treffer</span>
-        </div>
+    <Modal
+      title="Befehlspalette"
+      onClose={onClose}
+      wrapClassName="palette-wrap"
+      panelClassName="palette"
+      hideTitle
+    >
+      <div className="palette-input-row">
+        <span style={{ color: 'var(--tx3)', display: 'inline-flex' }}><IconSearch size={14} /></span>
+        <input
+          className="palette-input"
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setSel(0);
+          }}
+          onKeyDown={onKey}
+          placeholder="Seite, Gerät oder Aktion…"
+          aria-label="Befehlspalette durchsuchen"
+        />
+        <span className="kbd" style={{ margin: 0 }}>
+          esc
+        </span>
       </div>
-    </div>
+      <div className="palette-list">
+        {results.map((r, i) => (
+          <button
+            key={r.id}
+            className={i === clampedSel ? 'palette-item sel' : 'palette-item'}
+            onClick={r.run}
+            onMouseEnter={() => setSel(i)}
+          >
+            <span className="palette-ico" style={{ color: r.iconColor ?? 'var(--tx2)' }}>
+              {r.icon}
+            </span>
+            <span style={{ fontWeight: 700, fontSize: 12.5 }}>{r.label}</span>
+            <span style={{ marginLeft: 'auto', fontWeight: 500, fontSize: 10.5, color: 'var(--tx3)' }}>
+              {r.hint}
+            </span>
+          </button>
+        ))}
+        {results.length === 0 && (
+          <div style={{ padding: '14px 11px', color: 'var(--tx3)', fontSize: 12.5 }}>
+            Keine Treffer.
+          </div>
+        )}
+      </div>
+      <div className="palette-foot">
+        <span>↵ öffnen</span>
+        <span>esc schließen</span>
+        <span style={{ marginLeft: 'auto' }}>{results.length} Treffer</span>
+      </div>
+    </Modal>
   );
 }

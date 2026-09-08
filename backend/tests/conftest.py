@@ -21,6 +21,7 @@ from app import (
 )
 from app.config import Settings, get_settings
 from app.main import app
+from app.routers import agent as agent_router
 from app.routers import auth as auth_router
 
 
@@ -66,6 +67,7 @@ async def client(settings: Settings):
     releases.reset_for_tests(None, "")
     job_secrets.reset_for_tests()
     auth_router.reset_rate_limiter_for_tests()
+    agent_router.reset_enroll_limiter_for_tests()
     app.dependency_overrides[get_settings] = lambda: settings
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c

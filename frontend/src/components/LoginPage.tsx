@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { apiErrorMessage } from '../api/client';
 
 interface Props {
@@ -14,6 +14,17 @@ export function LoginPage({ onLogin }: Props) {
   const [needTotp, setNeedTotp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const userRef = useRef<HTMLInputElement>(null);
+  const totpRef = useRef<HTMLInputElement>(null);
+
+  // Focus moves to the field that is actually actionable: the username on
+  // arrival, the code field when the second factor is asked for. Done with a
+  // ref rather than autoFocus so it also fires on the second step, where the
+  // input is newly revealed rather than newly mounted on page load.
+  useEffect(() => {
+    if (needTotp) totpRef.current?.focus();
+    else userRef.current?.focus();
+  }, [needTotp]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -51,19 +62,19 @@ export function LoginPage({ onLogin }: Props) {
             <span className="brand-sub">Remote Monitoring &amp; Management</span>
           </div>
         </div>
-        <div className="field">
+        <label className="field">
           <span className="field-label">Benutzername</span>
           <input
             className="input"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
-            autoFocus
+            ref={userRef}
             required
             disabled={needTotp}
           />
-        </div>
-        <div className="field">
+        </label>
+        <label className="field">
           <span className="field-label">Passwort</span>
           <input
             className="input"
@@ -74,9 +85,9 @@ export function LoginPage({ onLogin }: Props) {
             required
             disabled={needTotp}
           />
-        </div>
+        </label>
         {needTotp && (
-          <div className="field">
+          <label className="field">
             <span className="field-label">2FA-Code (Authenticator-App oder Backup-Code)</span>
             <input
               className="input mono"
@@ -84,10 +95,10 @@ export function LoginPage({ onLogin }: Props) {
               onChange={(e) => setTotpCode(e.target.value.slice(0, 12))}
               inputMode="numeric"
               placeholder="123456"
-              autoFocus
+              ref={totpRef}
               required
             />
-          </div>
+          </label>
         )}
         {error && (
           <p className="err" role="alert">

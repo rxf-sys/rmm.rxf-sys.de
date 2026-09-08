@@ -61,9 +61,27 @@ rustdesk --config "host=rd.rxf-sys.de,key=<PUBKEY>"
 rustdesk.exe --config "host=rd.rxf-sys.de,key=<PUBKEY>"
 ```
 
-Für unbeaufsichtigten Zugriff in RustDesk ein festes Passwort pro Gerät
-setzen (Einstellungen → Sicherheit → unbeaufsichtigter Zugriff) — pro Gerät
-einzeln, nicht geteilt.
+### Zustimmung oder unbeaufsichtigter Zugriff
+
+Diese Entscheidung fällt pro Gerät und gehört nicht nebenbei getroffen:
+
+| Betriebsart | Wann | Wie |
+|---|---|---|
+| **Mit Zustimmung** (empfohlen für persönlich genutzte Geräte) | Familienlaptop, Arbeitsplatzrechner — auf dem Gerät erscheint eine Abfrage, die Verbindung kommt erst nach Bestätigung zustande | RustDesk → Einstellungen → Sicherheit: Zugriff nur nach Bestätigung zulassen |
+| **Unbeaufsichtigt** | Server ohne Bildschirm, Geräte ohne Nutzer | Festes Passwort pro Gerät setzen (Einstellungen → Sicherheit → unbeaufsichtigter Zugriff) — pro Gerät einzeln, nie geteilt |
+
+Die genaue Beschriftung der Optionen unterscheidet sich zwischen
+RustDesk-Versionen; die entsprechenden Schalter liegen immer unter
+Einstellungen → Sicherheit. Ob sich dasselbe über `--option` auf der
+Kommandozeile setzen lässt, ist hier **nicht verifiziert** — der
+GUI-Weg ist der belastbare.
+
+Das Passwort für unbeaufsichtigten Zugriff gehört in den Passwort-Tresor des
+Dashboards (Gerät → Passwörter), nicht in eine Notiz: dort ist es
+verschlüsselt und jeder Zugriff steht im Audit-Log.
+
+Was die betreute Person darüber wissen sollte, steht in
+[`../docs/PRIVACY.md`](../docs/PRIVACY.md).
 
 Der Agent liest die RustDesk-ID danach automatisch aus (`rustdesk --get-id`)
 und meldet sie im Heartbeat; sie erscheint dann im Remote-Panel. Alternativ

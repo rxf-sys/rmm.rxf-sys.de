@@ -2,9 +2,9 @@
 
 Every security- or fleet-relevant action (login, enrollment, job execution,
 device change, fired alert) lands here as one immutable row and also goes
-through structlog. Unlike the Phase-0 in-memory ring buffer this survives a
-restart, which matters for an RMM: the audit trail of "who ran what on whose
-machine" is not allowed to vanish when the container recycles.
+through structlog. Unlike an in-memory ring buffer this survives a restart,
+which matters for an RMM: the audit trail of "who ran what on whose machine"
+is not allowed to vanish when the container recycles.
 
 ``record`` is async because it writes SQLite; every caller already runs
 inside an async request handler or background loop.
@@ -14,14 +14,15 @@ from __future__ import annotations
 
 import json
 import time
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiosqlite
 import structlog
 
 from .config import Settings
+from .db import connect as db_connect
 
 _log = structlog.get_logger("audit")
 
@@ -53,10 +54,9 @@ async def ensure_schema(settings: Settings) -> None:
     _log.info("audit.ready", db=_db_path)
 
 
-@asynccontextmanager
-async def _connect() -> AsyncIterator[aiosqlite.Connection]:
-    async with aiosqlite.connect(_db_path) as db:
-        yield db
+def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
+    """Shared connection helper — see app/db.py."""
+    return db_connect(_db_path)
 
 
 async def record(event: str, **fields: Any) -> None:

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
+import { useConfirm } from '../hooks/useConfirm';
 import { formatRelative } from '../format';
 import type { Account } from '../types';
 import { AdminExtras } from './AdminExtras';
+import { Modal } from './Modal';
 
 interface Props {
   currentUser: Account;
@@ -19,6 +21,7 @@ const EMPTY: Draft = { username: '', password: '', role: 'viewer', email: '' };
 const COLS = '14fr 12fr 8fr 8fr 10fr 16fr';
 
 export function AdminPage({ currentUser }: Props) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [resetFor, setResetFor] = useState<number | null>(null);
@@ -67,6 +70,7 @@ export function AdminPage({ currentUser }: Props) {
 
   return (
     <div className="screen">
+      {confirmDialog}
       <div className="page-head center">
         <h1 className="page-title">Administration</h1>
         <span className="muted">Benutzer, Sicherheit &amp; Benachrichtigungen</span>
@@ -96,7 +100,7 @@ export function AdminPage({ currentUser }: Props) {
               value={draft.username}
               onChange={(e) => setDraft({ ...draft, username: e.target.value })}
               placeholder="Benutzername"
-              autoFocus
+              aria-label="Benutzername"
             />
             <input
               className="input"
@@ -200,11 +204,23 @@ export function AdminPage({ currentUser }: Props) {
                       <button
                         className="btn btn-sm"
                         title="Zweitfaktor + Backup-Codes entfernen (verlorenes Handy)"
-                        onClick={() => {
-                          if (confirm(`2FA für „${a.username}" wirklich zurücksetzen?`)) {
-                            void run(() => api.updateAccount(a.id, { reset_totp: true }));
-                          }
-                        }}
+                        onClick={() =>
+                          void (async () => {
+                            const ok = await ask({
+                              title: '2FA zurücksetzen',
+                              body: (
+                                <>
+                                  Zweitfaktor und Backup-Codes von <strong>{a.username}</strong>{' '}
+                                  werden entfernt. Das Konto kann sich danach allein mit dem
+                                  Passwort anmelden, bis 2FA neu eingerichtet ist.
+                                </>
+                              ),
+                              confirmLabel: '2FA zurücksetzen',
+                              danger: true,
+                            });
+                            if (ok) await run(() => api.updateAccount(a.id, { reset_totp: true }));
+                          })()
+                        }
                       >
                         2FA zurücksetzen
                       </button>
@@ -219,11 +235,23 @@ export function AdminPage({ currentUser }: Props) {
                         </button>
                         <button
                           className="btn btn-danger btn-sm"
-                          onClick={() => {
-                            if (confirm(`Konto „${a.username}" wirklich löschen?`)) {
-                              void run(() => api.deleteAccount(a.id));
-                            }
-                          }}
+                          onClick={() =>
+                            void (async () => {
+                              const ok = await ask({
+                                title: 'Konto löschen',
+                                body: (
+                                  <>
+                                    Das Konto <strong>{a.username}</strong> wird gelöscht und alle
+                                    seine Sitzungen werden beendet. Verknüpfte Geräte und
+                                    Audit-Einträge bleiben erhalten.
+                                  </>
+                                ),
+                                confirmLabel: 'Konto löschen',
+                                danger: true,
+                              });
+                              if (ok) await run(() => api.deleteAccount(a.id));
+                            })()
+                          }
                         >
                           Löschen
                         </button>
@@ -240,32 +268,33 @@ export function AdminPage({ currentUser }: Props) {
       <AdminExtras currentUser={currentUser} />
 
       {resetFor !== null && (
-        <div className="overlay modal-wrap" onClick={() => setResetFor(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <span style={{ fontWeight: 800, fontSize: 15 }}>
-              Passwort zurücksetzen — {accounts?.find((a) => a.id === resetFor)?.username}
-            </span>
+        <Modal
+          title={`Passwort zurücksetzen — ${accounts?.find((a) => a.id === resetFor)?.username ?? ''}`}
+          onClose={() => setResetFor(null)}
+        >
+          <label className="field" htmlFor="reset-pw">
+            <span className="field-label">Neues Passwort (min. 8 Zeichen)</span>
             <input
+              id="reset-pw"
               className="input"
               type="password"
+              autoComplete="new-password"
               value={resetPw}
               onChange={(e) => setResetPw(e.target.value)}
-              placeholder="Neues Passwort (min. 8 Zeichen)"
-              autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && resetPw.length >= 8) void doReset();
               }}
             />
-            <div className="row" style={{ gap: 8 }}>
-              <button className="btn btn-primary" onClick={() => void doReset()} disabled={resetPw.length < 8}>
-                Setzen
-              </button>
-              <button className="btn" onClick={() => setResetFor(null)}>
-                Abbrechen
-              </button>
-            </div>
+          </label>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn btn-primary" onClick={() => void doReset()} disabled={resetPw.length < 8}>
+              Setzen
+            </button>
+            <button className="btn" onClick={() => setResetFor(null)}>
+              Abbrechen
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

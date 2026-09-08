@@ -1,8 +1,12 @@
 """Request authentication via local account sessions.
 
-Every protected router depends on ``verify_session``; admin-only routes
-additionally depend on ``require_admin``. Agents do NOT authenticate here —
-they carry per-device credentials checked by the agent endpoints (Phase 1).
+Every protected router depends on one of three levels: ``verify_session``
+(any signed-in role), ``require_operator`` (admin or techniker) or
+``require_admin``. ``person_scope`` and ``device_visible`` narrow the data a
+``viewer`` sees to their own person's devices — role alone is not enough.
+
+Agents do NOT authenticate here; they carry per-device credentials that the
+agent endpoints check themselves.
 
 When ``auth_enabled`` is False (local development) both dependencies resolve
 to a synthetic admin identity so the API can be exercised without a login.

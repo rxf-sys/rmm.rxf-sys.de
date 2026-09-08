@@ -48,12 +48,11 @@ async def test_aggregation_rolls_up_and_retention_drops_raw(
     assert [s["cpu_pct"] for s in raw] == [50.0]
 
     # Hourly: the completed hour was rolled up (avg of 10 and 30).
-    async with aiosqlite.connect(settings.storage_db_path) as db:
-        async with db.execute(
-            "SELECT cpu_avg, cpu_max, samples FROM metrics_hourly WHERE device_id = 1 AND hour_ts = ?",
-            (hour,),
-        ) as cur:
-            row = await cur.fetchone()
+    async with aiosqlite.connect(settings.storage_db_path) as db, db.execute(
+        "SELECT cpu_avg, cpu_max, samples FROM metrics_hourly WHERE device_id = 1 AND hour_ts = ?",
+        (hour,),
+    ) as cur:
+        row = await cur.fetchone()
     assert row is not None
     assert row[0] == 20.0 and row[1] == 30.0 and row[2] == 2
 

@@ -188,10 +188,24 @@ der Rest:
 Pro Gerät: im Dashboard „Gerät hinzufügen" → Token → Binary + Installer
 aufs Gerät → `install.sh`/`install.ps1` (siehe `agent/install/README.md`).
 
-**Transparenz gegenüber der Familie:** kurz erklären, was installiert ist und
-was du sehen/tun kannst (Monitoring, Fernwartung mit Zustimmung, Updates).
-Das append-only Audit-Log protokolliert jeden Befehl — nicht nur Technik,
-auch eine Fairness-Frage.
+**Transparenz gegenüber der Familie:** Vor der Installation
+[`docs/PRIVACY.md`](../docs/PRIVACY.md) weitergeben. Die Seite ist in
+einfachem Deutsch für die betreute Person geschrieben und listet konkret, was
+gemeldet wird (auch der angemeldete Benutzername und die Liste installierter
+Programme) und was ausdrücklich nicht (Bildschirminhalt, Tastatureingaben,
+Dateien, Browserverlauf). Dazu die Deinstallation und das Recht, das
+Audit-Log einzusehen.
+
+Zwei Punkte, die dabei ehrlich benannt gehören: Über „Befehl ausführen" ist
+auf dem Gerät technisch alles möglich, was auch am Gerät selbst ginge. Und
+RustDesk lässt sich mit **oder ohne** Zustimmungsabfrage betreiben — für
+persönlich genutzte Geräte gehört die Abfrage an (siehe
+[`RUSTDESK.md`](RUSTDESK.md), Abschnitt 4). Das append-only Audit-Log
+protokolliert jeden Befehl; das ist nicht nur Technik, sondern eine
+Fairness-Frage.
+
+Wer möchte, bekommt einen eigenen `viewer`-Zugang: Personen anlegen, Gerät
+zuordnen — das Konto sieht dann genau die eigenen Geräte, nur lesend.
 
 ## Fertig wenn
 

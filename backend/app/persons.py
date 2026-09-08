@@ -9,14 +9,15 @@ never deletes devices — they just become unassigned.
 from __future__ import annotations
 
 import time
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiosqlite
 import structlog
 
 from .config import Settings
+from .db import connect as db_connect
 
 log = structlog.get_logger("persons")
 
@@ -46,10 +47,9 @@ async def ensure_schema(settings: Settings) -> None:
     log.info("persons.ready", db=_db_path)
 
 
-@asynccontextmanager
-async def _connect() -> AsyncIterator[aiosqlite.Connection]:
-    async with aiosqlite.connect(_db_path) as db:
-        yield db
+def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
+    """Shared connection helper — see app/db.py."""
+    return db_connect(_db_path)
 
 
 def _row_to_person(row: aiosqlite.Row) -> dict[str, Any]:
@@ -60,7 +60,8 @@ def _row_to_person(row: aiosqlite.Row) -> dict[str, Any]:
         "phone": row["phone"],
         "notes": row["notes"],
         "created_at": int(row["created_at"]),
-        "device_count": int(row["device_count"]) if "device_count" in row.keys() else 0,
+        # sqlite3.Row.__contains__ tests values, not column names — see devices.py.
+        "device_count": int(row["device_count"]) if "device_count" in row.keys() else 0,  # noqa: SIM118
     }
 
 
@@ -97,7 +98,8 @@ async def create_person(
         await db.commit()
         person_id = int(cur.lastrowid or 0)
     person = await get_person(person_id)
-    assert person is not None
+    if person is None:
+        raise RuntimeError(f"person {person_id} vanished between insert and read")
     return person
 
 
@@ -118,7 +120,7 @@ async def update_person(
     if sets:
         params.append(person_id)
         async with _connect() as db:
-            await db.execute(f"UPDATE persons SET {', '.join(sets)} WHERE id = ?", params)
+            await db.execute(f"UPDATE persons SET {', '.join(sets)} WHERE id = ?", params)  # noqa: S608 - literal columns
             await db.commit()
     return await get_person(person_id)
 

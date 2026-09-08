@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Sicherheitslücke melden
+    url: https://github.com/rxf-sys/rmm.rxf-sys.de/blob/main/SECURITY.md
+    about: Bitte nicht öffentlich als Issue melden — Meldeweg steht in SECURITY.md.

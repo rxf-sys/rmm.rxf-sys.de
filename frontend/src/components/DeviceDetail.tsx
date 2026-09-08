@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { formatBytes, formatRate, formatRelative, osLabel } from '../format';
+import { useConfirm } from '../hooks/useConfirm';
 import { useJobStream } from '../hooks/useJobStream';
 import type {
   Alert,
@@ -18,7 +19,8 @@ import type {
   Severity,
   Shell,
 } from '../types';
-import { Dot, deviceState, diskColor, stateColor } from '../ui';
+import { Dot } from '../ui';
+import { deviceState, diskColor, stateColor } from '../deviceStatus';
 import { IconKey, IconPower, IconTerminal, IconWrench, OsIcon } from '../icons';
 // (osShort available via ../format if needed by future tab work)
 
@@ -92,18 +94,26 @@ export function DeviceDetail({
   onBack,
   onDeleted,
 }: Props) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [detail, setDetail] = useState<DeviceDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Separate from `error`: a confirmation rendered in red as if it were a
+  // failure is worse than no confirmation at all.
+  const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<TabId>('overview');
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [agentUpdating, setAgentUpdating] = useState(false);
   const [agentUpdateMsg, setAgentUpdateMsg] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Reset during render instead of in an effect: an effect would show the
+  // previous device's update message for one frame after switching devices.
+  const [seenDeviceId, setSeenDeviceId] = useState(deviceId);
+  if (deviceId !== seenDeviceId) {
+    setSeenDeviceId(deviceId);
     setAgentUpdateMsg(null);
     setAgentUpdating(false);
-  }, [deviceId]);
+  }
 
   const load = useCallback(
     (signal?: AbortSignal) =>
@@ -130,7 +140,19 @@ export function DeviceDetail({
   }, [load]);
 
   const remove = async () => {
-    if (!confirm('Gerät wirklich entfernen? Der Agent verliert damit den Zugang.')) return;
+    const ok = await ask({
+      title: 'Gerät entfernen',
+      body: (
+        <>
+          <strong>{detail?.device.hostname ?? `Gerät ${deviceId}`}</strong> wird samt Verlauf, Inventar,
+          Alarmen und gespeicherten Passwörtern gelöscht. Der Agent auf dem Gerät verliert sofort
+          seinen Zugang und müsste neu enrollt werden.
+        </>
+      ),
+      confirmLabel: 'Endgültig entfernen',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.deleteDevice(deviceId);
       onDeleted();
@@ -150,17 +172,32 @@ export function DeviceDetail({
 
   const wake = async () => {
     setError(null);
+    setNotice(null);
     try {
       const r = await api.wakeDevice(deviceId);
-      setError(`✓ Magic Packet an ${r.sent} MAC(s) gesendet — das Gerät sollte in Kürze hochfahren.`);
+      setNotice(
+        `Magic Packet an ${r.sent} MAC(s) gesendet — das Gerät sollte in Kürze hochfahren.`,
+      );
     } catch (e) {
       setError(apiErrorMessage(e));
     }
   };
 
   const updateAgentNow = async () => {
+    const ok = await ask({
+      title: 'Agent aktualisieren',
+      body: (
+        <>
+          Der Agent lädt die neue Binary, prüft Signatur und Prüfsumme, tauscht sich aus und
+          startet neu. Laufende Jobs auf diesem Gerät brechen dabei ab.
+        </>
+      ),
+      confirmLabel: 'Update anstoßen',
+    });
+    if (!ok) return;
     setAgentUpdating(true);
     setError(null);
+    setNotice(null);
     try {
       const r = await api.updateAgent(deviceId);
       setAgentUpdateMsg(
@@ -192,6 +229,7 @@ export function DeviceDetail({
 
   return (
     <div className="screen" style={{ paddingTop: 18 }}>
+      {confirmDialog}
       <div className="row" style={{ gap: 12 }}>
         <button className="btn-icon sq30" onClick={onBack}>
           ←
@@ -266,6 +304,11 @@ export function DeviceDetail({
       </div>
 
       {error && <p className="err">{error}</p>}
+      {notice && (
+        <p style={{ color: 'var(--ok)', fontSize: 12.5, fontWeight: 600, margin: 0 }} role="status">
+          {notice}
+        </p>
+      )}
 
       {d.agent_update_available && (
         <div className="card card-pad row" style={{ gap: 10, flexWrap: 'wrap', borderColor: 'var(--accLine)' }}>
@@ -322,9 +365,15 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
   const [tags, setTags] = useState(device.tags.join(', '));
   const [personId, setPersonId] = useState<number>(device.person_id ?? 0);
   const [persons, setPersons] = useState<Person[]>([]);
+  const [personsError, setPersonsError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.persons().then((r) => setPersons(r.persons)).catch(() => {});
+    // A failed person list must not silently look like "no persons exist" —
+    // the picker would then quietly offer nothing.
+    api
+      .persons()
+      .then((r) => setPersons(r.persons))
+      .catch((e) => setPersonsError(apiErrorMessage(e)));
   }, []);
 
   const save = async () => {
@@ -342,11 +391,12 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
   return (
     <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <span className="card-title">Gerät bearbeiten</span>
-      <div className="field">
+      {personsError && <p className="err">Personenliste nicht geladen: {personsError}</p>}
+      <label className="field">
         <span className="field-label">Besitzer / Bezeichnung</span>
         <input className="input" value={owner} onChange={(e) => setOwner(e.target.value)} />
-      </div>
-      <div className="field">
+      </label>
+      <label className="field">
         <span className="field-label">Zugewiesene Person</span>
         <select className="input" value={personId} onChange={(e) => setPersonId(Number(e.target.value))}>
           <option value={0}>— keine —</option>
@@ -354,11 +404,11 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
-      </div>
-      <div className="field">
+      </label>
+      <label className="field">
         <span className="field-label">Tags (kommagetrennt)</span>
         <input className="input" value={tags} onChange={(e) => setTags(e.target.value)} />
-      </div>
+      </label>
       <div className="row" style={{ gap: 8 }}>
         <button className="btn btn-primary" onClick={() => void save()}>Speichern</button>
         <button className="btn" onClick={onClose}>Abbrechen</button>
@@ -380,8 +430,16 @@ interface CredDraft {
 const EMPTY_CRED: CredDraft = { id: null, label: '', username: '', secret: '', notes: '' };
 
 function PasswordsTab({ deviceId }: { deviceId: number }) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [creds, setCreds] = useState<Credential[] | null>(null);
   const [draft, setDraft] = useState<CredDraft | null>(null);
+  const labelRef = useRef<HTMLInputElement>(null);
+  // One stable key per open form: "new", or the id being edited. Focus follows
+  // the form when it appears, without autoFocus's page-load surprise.
+  const draftKey = draft ? String(draft.id ?? 'new') : null;
+  useEffect(() => {
+    if (draftKey !== null) labelRef.current?.focus();
+  }, [draftKey]);
   const [revealed, setRevealed] = useState<Record<number, string>>({});
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -460,7 +518,13 @@ function PasswordsTab({ deviceId }: { deviceId: number }) {
   };
 
   const remove = async (id: number) => {
-    if (!confirm('Passwort-Eintrag wirklich löschen?')) return;
+    const ok = await ask({
+      title: 'Passwort löschen',
+      body: 'Der verschlüsselte Eintrag wird entfernt. Das lässt sich nicht rückgängig machen.',
+      confirmLabel: 'Löschen',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await api.deleteCredential(deviceId, id);
       await load();
@@ -471,6 +535,7 @@ function PasswordsTab({ deviceId }: { deviceId: number }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {confirmDialog}
       <div className="row" style={{ gap: 8 }}>
         <span className="card-title">Passwörter {creds ? `(${creds.length})` : ''}</span>
         <span className="muted" style={{ fontSize: 11 }}>
@@ -488,7 +553,7 @@ function PasswordsTab({ deviceId }: { deviceId: number }) {
         <div className="card card-pad" style={{ borderColor: 'var(--accLine)', display: 'flex', flexDirection: 'column', gap: 9 }}>
           <span className="card-title-sm">{draft.id === null ? 'Neuer Eintrag' : 'Eintrag bearbeiten'}</span>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <input className="input" style={{ flex: '1 1 150px' }} value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder="Bezeichnung, z. B. Windows-Login" autoFocus />
+            <input className="input" style={{ flex: '1 1 150px' }} value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} placeholder="Bezeichnung, z. B. Windows-Login" aria-label="Bezeichnung" ref={labelRef} />
             <input className="input" style={{ flex: '1 1 130px' }} value={draft.username} onChange={(e) => setDraft({ ...draft, username: e.target.value })} placeholder="Benutzername (optional)" />
             <input
               className="input"
@@ -661,7 +726,10 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
           lastScan: scanned,
         });
       })
-      .catch(() => {});
+      .catch(() => {
+        // Trend numbers are decoration on the overview tab; the tab itself
+        // still renders without them.
+      });
     return () => ctrl.abort();
   }, [d.id]);
   const secRow = (label: string, value: string | undefined): [string, ReactNode] => [
@@ -960,17 +1028,29 @@ function HistoryTab({ deviceId }: { deviceId: number }) {
 
   const W = 600;
   const H = 220;
+  // `samples.length < 2` already rules out an empty array; the explicit
+  // first/last bindings make that visible to the compiler as well.
+  const bounds = () => {
+    if (!samples || samples.length < 2) return null;
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    if (!first || !last) return null;
+    return { t0: first.ts, t1: Math.max(last.ts, first.ts + 1) };
+  };
   const line = (key: 'cpu_pct' | 'mem_pct' | 'disk_max_pct') => {
-    if (!samples || samples.length < 2) return '';
-    const t0 = samples[0].ts;
-    const t1 = Math.max(samples[samples.length - 1].ts, t0 + 1);
+    const b = bounds();
+    if (!b || !samples) return '';
     return samples
-      .map((s) => `${(((s.ts - t0) / (t1 - t0)) * W).toFixed(1)},${(H - (s[key] / 100) * H).toFixed(1)}`)
+      .map(
+        (s) =>
+          `${(((s.ts - b.t0) / (b.t1 - b.t0)) * W).toFixed(1)},${(H - (s[key] / 100) * H).toFixed(1)}`,
+      )
       .join(' ');
   };
   const tsLabel = (frac: number) => {
-    if (!samples || samples.length < 2) return '';
-    const t = samples[0].ts + frac * (samples[samples.length - 1].ts - samples[0].ts);
+    const b = bounds();
+    if (!b) return '';
+    const t = b.t0 + frac * (b.t1 - b.t0);
     return new Date(t * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -1159,11 +1239,15 @@ function RemoteTab({ device, isOperator, onSession, onChanged }: { device: Devic
   const [shell, setShell] = useState<Shell>(device.os === 'windows' ? 'powershell' : 'bash');
   const [activeJob, setActiveJob] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { ask, dialog: confirmDialog } = useConfirm();
   const stream = useJobStream(activeJob);
   const outRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.scripts().then((r) => setScripts(r.scripts)).catch(() => {});
+    api
+      .scripts()
+      .then((r) => setScripts(r.scripts))
+      .catch((e) => setError(apiErrorMessage(e)));
   }, []);
   useEffect(() => {
     if (outRef.current) outRef.current.scrollTop = outRef.current.scrollHeight;
@@ -1171,6 +1255,20 @@ function RemoteTab({ device, isOperator, onSession, onChanged }: { device: Devic
 
   const runShell = async () => {
     if (!command.trim()) return;
+    const ok = await ask({
+      title: 'Befehl ausführen',
+      body: (
+        <>
+          Wird auf <strong>{device.hostname}</strong> mit vollen Systemrechten ausgeführt:
+          <pre className="mono" style={{ fontSize: 11.5, whiteSpace: 'pre-wrap', marginTop: 8 }}>
+            {command.trim()}
+          </pre>
+        </>
+      ),
+      confirmLabel: 'Ausführen',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const r = await api.createShellJob(device.id, command.trim(), shell);
       setActiveJob(r.job.id);
@@ -1194,6 +1292,7 @@ function RemoteTab({ device, isOperator, onSession, onChanged }: { device: Devic
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {confirmDialog}
       {device.rustdesk_id && (
         <div className="card card-pad row" style={{ gap: 10 }}>
           <span className="card-title-sm">Remote-Desktop</span>
@@ -1306,6 +1405,7 @@ function RemoteSetup({ device, onChanged }: { device: Device; onChanged: () => v
 // Updates tab (patches)
 // ---------------------------------------------------------------------------
 function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; connected: boolean; isOperator: boolean }) {
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [patches, setPatches] = useState<Patch[] | null>(null);
   const [installingJob, setInstallingJob] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1343,6 +1443,19 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
     } catch (e) { setError(apiErrorMessage(e)); } finally { setBusy(false); }
   };
   const install = async (securityOnly: boolean) => {
+    const ok = await ask({
+      title: securityOnly ? 'Sicherheitsupdates installieren' : 'Alle Updates installieren',
+      body: (
+        <>
+          Die Installation läuft auf dem Gerät und kann je nach Umfang lange dauern. Manche
+          Updates erzwingen einen Neustart — wer gerade davor sitzt, verliert ungespeicherte
+          Arbeit.
+        </>
+      ),
+      confirmLabel: 'Installation starten',
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const r = await api.installPatches(deviceId, { security_only: securityOnly });
@@ -1355,6 +1468,7 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {confirmDialog}
       <div className="row" style={{ gap: 8 }}>
         <span className="card-title">Updates {patches ? `(${patches.length})` : ''}</span>
         {isOperator && (
@@ -1407,12 +1521,19 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
 // ---------------------------------------------------------------------------
 function JobsTab({ deviceId }: { deviceId: number }) {
   const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [jobsError, setJobsError] = useState<string | null>(null);
   const [openJob, setOpenJob] = useState<number | null>(null);
   const stream = useJobStream(openJob);
 
   useEffect(() => {
     const ctrl = new AbortController();
-    const load = () => api.deviceJobs(deviceId, ctrl.signal).then((r) => setJobs(r.jobs)).catch(() => {});
+    const load = () =>
+      api
+        .deviceJobs(deviceId, ctrl.signal)
+        .then((r) => setJobs(r.jobs))
+        .catch((e) => {
+          if (!ctrl.signal.aborted) setJobsError(apiErrorMessage(e));
+        });
     void load();
     const timer = setInterval(load, 10_000);
     return () => { clearInterval(timer); ctrl.abort(); };
@@ -1420,6 +1541,7 @@ function JobsTab({ deviceId }: { deviceId: number }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {jobsError && <p className="err">{jobsError}</p>}
       <div className="card" style={{ overflow: 'hidden' }}>
         <div className="card-head"><span className="card-title-sm">Job-Verlauf</span></div>
         {jobs === null ? (

@@ -15,14 +15,15 @@ import hmac
 import json
 import secrets
 import time
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiosqlite
 import structlog
 
 from .config import Settings
+from .db import connect as db_connect
 
 log = structlog.get_logger("devices")
 
@@ -87,7 +88,7 @@ async def ensure_schema(settings: Settings) -> None:
 
 
 async def _migrate_devices(db: aiosqlite.Connection) -> None:
-    """ALTER in columns added after the Phase-0 schema (SQLite's CREATE TABLE
+    """ALTER in columns added after the initial schema (SQLite's CREATE TABLE
     IF NOT EXISTS ignores new columns once the table exists)."""
     async with db.execute("PRAGMA table_info(devices)") as cur:
         cols = {row[1] for row in await cur.fetchall()}
@@ -105,11 +106,9 @@ async def _migrate_devices(db: aiosqlite.Connection) -> None:
         log.info("devices.migrated", column="maintenance_until")
 
 
-@asynccontextmanager
-async def _connect() -> AsyncIterator[aiosqlite.Connection]:
-    async with aiosqlite.connect(_db_path) as db:
-        await db.execute("PRAGMA foreign_keys = ON")
-        yield db
+def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
+    """Shared connection helper — see app/db.py."""
+    return db_connect(_db_path)
 
 
 def _hash_token(token: str) -> str:
@@ -136,15 +135,18 @@ def _row_to_device(row: aiosqlite.Row, offline_after_s: int) -> dict[str, Any]:
         "agent_version": row["agent_version"],
         "tags": [t for t in str(row["tags"]).split(",") if t],
         "heartbeat": heartbeat if isinstance(heartbeat, dict) else {},
-        "rustdesk_id": row["rustdesk_id"] if "rustdesk_id" in row.keys() else "",
+        # `in row.keys()` is deliberate: sqlite3.Row.__contains__ tests VALUES,
+        # not column names, so SIM118's rewrite would break these fallbacks for
+        # rows read before the corresponding ALTER TABLE ran.
+        "rustdesk_id": row["rustdesk_id"] if "rustdesk_id" in row.keys() else "",  # noqa: SIM118
         "person_id": (
             int(row["person_id"])
-            if "person_id" in row.keys() and row["person_id"] is not None
+            if "person_id" in row.keys() and row["person_id"] is not None  # noqa: SIM118
             else None
         ),
         "maintenance_until": (
             int(row["maintenance_until"])
-            if "maintenance_until" in row.keys()
+            if "maintenance_until" in row.keys()  # noqa: SIM118
             and row["maintenance_until"] is not None
             and int(row["maintenance_until"]) > time.time()
             else None
@@ -439,7 +441,7 @@ async def update_device(
     if sets:
         params.append(device_id)
         async with _connect() as db:
-            await db.execute(f"UPDATE devices SET {', '.join(sets)} WHERE id = ?", params)
+            await db.execute(f"UPDATE devices SET {', '.join(sets)} WHERE id = ?", params)  # noqa: S608 - literal columns
             await db.commit()
     return await get_device(device_id, offline_after_s=1)
 
@@ -500,21 +502,19 @@ async def in_maintenance_ids() -> set[int]:
     """Device ids whose maintenance window is currently open (for the alert
     engine, which reads this once per tick)."""
     now = int(time.time())
-    async with _connect() as db:
-        async with db.execute(
-            "SELECT id FROM devices WHERE maintenance_until IS NOT NULL AND maintenance_until > ?",
-            (now,),
-        ) as cur:
-            return {int(r[0]) for r in await cur.fetchall()}
+    async with _connect() as db, db.execute(
+        "SELECT id FROM devices WHERE maintenance_until IS NOT NULL AND maintenance_until > ?",
+        (now,),
+    ) as cur:
+        return {int(r[0]) for r in await cur.fetchall()}
 
 
 async def device_ids_for_person(person_id: int) -> set[int]:
     """Ids of the devices assigned to a person (viewer scoping)."""
-    async with _connect() as db:
-        async with db.execute(
-            "SELECT id FROM devices WHERE person_id = ?", (person_id,)
-        ) as cur:
-            return {int(r[0]) for r in await cur.fetchall()}
+    async with _connect() as db, db.execute(
+        "SELECT id FROM devices WHERE person_id = ?", (person_id,)
+    ) as cur:
+        return {int(r[0]) for r in await cur.fetchall()}
 
 
 async def device_macs(device_id: int) -> list[str]:

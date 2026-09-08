@@ -28,6 +28,7 @@ from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..config import get_settings
 from ..fleet_ws import hub as fleet_hub
+from ..ratelimit import SlidingWindowLimiter, client_ip
 
 log = structlog.get_logger("agent_api")
 
@@ -37,6 +38,32 @@ router = APIRouter(prefix="/api/agent", tags=["agent"])
 # treats it like any connection loss and retries with backoff, which also
 # covers "device row deleted while agent still runs".
 WS_CLOSE_UNAUTHORIZED = 4401
+
+
+# --- Enrollment rate limiter --------------------------------------------------
+# The token endpoints are the only unauthenticated surface besides the login,
+# and an enrollment token is 24 hours of "may join the fleet". A token is
+# secrets.token_urlsafe(24), so brute force is not the realistic threat — but
+# an unthrottled endpoint that answers "valid / not valid" is a free oracle for
+# a leaked-and-maybe-expired token, and free CPU for whoever wants it.
+#
+# Wider than the login limit because a genuine rollout can legitimately retry:
+# a failed download, a re-run installer. Only failures count.
+_enroll_limiter = SlidingWindowLimiter(max_events=20, window_s=300)
+
+
+def reset_enroll_limiter_for_tests() -> None:
+    _enroll_limiter.reset()
+
+
+def _guard_enroll_rate(request: Request) -> str:
+    ip = client_ip(request)
+    if _enroll_limiter.limited(ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Zu viele fehlgeschlagene Versuche — bitte später erneut probieren",
+        )
+    return ip
 
 
 class EnrollRequest(BaseModel):
@@ -50,7 +77,8 @@ class EnrollRequest(BaseModel):
 
 
 @router.post("/enroll")
-async def enroll(body: EnrollRequest) -> dict:
+async def enroll(body: EnrollRequest, request: Request) -> dict:
+    ip = _guard_enroll_rate(request)
     try:
         result = await devices.enroll_device(
             token=body.token,
@@ -62,6 +90,7 @@ async def enroll(body: EnrollRequest) -> dict:
             agent_version=body.agent_version,
         )
     except devices.EnrollmentError as e:
+        _enroll_limiter.hit(ip)
         # 403 for all token failures; the message says why. No 404-vs-410
         # split — an attacker probing tokens learns nothing extra.
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
@@ -105,6 +134,12 @@ LABEL=__LABEL__
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
 case "$arch" in x86_64|amd64) arch=amd64;; aarch64|arm64) arch=arm64;; *) echo "nicht unterstützte Architektur: $arch" >&2; exit 1;; esac
+# Ein laufender Dienst hält die Binary offen; curl -o scheitert dann mit
+# "Text file busy". Erst stoppen — ein fehlender Dienst ist hier kein Fehler.
+if [[ -x /usr/local/bin/rmm-agent ]]; then
+  echo "==> stoppe vorhandenen Dienst"
+  /usr/local/bin/rmm-agent stop >/dev/null 2>&1 || true
+fi
 echo "==> lade Agent ($os-$arch) von $SERVER"
 # Token im Header statt in der URL — bleibt aus Proxy-/Access-Logs raus.
 curl -fsSL -H "X-Enroll-Token: $TOKEN" "$SERVER/api/agent/setup/download/$os-$arch" -o /usr/local/bin/rmm-agent
@@ -201,8 +236,10 @@ def _public_base(request: Request) -> str:
     return f"{proto}://{host}"
 
 
-async def _validate_setup_token(token: str) -> None:
+async def _validate_setup_token(token: str, request: Request) -> None:
+    ip = _guard_enroll_rate(request)
     if not token or not await devices.enrollment_token_valid(token):
+        _enroll_limiter.hit(ip)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Enrollment-Token ungültig oder abgelaufen",
@@ -212,6 +249,7 @@ async def _validate_setup_token(token: str) -> None:
 @router.get("/setup/download/{target}")
 async def setup_download(
     target: str,
+    request: Request,
     token: str = Query(default=""),
     x_enroll_token: str = Header(default=""),
 ) -> FileResponse:
@@ -220,7 +258,7 @@ async def setup_download(
     device credentials instead). The token travels in the X-Enroll-Token
     header (preferred — keeps it out of proxy/access logs); the query
     parameter remains as fallback for plain browser downloads."""
-    await _validate_setup_token(x_enroll_token or token)
+    await _validate_setup_token(x_enroll_token or token, request)
     path = releases.binary_path(target)
     if path is None:
         raise HTTPException(
@@ -242,7 +280,7 @@ async def setup_script(
     or `irm | iex` (Windows). Token preferred via X-Enroll-Token header
     (stays out of proxy logs); query fallback kept for hand-typed URLs."""
     token = x_enroll_token or token
-    await _validate_setup_token(token)
+    await _validate_setup_token(token, request)
     server = _public_base(request)
     if platform in ("linux", "darwin"):
         body = (
@@ -298,8 +336,10 @@ async def agent_ws(ws: WebSocket) -> None:
     if stale is not None:
         try:
             await stale.close(code=1000, reason="superseded by new connection")
-        except Exception:  # noqa: BLE001 - stale socket is usually already dead
-            pass
+        except Exception as e:  # noqa: BLE001 - any transport error is terminal here
+            # The superseded socket is usually already dead; it has been
+            # replaced in the registry regardless, so this only gets logged.
+            log.debug("agent.stale_close_failed", device_id=device_id, error=str(e))
     if not was_connected:
         fleet_hub.broadcast("device_online")
 

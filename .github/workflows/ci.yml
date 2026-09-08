@@ -30,6 +30,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
       - name: Install
         run: pip install -e ".[dev]"
       - name: Lint
@@ -38,7 +40,7 @@ jobs:
         run: pytest -v --cov=app --cov-fail-under=70
 
   frontend:
-    name: Frontend (build)
+    name: Frontend (lint, test, build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -52,6 +54,10 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install
         run: npm ci --no-audit --no-fund
+      - name: Lint (eslint incl. jsx-a11y)
+        run: npm run lint
+      - name: Test (vitest)
+        run: npm test
       - name: Build (tsc + vite)
         run: npm run build
 
@@ -73,3 +79,62 @@ jobs:
         run: go test ./...
       - name: Cross-compile (all targets)
         run: make release
+
+  # Dependency vulnerabilities, one job per ecosystem so a finding names the
+  # ecosystem it belongs to. This gate did not exist before; `npm ci
+  # --no-audit` above even switches npm's own check off, which is right for
+  # the build job and wrong as the only place it could have happened.
+  audit:
+    name: Dependency audit (${{ matrix.tool }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [pip-audit, npm-audit, govulncheck]
+    steps:
+      - uses: actions/checkout@v5
+
+      - if: matrix.tool == 'pip-audit'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - if: matrix.tool == 'pip-audit'
+        name: pip-audit
+        working-directory: backend
+        run: |
+          pip install pip-audit
+          # Audits the declared dependency tree, not the runner's own toolchain.
+          pip-audit --strict --progress-spinner=off .
+
+      - if: matrix.tool == 'npm-audit'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - if: matrix.tool == 'npm-audit'
+        name: npm audit
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          # Build-chain advisories are real but not shipped to a browser;
+          # fail on high and above, report the rest.
+          npm audit --audit-level=high
+
+      - if: matrix.tool == 'govulncheck'
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - if: matrix.tool == 'govulncheck'
+        name: govulncheck
+        working-directory: agent
+        run: |
+          # Pinned for the same reason ruff is: an unpinned tool in a gate
+          # makes CI a function of someone else's release train. A newer
+          # x/vuln can also raise its own Go floor, which breaks under the
+          # GOTOOLCHAIN=local that setup-go sets.
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          # Reports only vulnerabilities that are actually reachable from this
+          # code, so a finding here is worth acting on.
+          govulncheck ./...

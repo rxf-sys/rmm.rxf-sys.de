@@ -25,7 +25,14 @@ class ConnectionManager:
         # agent's "agent_logs" reply arrives.
         self._log_waiters: dict[int, asyncio.Future[list[str]]] = {}
 
-    async def request_logs(self, device_id: int, timeout: float = 5.0) -> list[str] | None:
+    async def request_logs(
+        self,
+        device_id: int,
+        # ASYNC109 wants callers to own the deadline; here the timeout *is*
+        # enforced in this function (asyncio.wait_for below), and the caller is
+        # an HTTP handler that only needs "logs or nothing".
+        timeout: float = 5.0,  # noqa: ASYNC109
+    ) -> list[str] | None:
         """Ask a connected agent for its recent log lines. Returns None when
         the device isn't connected or doesn't answer in time."""
         if not self.is_connected(device_id):
@@ -37,7 +44,10 @@ class ConnectionManager:
             if not await self.send(device_id, {"type": "get_logs"}):
                 return None
             return await asyncio.wait_for(fut, timeout)
-        except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+        except TimeoutError:
+            # The agent is connected but did not answer in time — an empty
+            # diagnostics panel is the honest result, not a 500.
+            log.info("agent.logs_timeout", device_id=device_id, timeout=timeout)
             return None
         finally:
             self._log_waiters.pop(device_id, None)
@@ -91,8 +101,10 @@ class ConnectionManager:
             return
         try:
             await ws.close(code=4403, reason="device revoked")
-        except Exception:  # noqa: BLE001 - already gone
-            pass
+        except Exception as e:  # noqa: BLE001 - any transport error is terminal here
+            # The socket was already torn down by the peer or the receive loop.
+            # The registry entry is dropped either way, so this is not an error.
+            log.debug("agent.close_failed", device_id=device_id, error=str(e))
 
     def reset_for_tests(self) -> None:
         self._conns.clear()

@@ -148,7 +148,7 @@ async def job_output_ws(ws: WebSocket, job_id: int) -> None:
         while True:
             try:
                 event = await asyncio.wait_for(queue.get(), timeout=30)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Keepalive so idle proxies (Cloudflare ~100s) don't cut the
                 # socket while a long job produces no output.
                 await ws.send_json({"type": "ping"})

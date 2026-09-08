@@ -13,7 +13,19 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
-from app import accounts, alerts, audit, credentials, devices, job_secrets, jobs, metrics, patches, releases, scripts
+from app import (
+    accounts,
+    alerts,
+    audit,
+    credentials,
+    devices,
+    job_secrets,
+    jobs,
+    metrics,
+    patches,
+    releases,
+    scripts,
+)
 from app.agents_ws import manager
 from app.config import Settings, get_settings
 from app.main import app
@@ -153,7 +165,9 @@ def test_ws_job_output_marker_lands_in_vault_not_in_job_log(ws_client: TestClien
         # Marker über zwei Chunks verteilt, wie ein echter Agent streamt.
         ws.send_json({"type": "job_output", "payload": {"job_id": job["id"], "chunk": "ok\n" + marker[:10]}})
         ws.send_json({"type": "job_output", "payload": {"job_id": job["id"], "chunk": marker[10:]}})
-        ws.send_json({"type": "job_result", "payload": {"job_id": job["id"], "status": "done", "exit_code": 0}})
+        ws.send_json(
+            {"type": "job_result", "payload": {"job_id": job["id"], "status": "done", "exit_code": 0}}
+        )
         ws.send_json({"type": "ping"})
         assert ws.receive_json() == {"type": "pong"}
 

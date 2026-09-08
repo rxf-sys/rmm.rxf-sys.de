@@ -13,9 +13,10 @@ Tables (same SQLite file as the device fleet, ``settings.storage_db_path``):
                      as a live cookie
 - ``app_settings`` — global key-value store for runtime-tunable settings
 
-Deliberately NOT ported (yet): API tokens and TOTP — the RMM dashboard has
-exactly one operator for now. Both can be lifted from the admin repo when
-needed.
+TOTP (with single-use backup codes) is implemented here as well; the columns
+``totp_secret`` and ``totp_backup_codes`` are added by the additive migration
+in ``ensure_schema``. API tokens are deliberately absent — every client is
+either a browser (session cookie) or an agent (per-device credentials).
 """
 
 from __future__ import annotations
@@ -23,9 +24,9 @@ from __future__ import annotations
 import hashlib
 import secrets
 import time
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 import aiosqlite
 import structlog
@@ -33,6 +34,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 from .config import Settings
+from .db import connect as db_connect
 
 log = structlog.get_logger("accounts")
 
@@ -74,6 +76,12 @@ _db_path: str = ""
 # ``viewer`` is read-only for family members watching their own device.
 ROLES = ("admin", "techniker", "viewer")
 
+# Enforced here rather than only in the router: create_user/set_password are
+# also reached from the startup bootstrap and from the automatic viewer
+# account for a new person. A policy that only lives in one request handler
+# is not a policy.
+MIN_PASSWORD_LEN = 8
+
 
 class AccountError(Exception):
     """Raised for expected, user-facing account errors (e.g. duplicate name)."""
@@ -112,19 +120,19 @@ async def ensure_schema(settings: Settings) -> None:
     log.info("accounts.ready", db=_db_path)
 
 
-@asynccontextmanager
-async def _connect() -> AsyncIterator[aiosqlite.Connection]:
-    """Open a connection with foreign-key enforcement switched on (SQLite
-    defaults it to OFF per connection, which would disable the ON DELETE
-    CASCADE on sessions)."""
-    async with aiosqlite.connect(_db_path) as db:
-        await db.execute("PRAGMA foreign_keys = ON")
-        yield db
+def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
+    """Shared connection helper — see app/db.py."""
+    return db_connect(_db_path)
 
 
 # ---------------------------------------------------------------------------
 # Password hashing
 # ---------------------------------------------------------------------------
+
+
+def _check_password(password: str) -> None:
+    if len(password) < MIN_PASSWORD_LEN:
+        raise AccountError(f"Passwort muss mindestens {MIN_PASSWORD_LEN} Zeichen haben")
 
 
 def hash_password(plain: str) -> str:
@@ -176,10 +184,9 @@ def _row_to_user(row: aiosqlite.Row) -> dict[str, Any]:
 
 
 async def count_users() -> int:
-    async with _connect() as db:
-        async with db.execute("SELECT COUNT(*) FROM users") as cur:
-            row = await cur.fetchone()
-            return int(row[0]) if row else 0
+    async with _connect() as db, db.execute("SELECT COUNT(*) FROM users") as cur:
+        row = await cur.fetchone()
+        return int(row[0]) if row else 0
 
 
 async def create_user(
@@ -196,6 +203,7 @@ async def create_user(
         raise AccountError("Benutzername darf nicht leer sein")
     if role not in ROLES:
         raise AccountError(f"Ungültige Rolle: {role}")
+    _check_password(password)
     now = int(time.time())
     try:
         async with _connect() as db:
@@ -210,7 +218,8 @@ async def create_user(
         raise AccountError("Benutzername bereits vergeben") from e
     log.info("accounts.user_created", username=username, role=role)
     user = await get_user_by_id(int(user_id or 0))
-    assert user is not None
+    if user is None:
+        raise AccountError("Benutzer konnte nach dem Anlegen nicht gelesen werden")
     return user
 
 
@@ -230,6 +239,7 @@ async def list_users() -> list[dict[str, Any]]:
 
 
 async def set_password(user_id: int, new_password: str) -> None:
+    _check_password(new_password)
     async with _connect() as db:
         await db.execute(
             "UPDATE users SET password_hash = ? WHERE id = ?",
@@ -271,7 +281,7 @@ async def update_user(
     if sets:
         params.append(user_id)
         async with _connect() as db:
-            await db.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = ?", params)
+            await db.execute(f"UPDATE users SET {', '.join(sets)} WHERE id = ?", params)  # noqa: S608 - literal columns
             if disabled:
                 await db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
             await db.commit()
@@ -298,12 +308,11 @@ async def users_for_person(person_id: int) -> list[dict[str, Any]]:
 
 
 async def count_active_admins() -> int:
-    async with _connect() as db:
-        async with db.execute(
-            "SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled = 0"
-        ) as cur:
-            row = await cur.fetchone()
-            return int(row[0]) if row else 0
+    async with _connect() as db, db.execute(
+        "SELECT COUNT(*) FROM users WHERE role = 'admin' AND disabled = 0"
+    ) as cur:
+        row = await cur.fetchone()
+        return int(row[0]) if row else 0
 
 
 # ---------------------------------------------------------------------------
@@ -312,9 +321,11 @@ async def count_active_admins() -> int:
 
 
 async def get_totp_secret(user_id: int) -> str | None:
-    async with _connect() as db:
-        async with db.execute("SELECT totp_secret FROM users WHERE id = ?", (user_id,)) as cur:
-            row = await cur.fetchone()
+    async with (
+        _connect() as db,
+        db.execute("SELECT totp_secret FROM users WHERE id = ?", (user_id,)) as cur,
+    ):
+        row = await cur.fetchone()
     return str(row[0]) if row and row[0] else None
 
 
@@ -388,11 +399,10 @@ async def consume_backup_code(user_id: int, code: str) -> bool:
 async def backup_codes_left(user_id: int) -> int:
     import json as _json
 
-    async with _connect() as db:
-        async with db.execute(
-            "SELECT totp_backup_codes FROM users WHERE id = ?", (user_id,)
-        ) as cur:
-            row = await cur.fetchone()
+    async with _connect() as db, db.execute(
+        "SELECT totp_backup_codes FROM users WHERE id = ?", (user_id,)
+    ) as cur:
+        row = await cur.fetchone()
     if not row or not row[0]:
         return 0
     try:
@@ -573,10 +583,12 @@ async def cleanup_expired_sessions() -> int:
 async def get_app_setting(key: str) -> str | None:
     if not _db_path:
         return None
-    async with _connect() as db:
-        async with db.execute("SELECT value FROM app_settings WHERE key = ?", (key,)) as cur:
-            row = await cur.fetchone()
-            return str(row[0]) if row else None
+    async with (
+        _connect() as db,
+        db.execute("SELECT value FROM app_settings WHERE key = ?", (key,)) as cur,
+    ):
+        row = await cur.fetchone()
+        return str(row[0]) if row else None
 
 
 async def set_app_setting(key: str, value: str) -> None:
@@ -609,11 +621,21 @@ async def bootstrap_admin(settings: Settings) -> None:
             hint="set bootstrap_admin_password to create the first admin account",
         )
         return
-    await create_user(
-        settings.bootstrap_admin_user,
-        settings.bootstrap_admin_password,
-        role="admin",
-    )
+    try:
+        await create_user(
+            settings.bootstrap_admin_user,
+            settings.bootstrap_admin_password,
+            role="admin",
+        )
+    except AccountError as e:
+        # Starting without an admin is bad, but starting with a two-character
+        # admin password on a remote-command tool is worse. Refuse and say so.
+        log.error(
+            "accounts.bootstrap_rejected",
+            error=str(e),
+            hint="fix BOOTSTRAP_ADMIN_PASSWORD and restart; no admin was created",
+        )
+        return
     log.info("accounts.admin_bootstrapped", username=settings.bootstrap_admin_user)
 
 

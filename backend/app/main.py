@@ -15,6 +15,7 @@ from . import (
     audit,
     automation,
     credentials,
+    db,
     devices,
     jobs,
     metrics,
@@ -25,19 +26,20 @@ from . import (
     scripts,
 )
 from .config import get_settings
+from .routers import accounts_admin as accounts_admin_router
 from .routers import agent as agent_router
 from .routers import alerts as alerts_router
 from .routers import audit as audit_router
 from .routers import auth as auth_router
-from .routers import accounts_admin as accounts_admin_router
 from .routers import automation as automation_router
 from .routers import credentials as credentials_router
-from .routers import persons as persons_router
 from .routers import devices as devices_router
 from .routers import fleet as fleet_router
+from .routers import health as health_router
 from .routers import inventory as inventory_router
 from .routers import jobs as jobs_router
 from .routers import patches as patches_router
+from .routers import persons as persons_router
 from .routers import remote as remote_router
 from .routers import scripts as scripts_router
 from .routers import settings as settings_router
@@ -113,6 +115,7 @@ async def lifespan(app: FastAPI):
     # Account auth is mandatory — its schema + first-admin bootstrap run
     # before anything else so the API is never up without a way to log in.
     await accounts.ensure_schema(_settings)
+    await db.record_schema_version(_settings.storage_db_path, structlog.get_logger("db"))
     await accounts.bootstrap_admin(_settings)
     await devices.ensure_schema(_settings)
     await metrics.ensure_schema(_settings)
@@ -129,8 +132,8 @@ async def lifespan(app: FastAPI):
     releases.load(_settings)
 
     tasks = [
-        asyncio.create_task(_cleanup_loop()),
-        asyncio.create_task(_alert_loop()),
+        asyncio.create_task(_cleanup_loop(), name="cleanup_loop"),
+        asyncio.create_task(_alert_loop(), name="alert_loop"),
     ]
     structlog.get_logger().info(
         "notify.ntfy", enabled=bool(_settings.ntfy_base), topic=_settings.ntfy_topic
@@ -140,10 +143,17 @@ async def lifespan(app: FastAPI):
     finally:
         for task in tasks:
             task.cancel()
-            try:
-                await task
-            except (asyncio.CancelledError, Exception):
-                pass
+        # CancelledError derives from BaseException, so gather() reports the
+        # expected cancellation as a non-Exception result. Anything that *is*
+        # an Exception means a background loop died on its own — worth a log
+        # line instead of a silent shutdown.
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        shutdown_log = structlog.get_logger()
+        for task, result in zip(tasks, results, strict=True):
+            if isinstance(result, Exception):
+                shutdown_log.warning(
+                    "lifespan.task_failed", task=task.get_name(), error=str(result)
+                )
 
 
 # Interactive docs + OpenAPI schema are dev conveniences: in production the
@@ -171,11 +181,7 @@ app.add_middleware(
 )
 
 
-@app.get("/api/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
+app.include_router(health_router.router)
 app.include_router(auth_router.router)
 app.include_router(devices_router.router)
 app.include_router(agent_router.router)
