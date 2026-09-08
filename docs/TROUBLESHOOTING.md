@@ -238,13 +238,22 @@ Häufigste Ursachen in dieser Reihenfolge:
 6. **`web` startet, aber Port 80 verweigert die Verbindung** — der
    Container ist wieder ausgestiegen, damit ist auch die Portfreigabe weg.
    `docker compose ps -a` zeigt ihn als `Exited`/`Restarting`,
-   `docker compose logs --tail 40 web` nennt den Grund. Bekannter Fall:
-   Caddy kann seinen Zustand nicht schreiben, weil `/data` bzw. `/config`
-   root gehören — beides deklariert das Basis-Image als `VOLUME`, weshalb
-   ein `chown` im Dockerfile dort folgenlos bleibt. Behoben, indem
-   `XDG_CONFIG_HOME`/`XDG_DATA_HOME` auf `/caddyhome` zeigen
-   (`frontend/Dockerfile`). Nach einem `git pull` neu bauen:
-   `docker compose up -d --build web`.
+   `docker compose logs --tail 40 web` nennt den Grund. Real aufgetreten:
+
+   ```
+   rxf-rmm-web  | exec /usr/bin/caddy: operation not permitted
+   ```
+
+   Kein Schreibrecht-, sondern ein `execve`-Problem. `/usr/bin/caddy` trägt
+   die Datei-Capability `cap_net_bind_service=ep`; ist deren *effective*-Bit
+   gesetzt und die Capability fehlt im Bounding-Set, verweigert der Kernel
+   den Exec. Ein blankes `cap_drop: ALL` macht den Container damit
+   unstartbar — es gibt nicht einmal eine Caddy-Logzeile, nur Exit 255.
+   Behoben durch `cap_add: [NET_BIND_SERVICE]` in `docker-compose.yml`.
+
+   Merkmal zum Wiedererkennen: die Logzeile beginnt mit `exec ` und nennt
+   den Programmpfad. Dann liegt es am Container-Start, nicht am Programm —
+   und Konfiguration, Ports und Dateirechte sind die falsche Spur.
 
 ## Nichts hilft: Zustand sammeln
 
