@@ -14,10 +14,23 @@ COPY app ./app
 # the data volume's ownership stays predictable across rebuilds.
 #
 # A FRESH named volume inherits the ownership of /data from this image. An
-# EXISTING volume does not — it stays root-owned and the container will fail
-# to write. One-time fix on the host before the first deploy of this image:
+# EXISTING volume does not — it stays root-owned, and the backend then fails
+# with "attempt to write a readonly database". One-time fix on the host,
+# before the first deploy of this image:
 #
-#   docker run --rm -v rxf-rmm-data:/data alpine chown -R 10001:10001 /data
+#   docker run --rm -v infrastructure_rxf-rmm-data:/data alpine \
+#     sh -c 'chown -R 10001:10001 /data && ls -lan /data'
+#
+# Two traps, both hit in practice:
+#   * The volume is NOT called rxf-rmm-data. Compose prefixes volume names
+#     with the project, so the real name is infrastructure_rxf-rmm-data.
+#     `-v rxf-rmm-data:/data` quietly creates a NEW empty volume and chowns
+#     that, leaving the real one untouched. Check with
+#     `docker volume ls --filter name=rxf-rmm-data`.
+#   * Do NOT route this through `docker compose run`: that inherits the
+#     service's `cap_drop: ALL`, and chown then fails with "Operation not
+#     permitted" even as uid 0. A plain `docker run` keeps the default
+#     capabilities.
 #
 # See docs/OPERATIONS.md.
 RUN useradd --system --uid 10001 --create-home --home-dir /home/rmm rmm \

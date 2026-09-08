@@ -52,19 +52,46 @@ Beide Anwendungscontainer laufen als uid 10001, ohne Capabilities
 bildet Host-80 darauf ab.
 
 > **Einmalig vor dem ersten Deploy dieser Images.** Ein bereits bestehendes
-> Volume `rxf-rmm-data` gehört root — der nicht privilegierte Prozess kann
-> darin nicht schreiben und der Container startet in einer Schleife. Vorher
-> auf dem Host:
+> Datenvolumen gehört root — der nicht privilegierte Prozess kann darin nicht
+> schreiben. Das Backend bricht dann beim Start mit
+> `sqlite3.OperationalError: attempt to write a readonly database` ab und
+> läuft in eine Neustartschleife; `web` startet mangels gesundem Backend gar
+> nicht erst. Vorher auf dem Host:
 >
 > ```bash
 > cd /opt/rxf-rmm/infrastructure
 > docker compose down
-> docker run --rm -v rxf-rmm-data:/data alpine chown -R 10001:10001 /data
+>
+> # Kontrolle: genau ein Treffer, und zwar mit Projektpräfix
+> docker volume ls --filter name=rxf-rmm-data
+>
+> docker run --rm -v infrastructure_rxf-rmm-data:/data alpine \
+>   sh -c 'chown -R 10001:10001 /data && ls -lan /data'
+>
 > docker compose up -d --build
 > ```
 >
-> Bei einem frisch angelegten Volume entfällt das: ein neues Named Volume
-> übernimmt die Rechte von `/data` aus dem Image.
+> Die `ls -lan`-Ausgabe zeigt vor dem Start, ob `rmm.db` und
+> `credentials.key` jetzt `10001 10001` gehören.
+>
+> **Zwei Fallen, beide real aufgetreten:**
+>
+> 1. **Das Volume heißt nicht `rxf-rmm-data`.** Compose stellt Volume- und
+>    Netzwerknamen den Projektnamen voran; weil das Compose-File in
+>    `infrastructure/` liegt, heißt es `infrastructure_rxf-rmm-data` — zu
+>    sehen auch am Netzwerk `infrastructure_rmm`. Ein
+>    `docker run -v rxf-rmm-data:/data …` legt ein **neues, leeres** Volume
+>    an und ändert dessen Rechte; das echte bleibt unberührt, und der Fehler
+>    sieht danach aus wie vorher.
+> 2. **Nicht über `docker compose run` gehen.** Das erbt `cap_drop: ALL` aus
+>    der Service-Definition, und `chown` scheitert dann mit
+>    „Operation not permitted" — auch als uid 0, weil `CAP_CHOWN` fehlt. Ein
+>    einfaches `docker run` behält die Default-Capabilities. Nebenbei ist
+>    dabei auch der read-only Bind-Mount `agent-releases` nicht eingehängt,
+>    der sonst zusätzliche (harmlose) Fehlermeldungen erzeugt.
+>
+> Bei einem frisch angelegten Volume entfällt der ganze Schritt: ein neues
+> Named Volume übernimmt die Rechte von `/data` aus dem Image.
 
 ## Logs
 
