@@ -47,7 +47,7 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           # Muss zum Build-Stage-Image in frontend/Dockerfile passen.
           node-version: 24
@@ -108,7 +108,7 @@ jobs:
           pip-audit --strict --progress-spinner=off .
 
       - if: matrix.tool == 'npm-audit'
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           # Muss zum Build-Stage-Image in frontend/Dockerfile passen.
           node-version: 24
