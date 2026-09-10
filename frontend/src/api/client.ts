@@ -2,7 +2,7 @@ import type {
   Account,
   Alert,
   AlertRule,
-  AuditEvent,
+  AuditPage,
   AutomationConfig,
   Credential,
   CreatedEnrollToken,
@@ -24,6 +24,20 @@ import type {
   SessionInfo,
   Shell,
 } from '../types';
+
+/** Filters accepted by GET /api/audit. Everything is optional; an empty
+ *  object is "the most recent 100 events". */
+export interface AuditQuery {
+  limit?: number;
+  offset?: number;
+  deviceId?: number;
+  actor?: string;
+  category?: string;
+  securityOnly?: boolean;
+  /** Unix seconds — the client decides what "last 24h" means. */
+  since?: number;
+  q?: string;
+}
 
 class ApiError extends Error {
   constructor(
@@ -195,15 +209,44 @@ export const api = {
 
   // Scripts
   scripts: (signal?: AbortSignal) => get<{ scripts: Script[] }>('/api/scripts', signal),
-  createScript: (body: { name: string; shell: Shell; os: string; content: string }) =>
+  createScript: (body: {
+    name: string;
+    shell: Shell;
+    os: string;
+    content: string;
+    category: string;
+    danger: boolean;
+  }) =>
     post<{ script: Script }>('/api/scripts', body),
-  updateScript: (id: number, body: { name: string; shell: Shell; os: string; content: string }) =>
+  updateScript: (
+    id: number,
+    body: {
+      name: string;
+      shell: Shell;
+      os: string;
+      content: string;
+      category: string;
+      danger: boolean;
+    },
+  ) =>
     send<{ script: Script }>('PUT', `/api/scripts/${id}`, body),
   deleteScript: (id: number) => del<{ ok: boolean }>(`/api/scripts/${id}`),
 
   // Audit
-  audit: (limit = 100, signal?: AbortSignal) =>
-    get<{ events: AuditEvent[] }>(`/api/audit?limit=${limit}`, signal),
+  audit: (params: AuditQuery = {}, signal?: AbortSignal) => {
+    const qs = new URLSearchParams();
+    qs.set('limit', String(params.limit ?? 100));
+    if (params.offset) qs.set('offset', String(params.offset));
+    if (params.deviceId !== undefined) qs.set('device_id', String(params.deviceId));
+    if (params.actor) qs.set('actor', params.actor);
+    if (params.category) qs.set('category', params.category);
+    if (params.securityOnly) qs.set('security_only', 'true');
+    if (params.since !== undefined) qs.set('since', String(params.since));
+    if (params.q) qs.set('q', params.q);
+    return get<AuditPage>(`/api/audit?${qs.toString()}`, signal);
+  },
+  auditMeta: (signal?: AbortSignal) =>
+    get<{ categories: string[]; actors: string[] }>('/api/audit/meta', signal),
 
   // Patches
   patchSummary: (signal?: AbortSignal) =>

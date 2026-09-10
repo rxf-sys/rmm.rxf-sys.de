@@ -8,6 +8,35 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Geräteliste neu:** Statuspunkt, Hostname, OS-Chip und eine Unterzeile
+  `OS · Tag · Tag` bilden einen Block; die eigene Tags-Spalte entfällt. CPU,
+  RAM und Disk sind beschriftete Balken, deren Farbe auf die Last reagiert —
+  grün, ab 70/75/80 % gelb, ab 90 % rot. Die Disk-Schwellen sind identisch mit
+  denen des Statuspunkts, damit beide nie widersprüchlich aussehen.
+- **Segmentierte Filterleiste** mit Trefferzahlen (`components/FilterBar.tsx`)
+  statt einer Reihe loser Buttons: eine Tab-Station, Pfeiltasten wechseln, und
+  jede Zahl sagt vorab, was der Filter übrig lässt.
+- **Blätterleiste für alle langen Listen** — Geräte, Alarme, Patches, Skripte,
+  Konten, Job-Verlauf, Audit. 25 pro Seite als Default, 50/100/alle wählbar,
+  Auswahl je Liste im Browser gemerkt. Die Liste „kürzlich behobene Alarme"
+  verliert ihren harten Schnitt nach acht Einträgen.
+- **Personen als Master-Detail:** links die Liste, rechts alles zu einer
+  Person — Kennzahlen (Geräte, online, offene Alarme, offene Updates,
+  Sicherheitsupdates), Notiz, zugewiesene Geräte samt Patch-Stand,
+  Gerätezuweisung, das verknüpfte Konto (Rolle, letzter Login, Zwei-Faktor,
+  Passwort zurücksetzen) und ein auf die Person gefilterter Aktivitätsverlauf.
+- **Skript-Bibliothek:** Vorlagen haben eine eigene Galerie statt eines
+  versteckten Auswahlfelds und sind von 4 auf 12 gewachsen (Temp-Cleanup,
+  Paketcache, Drucker-Spooler, Netzwerk-Diagnose für Linux und Windows,
+  Speicherplatz-Report, Windows-Update-Reset, Neustart). Skripte tragen eine
+  Kategorie, lassen sich mit einem Stern markieren, als **destruktiv**
+  kennzeichnen (Ausführen verlangt dann die Eingabe des Namens) und
+  duplizieren.
+- **Audit-Log ist ein Werkzeug geworden:** Filter nach Zeitraum, Kategorie,
+  Akteur, Gerät und Freitext (auch im `detail`-Blob), ein Schnellfilter
+  „Sicherheit", serverseitige Blätterung mit Gesamtzahl, farbige Kategorien,
+  ausklappbare Zeilen mit allen Feldern des Ereignisses und Tagestrenner
+  („Heute", „Gestern", Datum). Neuer Endpunkt `/api/audit/meta`.
 - Optionale `.pre-commit-config.yaml` (ruff, gofmt, go vet, eslint, tsc, plus
   ein Riegel gegen versehentlich eingecheckte Secret-Dateien).
 - Agent-Tests von 4 auf 17: apt-Ausgabe-Parser (dafür aus der

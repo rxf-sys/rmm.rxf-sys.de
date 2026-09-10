@@ -115,7 +115,7 @@ export function OverviewPage({ fleet, user, onOpenDevice, onNavigate, onOpenEnro
     // Activity feed is admin-only (audit endpoint); silently skip otherwise.
     const ctrl = new AbortController();
     api
-      .audit(6, ctrl.signal)
+      .audit({ limit: 6 }, ctrl.signal)
       .then((r) => setActivity(r.events))
       .catch(() => setActivity([]));
     return () => ctrl.abort();

@@ -42,3 +42,40 @@ export function describeAudit(e: AuditEvent): string {
       return e.event;
   }
 }
+
+/** German name and badge tone per category. The classification itself is
+ *  server-side (`app/audit.py`); this only decides how it looks.
+ *
+ *  The tones reuse the six badge classes the rest of the app already has
+ *  rather than inventing a hue per category: those are defined for both
+ *  themes and already contrast-checked, and twelve bespoke colours would say
+ *  less than the grouping does. */
+export const AUDIT_CATEGORY: Record<string, { label: string; tone: string }> = {
+  auth: { label: 'Anmeldung', tone: 'badge-violet' },
+  account: { label: 'Konten', tone: 'badge-violet' },
+  credential: { label: 'Passwörter', tone: 'badge-danger' },
+  remote: { label: 'Fernzugriff', tone: 'badge-danger' },
+  device: { label: 'Geräte', tone: 'badge-accent' },
+  job: { label: 'Jobs', tone: 'badge-accent' },
+  script: { label: 'Skripte', tone: 'badge-accent' },
+  patch: { label: 'Patches', tone: 'badge-warn' },
+  alert: { label: 'Alarme', tone: 'badge-warn' },
+  person: { label: 'Personen', tone: 'badge-ok' },
+  config: { label: 'Konfiguration', tone: 'badge-off' },
+  other: { label: 'Sonstiges', tone: 'badge-off' },
+};
+
+export function auditCategoryLabel(category: string): string {
+  return AUDIT_CATEGORY[category]?.label ?? category;
+}
+
+/** Day header for the separators: "Heute", "Gestern", or the date. */
+export function auditDayLabel(ts: number): string {
+  const d = new Date(ts * 1000);
+  const today = new Date();
+  const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((midnight(today) - midnight(d)) / 86_400_000);
+  if (days === 0) return 'Heute';
+  if (days === 1) return 'Gestern';
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}

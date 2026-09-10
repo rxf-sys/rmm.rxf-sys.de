@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { useConfirm } from '../hooks/useConfirm';
-import type { Device, Person } from '../types';
-import { Dot } from '../ui';
-import { deviceState, stateColor } from '../deviceStatus';
+import { usePagination } from '../hooks/usePagination';
+import { roleLabel } from '../format';
+import type { Account, Alert, AuditEvent, Device, PatchSummary, Person } from '../types';
+import { Modal } from './Modal';
+import { Pagination } from './Pagination';
+import { PersonDetail } from './PersonDetail';
 
 interface Props {
   persons: Person[];
   devices: Device[];
+  alerts: Alert[];
+  patchSummary: PatchSummary;
   isAdmin: boolean;
   onOpenDevice: (id: number) => void;
   onRefresh: () => void;
@@ -23,9 +28,29 @@ interface Draft {
 
 const EMPTY: Draft = { id: null, name: '', email: '', phone: '', notes: '' };
 
-export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh }: Props) {
+export function PersonsPage({
+  persons,
+  devices,
+  alerts,
+  patchSummary,
+  isAdmin,
+  onOpenDevice,
+  onRefresh,
+}: Props) {
   const { ask, dialog: confirmDialog } = useConfirm();
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [activity, setActivity] = useState<AuditEvent[] | null>(null);
+  const [resetFor, setResetFor] = useState<Account | null>(null);
+  const [resetPw, setResetPw] = useState('');
+  // Zugangsdaten des automatisch angelegten Betrachter-Kontos — erscheinen
+  // genau einmal nach dem Anlegen (das Passwort ist danach nicht mehr abrufbar).
+  const [createdLogin, setCreatedLogin] = useState<{ username: string; password: string } | null>(
+    null,
+  );
+
   const nameRef = useRef<HTMLInputElement>(null);
   // One stable key per open form: "new", or the id being edited. Focus follows
   // the form when it is revealed — the point autoFocus got right, without
@@ -34,12 +59,30 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
   useEffect(() => {
     if (draftKey !== null) nameRef.current?.focus();
   }, [draftKey]);
-  const [error, setError] = useState<string | null>(null);
-  // Zugangsdaten des automatisch angelegten Betrachter-Kontos — erscheinen
-  // genau einmal nach dem Anlegen (das Passwort ist danach nicht mehr abrufbar).
-  const [createdLogin, setCreatedLogin] = useState<{ username: string; password: string } | null>(
-    null,
-  );
+
+  // Accounts and the audit log are admin-only. A techniker or viewer opening
+  // this page gets the fleet half of the detail pane and nothing else, rather
+  // than an error for something they never asked for.
+  useEffect(() => {
+    if (!isAdmin) return;
+    const ctrl = new AbortController();
+    api
+      .accounts(ctrl.signal)
+      .then((r) => setAccounts(r.accounts))
+      .catch(() => setAccounts([]));
+    api
+      .audit({ limit: 200 }, ctrl.signal)
+      .then((r) => setActivity(r.events))
+      .catch(() => setActivity([]));
+    return () => ctrl.abort();
+  }, [isAdmin]);
+
+  // Selection follows the data: a deleted person, or a first load, must not
+  // leave the pane pointing at nothing.
+  const selected = persons.find((p) => p.id === selectedId) ?? persons[0] ?? null;
+
+  const accountFor = (personId: number) =>
+    accounts.find((a) => a.person_id === personId) ?? null;
 
   const save = async () => {
     if (!draft) return;
@@ -56,6 +99,7 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
         if (r.account && r.initial_password) {
           setCreatedLogin({ username: r.account.username, password: r.initial_password });
         }
+        setSelectedId(r.person.id);
       } else {
         await api.updatePerson(draft.id, body);
       }
@@ -81,11 +125,31 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
     if (!ok) return;
     try {
       await api.deletePerson(p.id);
+      setSelectedId(null);
       onRefresh();
     } catch (e) {
       setError(apiErrorMessage(e));
     }
   };
+
+  const resetPassword = async () => {
+    if (!resetFor) return;
+    setError(null);
+    try {
+      await api.updateAccount(resetFor.id, { password: resetPw });
+      setResetFor(null);
+      setResetPw('');
+    } catch (e) {
+      setError(apiErrorMessage(e));
+    }
+  };
+
+  const viewerCount = accounts.filter(
+    (a) => a.role === 'viewer' && a.person_id !== null && a.person_id !== undefined,
+  ).length;
+  const assignedCount = devices.filter((d) => d.person_id !== null).length;
+
+  const pager = usePagination(persons, 'persons');
 
   return (
     <div className="screen">
@@ -99,7 +163,8 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
           </span>
           <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
             <span>
-              Benutzername: <span className="mono" style={{ fontWeight: 700 }}>{createdLogin.username}</span>
+              Benutzername:{' '}
+              <span className="mono" style={{ fontWeight: 700 }}>{createdLogin.username}</span>
             </span>
             <span>
               Passwort: <span className="mono" style={{ fontWeight: 700 }}>{createdLogin.password}</span>
@@ -124,9 +189,15 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
           </span>
         </div>
       )}
+
       <div className="page-head center">
-        <h1 className="page-title">Personen</h1>
-        <span className="muted">{persons.length}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <h1 className="page-title">Personen</h1>
+          <span className="muted" style={{ fontSize: 11.5 }}>
+            {persons.length} Personen · {viewerCount} Betrachter-Konten · {assignedCount} Geräte
+            zugewiesen
+          </span>
+        </div>
         {isAdmin && !draft && (
           <button
             className="btn btn-primary grow"
@@ -162,6 +233,7 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
               value={draft.email}
               onChange={(e) => setDraft({ ...draft, email: e.target.value })}
               placeholder="E-Mail (optional)"
+              aria-label="E-Mail"
             />
             <input
               className="input"
@@ -169,6 +241,7 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
               value={draft.phone}
               onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
               placeholder="Telefon (optional)"
+              aria-label="Telefon"
             />
           </div>
           <input
@@ -176,6 +249,7 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
             value={draft.notes}
             onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
             placeholder="Notizen (optional)"
+            aria-label="Notizen"
           />
           <div className="row" style={{ gap: 8 }}>
             <button className="btn btn-primary" onClick={() => void save()} disabled={!draft.name.trim()}>
@@ -202,71 +276,99 @@ export function PersonsPage({ persons, devices, isAdmin, onOpenDevice, onRefresh
           )}
         </div>
       ) : (
-        <div className="grid-2">
-          {persons.map((p) => {
-            const owned = devices.filter((d) => d.person_id === p.id);
-            return (
-              <div key={p.id} className="card" style={{ overflow: 'hidden' }}>
-                <div className="row" style={{ gap: 10, padding: '13px 16px' }}>
-                  <span className="avatar">{p.name.slice(0, 1).toUpperCase()}</span>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                    <span style={{ fontWeight: 800, fontSize: 13.5 }}>{p.name}</span>
-                    <span className="muted" style={{ fontSize: 11 }}>
-                      {[p.email, p.phone].filter(Boolean).join(' · ') || 'keine Kontaktdaten'}
-                    </span>
-                  </div>
-                  <div className="row grow" style={{ marginLeft: 'auto', gap: 6, flex: 'none' }}>
-                    <span className="chip">{p.device_count} Gerät{p.device_count === 1 ? '' : 'e'}</span>
-                    {isAdmin && (
-                      <>
-                        <button className="btn btn-sm" onClick={() => setDraft({ ...p })}>
-                          Bearbeiten
-                        </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => void remove(p)}>
-                          Löschen
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {p.notes && (
-                  <div className="muted" style={{ padding: '0 16px 10px', fontSize: 11.5 }}>
-                    {p.notes}
-                  </div>
-                )}
-                {owned.length > 0 && (
-                  <div style={{ borderTop: '1px solid var(--line2)' }}>
-                    {owned.map((d) => (
-                      <button
-                        key={d.id}
-                        className="row"
-                        style={{
-                          gap: 9,
-                          padding: '8px 16px',
-                          width: '100%',
-                          background: 'none',
-                          border: 'none',
-                          borderBottom: '1px solid var(--line2)',
-                          cursor: 'pointer',
-                          color: 'var(--tx)',
-                          textAlign: 'left',
-                          fontSize: 12,
-                        }}
-                        onClick={() => onOpenDevice(d.id)}
-                      >
-                        <Dot color={stateColor(deviceState(d))} />
-                        <span style={{ fontWeight: 600 }}>{d.hostname}</span>
-                        <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 10.5 }}>
-                          {d.online ? 'online' : 'offline'}
+        <div className="persons-layout">
+          <div className="card" style={{ overflow: 'hidden' }}>
+            <ul className="person-list">
+              {pager.items.map((p) => {
+                const owned = devices.filter((d) => d.person_id === p.id);
+                const account = accountFor(p.id);
+                const active = selected?.id === p.id;
+                return (
+                  <li key={p.id}>
+                    <button
+                      className={active ? 'person-item active' : 'person-item'}
+                      aria-current={active ? 'true' : undefined}
+                      onClick={() => setSelectedId(p.id)}
+                    >
+                      <span className="avatar">{p.name.slice(0, 1).toUpperCase()}</span>
+                      <span className="person-item-text">
+                        <span className="person-item-name">
+                          {p.name}
+                          {owned.some((d) => !d.online) && (
+                            <span
+                              className="dot"
+                              style={{ width: 6, height: 6, background: 'var(--dangerS)' }}
+                              title="mindestens ein Gerät offline"
+                            />
+                          )}
                         </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                        <span className="muted" style={{ fontSize: 10.5 }}>
+                          {owned.length} Gerät{owned.length === 1 ? '' : 'e'} ·{' '}
+                          {owned.filter((d) => d.online).length} online
+                        </span>
+                      </span>
+                      {account && (
+                        <span className="badge badge-off person-item-role">
+                          {roleLabel(account.role)}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <Pagination {...pager} label="Personen" />
+          </div>
+
+          {selected && (
+            <PersonDetail
+              key={selected.id}
+              person={selected}
+              devices={devices.filter((d) => d.person_id === selected.id)}
+              allDevices={devices}
+              account={accountFor(selected.id)}
+              activity={isAdmin ? activity : null}
+              alerts={alerts}
+              patchSummary={patchSummary}
+              isAdmin={isAdmin}
+              onEdit={() => setDraft({ ...selected })}
+              onDelete={() => void remove(selected)}
+              onOpenDevice={onOpenDevice}
+              onRefresh={onRefresh}
+              onResetPassword={(a) => {
+                setResetPw('');
+                setResetFor(a);
+              }}
+            />
+          )}
         </div>
+      )}
+
+      {resetFor !== null && (
+        <Modal title={`Passwort zurücksetzen — ${resetFor.username}`} onClose={() => setResetFor(null)}>
+          <label className="field" htmlFor="person-reset-pw">
+            <span className="field-label">Neues Passwort (min. 8 Zeichen)</span>
+            <input
+              id="person-reset-pw"
+              className="input"
+              type="password"
+              value={resetPw}
+              onChange={(e) => setResetPw(e.target.value)}
+            />
+          </label>
+          <div className="row" style={{ gap: 8, marginTop: 12 }}>
+            <button
+              className="btn btn-primary"
+              onClick={() => void resetPassword()}
+              disabled={resetPw.length < 8}
+            >
+              Passwort setzen
+            </button>
+            <button className="btn" onClick={() => setResetFor(null)}>
+              Abbrechen
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

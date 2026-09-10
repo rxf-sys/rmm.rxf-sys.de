@@ -18,6 +18,10 @@ class ScriptBody(BaseModel):
     shell: str = Field(default="bash")
     os: str = Field(default="any", pattern="^(windows|linux|darwin|any)$")
     content: str = Field(default="", max_length=64_000)
+    category: str = Field(default="sonstiges", pattern="^(wartung|sicherheit|diagnose|sonstiges)$")
+    # Markiert Skripte, die Daten zerstören oder ein Gerät lahmlegen können.
+    # Die Oberfläche verlangt dafür vor dem Start den Namen als Eingabe.
+    danger: bool = False
 
 
 @router.get("")
@@ -29,11 +33,19 @@ async def list_scripts(user: dict = Depends(require_operator)) -> dict:
 async def create_script(body: ScriptBody, user: dict = Depends(require_operator)) -> dict:
     try:
         script = await scripts.create(
-            body.name, body.shell, body.content, user["username"], os=body.os
+            body.name,
+            body.shell,
+            body.content,
+            user["username"],
+            os=body.os,
+            category=body.category,
+            danger=body.danger,
         )
     except scripts.ScriptError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
-    await audit_record("script.created", user=user["username"], name=body.name)
+    await audit_record(
+        "script.created", user=user["username"], name=body.name, danger=body.danger
+    )
     return {"script": script}
 
 
@@ -43,7 +55,14 @@ async def update_script(
 ) -> dict:
     try:
         script = await scripts.update(
-            script_id, body.name, body.shell, body.content, user["username"], os=body.os
+            script_id,
+            body.name,
+            body.shell,
+            body.content,
+            user["username"],
+            os=body.os,
+            category=body.category,
+            danger=body.danger,
         )
     except scripts.ScriptError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e

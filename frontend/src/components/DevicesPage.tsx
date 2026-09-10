@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
-import { formatRelative } from '../format';
+import { formatRelative, osLabel } from '../format';
 import { osShort } from '../deviceStatus';
 import { OsIcon } from '../icons';
 import type { Device, InventoryMatch, PatchSummary, Person } from '../types';
 import { Dot, Skeleton } from '../ui';
-import { deviceState, diskColor, stateColor } from '../deviceStatus';
+import { FilterBar, type FilterOption } from './FilterBar';
+import { Pagination } from './Pagination';
+import { usePagination } from '../hooks/usePagination';
+import { deviceState, loadColor, stateColor, type LoadKind } from '../deviceStatus';
 
 interface Props {
   devices: Device[];
@@ -86,22 +89,51 @@ function SoftwareSearch({ onOpenDevice }: { onOpenDevice: (id: number) => void }
   );
 }
 
-type Filter = 'alle' | 'server' | 'familie' | 'probleme' | 'offline';
+type Filter = 'alle' | 'probleme' | 'server' | 'familie' | 'offline';
 
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: 'alle', label: 'Alle' },
-  { id: 'server', label: 'Server' },
-  { id: 'familie', label: 'Familie' },
-  { id: 'probleme', label: 'Probleme' },
-  { id: 'offline', label: 'Offline' },
-];
+const FILTER_LABEL: Record<Filter, string> = {
+  alle: 'Alle',
+  probleme: 'Probleme',
+  server: 'Server',
+  familie: 'Familie',
+  offline: 'Offline',
+};
 
-const COLS = '16fr 8fr 10fr 8fr 8fr 8fr 6fr 6fr 8fr';
+/** Does a device belong in this filter? One predicate per filter, so the
+ *  counts on the chips and the rows below can never drift apart. */
+function matchesFilter(d: Device, f: Filter): boolean {
+  switch (f) {
+    case 'server':
+      return d.tags.includes('server');
+    case 'familie':
+      return d.tags.includes('familie');
+    case 'probleme':
+      return deviceState(d) !== 'ok';
+    case 'offline':
+      return !d.online;
+    default:
+      return true;
+  }
+}
 
-function Bar({ pct, color }: { pct: number; color: string }) {
+const COLS = '23fr 10fr 13fr 13fr 13fr 5fr 8fr 9fr';
+
+/** One labelled load bar: "CPU … 34 %" over a bar coloured by the value.
+ *  Offline devices report no load at all, which is different from 0 % — they
+ *  get a dash and an empty track. */
+function Meter({ label, pct, kind, online }: { label: string; pct: number; kind: LoadKind; online: boolean }) {
+  const color = loadColor(pct, kind);
   return (
-    <span className="bar" style={{ flex: 1 }}>
-      <span className="bar-fill" style={{ width: `${pct}%`, background: color }} />
+    <span className="cell-meter">
+      <span className="meter-line">
+        <span className="meter-key">{label}</span>
+        <span className="meter-val" style={{ color: online ? color : 'var(--tx3)' }}>
+          {online ? `${pct}%` : '—'}
+        </span>
+      </span>
+      <span className="bar">
+        <span className="bar-fill" style={{ width: online ? `${pct}%` : '0%', background: color }} />
+      </span>
     </span>
   );
 }
@@ -114,30 +146,31 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
   const personName = (id: number | null) =>
     id === null ? '' : (persons.find((p) => p.id === id)?.name ?? '');
 
-  const shown = useMemo(() => {
+  // Search and person narrow the set the filter chips count over, so their
+  // numbers describe what clicking would actually show.
+  const base = useMemo(() => {
     const query = q.trim().toLowerCase();
+    const nameOf = (id: number | null) =>
+      id === null ? '' : (persons.find((p) => p.id === id)?.name ?? '');
     return devices.filter((d) => {
-      if (query) {
-        const hay = `${d.hostname} ${d.owner_label} ${personName(d.person_id)} ${d.tags.join(' ')}`.toLowerCase();
-        if (!hay.includes(query)) return false;
-      }
       if (personFilter !== 'alle' && d.person_id !== personFilter) return false;
-      const st = deviceState(d);
-      switch (filter) {
-        case 'server':
-          return d.tags.includes('server');
-        case 'familie':
-          return d.tags.includes('familie') || d.tags.includes('familie'.toLowerCase());
-        case 'probleme':
-          return st !== 'ok';
-        case 'offline':
-          return !d.online;
-        default:
-          return true;
-      }
+      if (!query) return true;
+      const hay = `${d.hostname} ${d.owner_label} ${nameOf(d.person_id)} ${d.tags.join(' ')}`;
+      return hay.toLowerCase().includes(query);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [devices, persons, q, filter, personFilter]);
+  }, [devices, persons, q, personFilter]);
+
+  const shown = useMemo(() => base.filter((d) => matchesFilter(d, filter)), [base, filter]);
+  const pager = usePagination(shown, 'devices', `${filter}|${personFilter}|${q.trim()}`);
+
+  const filterOptions: FilterOption<Filter>[] = (
+    ['alle', 'probleme', 'server', 'familie', 'offline'] as Filter[]
+  ).map((id) => ({
+    id,
+    label: FILTER_LABEL[id],
+    count: id === 'alle' ? undefined : base.filter((d) => matchesFilter(d, id)).length,
+    tone: id === 'probleme' ? 'danger' : id === 'offline' ? 'warn' : 'neutral',
+  }));
 
   return (
     <div className="screen">
@@ -153,22 +186,15 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
         />
       </div>
 
-      <div className="row" style={{ gap: 7, flexWrap: 'wrap' }}>
-        {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            className={filter === f.id ? 'btn btn-accent btn-sm' : 'btn btn-sm'}
-            onClick={() => setFilter(f.id)}
-          >
-            {f.label}
-          </button>
-        ))}
+      <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+        <FilterBar options={filterOptions} value={filter} onChange={setFilter} label="Geräte filtern" />
         {persons.length > 0 && (
           <select
             className={personFilter === 'alle' ? 'input btn-sm' : 'input btn-sm accent-border'}
-            style={{ padding: '5px 9px', marginLeft: 4 }}
+            style={{ padding: '7px 10px' }}
             value={personFilter}
             onChange={(e) => setPersonFilter(e.target.value === 'alle' ? 'alle' : Number(e.target.value))}
+            aria-label="Nach Person filtern"
           >
             <option value="alle">Alle Personen</option>
             {persons.map((p) => (
@@ -182,10 +208,9 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
 
       <div className="card" style={{ overflow: 'hidden' }}>
         <div className="tbl-scroll">
-          <div className="tbl-head" style={{ gridTemplateColumns: COLS, minWidth: 820 }}>
+          <div className="tbl-head" style={{ gridTemplateColumns: COLS, minWidth: 980 }}>
             <span>Gerät</span>
             <span>Besitzer</span>
-            <span>Tags</span>
             <span>CPU</span>
             <span>RAM</span>
             <span>Disk</span>
@@ -204,50 +229,42 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
               Keine Geräte gefunden.
             </div>
           ) : (
-            shown.map((d) => {
+            pager.items.map((d) => {
               const st = deviceState(d);
-              const disk = Math.max(0, ...(d.heartbeat.disks ?? []).map((x) => x.used_pct));
-              const cpu = d.online ? Math.round(d.heartbeat.cpu_pct ?? 0) : 0;
-              const ram = d.online ? Math.round(d.heartbeat.mem_pct ?? 0) : 0;
+              const disk = Math.round(Math.max(0, ...(d.heartbeat.disks ?? []).map((x) => x.used_pct)));
+              const cpu = Math.round(d.heartbeat.cpu_pct ?? 0);
+              const ram = Math.round(d.heartbeat.mem_pct ?? 0);
               const patches = patchSummary[String(d.id)];
+              // Disk usage survives a reboot, so it stays meaningful while the
+              // device is offline; CPU and RAM do not.
+              const subtitle = [osLabel(d.os), ...d.tags].join(' · ');
               return (
                 <button
                   key={d.id}
-                  className="tbl-row"
-                  style={{ gridTemplateColumns: COLS, minWidth: 820 }}
+                  className="tbl-row device-row"
+                  style={{ gridTemplateColumns: COLS, minWidth: 980 }}
                   onClick={() => onOpenDevice(d.id)}
                 >
-                  <span className="cell-name">
+                  <span className="cell-device">
                     <Dot color={stateColor(st)} />
-                    <span className="name">{d.hostname}</span>
-                    <span className="chip-mono" title={osShort(d.os)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <OsIcon os={d.os} size={11} /> {osShort(d.os)}
+                    <span className="cell-device-text">
+                      <span className="cell-device-top">
+                        <span className="name">{d.hostname}</span>
+                        <span className="chip-mono" title={osShort(d.os)}>
+                          <OsIcon os={d.os} size={11} /> {osShort(d.os)}
+                        </span>
+                      </span>
+                      <span className="cell-device-sub" title={subtitle}>
+                        {subtitle}
+                      </span>
                     </span>
                   </span>
                   <span style={{ color: 'var(--tx2)', fontWeight: 600 }}>
                     {personName(d.person_id) || d.owner_label || '—'}
                   </span>
-                  <span style={{ display: 'flex', gap: 4, overflow: 'hidden' }}>
-                    {d.tags.slice(0, 2).map((t) => (
-                      <span key={t} className="chip">
-                        {t}
-                      </span>
-                    ))}
-                  </span>
-                  <span className="cell-bar">
-                    <Bar pct={cpu} color="var(--accent)" />
-                    <span className="pct">{d.online ? `${cpu}%` : '—'}</span>
-                  </span>
-                  <span className="cell-bar">
-                    <Bar pct={ram} color="var(--violet)" />
-                    <span className="pct">{d.online ? `${ram}%` : '—'}</span>
-                  </span>
-                  <span className="cell-bar">
-                    <Bar pct={Math.round(disk)} color={diskColor(disk)} />
-                    <span className="pct" style={{ color: diskColor(disk) }}>
-                      {disk ? `${Math.round(disk)}%` : '—'}
-                    </span>
-                  </span>
+                  <Meter label="CPU" pct={cpu} kind="cpu" online={d.online} />
+                  <Meter label="RAM" pct={ram} kind="ram" online={d.online} />
+                  <Meter label="Disk" pct={disk} kind="disk" online={disk > 0} />
                   <span>
                     {patches && patches.pending > 0 ? (
                       <span
@@ -284,6 +301,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
             })
           )}
         </div>
+        <Pagination {...pager} label="Geräte" />
       </div>
 
       {devices.length > 0 && <SoftwareSearch onOpenDevice={onOpenDevice} />}

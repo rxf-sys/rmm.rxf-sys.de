@@ -39,6 +39,17 @@ export function formatRate(bps: number | undefined | null): string {
   return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+const ROLE_LABEL: Record<string, string> = {
+  admin: 'Administrator',
+  techniker: 'Techniker',
+  viewer: 'Betrachter',
+};
+
+/** German name of an account role, for badges and labels. */
+export function roleLabel(role: string): string {
+  return ROLE_LABEL[role] ?? role;
+}
+
 const OS_LABEL: Record<string, string> = {
   windows: 'Windows',
   linux: 'Linux',

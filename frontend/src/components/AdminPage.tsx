@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { useConfirm } from '../hooks/useConfirm';
 import { formatRelative } from '../format';
+import { usePagination } from '../hooks/usePagination';
 import type { Account } from '../types';
 import { AdminExtras } from './AdminExtras';
 import { Modal } from './Modal';
+import { Pagination } from './Pagination';
 
 interface Props {
   currentUser: Account;
@@ -67,6 +69,8 @@ export function AdminPage({ currentUser }: Props) {
       setResetFor(null);
       setResetPw('');
     });
+
+  const pager = usePagination(accounts ?? [], 'accounts');
 
   return (
     <div className="screen">
@@ -157,7 +161,7 @@ export function AdminPage({ currentUser }: Props) {
               Lade…
             </div>
           ) : (
-            accounts.map((a) => {
+            pager.items.map((a) => {
               const self = a.id === currentUser.id;
               return (
                 <div
@@ -263,6 +267,7 @@ export function AdminPage({ currentUser }: Props) {
             })
           )}
         </div>
+        <Pagination {...pager} label="Konten" />
       </div>
 
       <AdminExtras currentUser={currentUser} />

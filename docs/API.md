@@ -89,6 +89,17 @@ Aufklärungsfläche hinter einem öffentlichen Tunnel.
 | PUT | `/api/scripts/{script_id}` | Operator | Skript ändern |
 | DELETE | `/api/scripts/{script_id}` | Operator | Skript löschen |
 
+Ein Skript trägt neben `name`, `shell`, `os` und `content` zwei
+Einordnungsfelder:
+
+| Feld | Werte | Bedeutung |
+|---|---|---|
+| `category` | `wartung`, `sicherheit`, `diagnose`, `sonstiges` | Festes Vokabular statt Freitext, damit sich danach filtern lässt. Default `sonstiges` |
+| `danger` | `true`/`false` | Zerstört Daten oder legt das Gerät lahm. Das Dashboard verlangt vor dem Ausführen die Eingabe des Skriptnamens. Default `false` |
+
+Beides ist additiv nachgerüstet (`PRAGMA table_info` → `ALTER TABLE`);
+Bestandsskripte bekommen `sonstiges` und `danger = false`.
+
 ## Patches
 
 | Methode | Pfad | Auth | Zweck |
@@ -105,7 +116,43 @@ Aufklärungsfläche hinter einem öffentlichen Tunnel.
 | GET | `/api/alerts` | Session | Offene und geschlossene Alarme, Viewer-gefiltert |
 | POST | `/api/alerts/{alert_id}/ack` | Session | Alarm quittieren; Scope wird vorher geprüft |
 | GET | `/api/inventory/search` | Session | Flottenweite Softwaresuche (`?q=`) |
-| GET | `/api/audit` | Admin | Audit-Log (`?limit=`, `?device_id=`) |
+| GET | `/api/audit` | Admin | Audit-Log, gefiltert und seitenweise — siehe unten |
+| GET | `/api/audit/meta` | Admin | Bekannte Kategorien und alle je aufgetretenen Akteure, für die Filter-Auswahl |
+
+### `GET /api/audit`
+
+Alle Parameter sind optional; ohne Angabe kommen die 100 neuesten Ereignisse.
+
+| Parameter | Typ | Zweck |
+|---|---|---|
+| `limit` | 1–500, Default 100 | Seitengröße |
+| `offset` | ≥ 0 | Startversatz der Seite |
+| `device_id` | int | Nur Ereignisse zu diesem Gerät |
+| `actor` | string | Exakter Benutzername |
+| `category` | siehe unten | Ereignisklasse |
+| `security_only` | bool | Nur sicherheitsrelevante Ereignisse; schlägt ein gleichzeitig gesetztes `category` |
+| `since` | Unix-Sekunden | Nur Ereignisse ab diesem Zeitpunkt. Das Dashboard rechnet „letzte 24 h" selbst aus, damit der Server keine Zeitzonen kennen muss |
+| `q` | max. 200 Zeichen | Freitext über Ereignisname, Akteur **und** den `detail`-Blob (dort stehen Hostnamen, Kommandos, Skriptnamen) |
+
+Die Antwort ist `{"events": [...], "total": n}`. `total` zählt alles, was die
+Filter treffen, nicht nur die Seite — daran hängt die Blätterleiste.
+
+Jedes Ereignis trägt zusätzlich zu `id`, `ts`, `event`, `actor`, `device_id`
+und `detail` zwei serverseitig berechnete Felder:
+
+- `category` — eine von `auth`, `account`, `device`, `job`, `patch`, `remote`,
+  `alert`, `script`, `person`, `credential`, `config`, `other`. Abgeleitet aus
+  dem Präfix vor dem Punkt im Ereignisnamen.
+- `security` — `true` für Anmeldungen (`auth.*`), Kontoänderungen
+  (`account.*`), Passwortzugriffe (`credential.*`) sowie
+  `devices.token_created`, `devices.token_deleted`, `devices.deleted` und
+  `remote.session_opened`. Job-Ausführungen stehen bewusst **nicht** drin: sie
+  sind Alltag und würden den Filter zuschütten — dafür gibt es die Kategorie
+  `job`.
+
+Die Einordnung passiert nur im Server (`backend/app/audit.py`); das Dashboard
+färbt nach dem gelieferten Feld, statt dieselbe Tabelle ein zweites Mal zu
+pflegen.
 
 ## Automatisierung
 

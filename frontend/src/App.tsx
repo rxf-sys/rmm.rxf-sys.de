@@ -239,6 +239,8 @@ export default function App() {
                 <PersonsPage
                   persons={fleet.persons}
                   devices={fleet.devices}
+                  alerts={fleet.alerts}
+                  patchSummary={fleet.patchSummary}
                   isAdmin={isAdmin}
                   onOpenDevice={openDevice}
                   onRefresh={fleet.refresh}

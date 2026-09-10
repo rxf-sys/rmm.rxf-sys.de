@@ -227,15 +227,35 @@ export type Shell = 'bash' | 'zsh' | 'powershell';
 
 export type ScriptOs = 'windows' | 'linux' | 'darwin' | 'any';
 
+export type ScriptCategory = 'wartung' | 'sicherheit' | 'diagnose' | 'sonstiges';
+
 export interface Script {
   id: number;
   name: string;
   shell: Shell;
   os: ScriptOs;
   content: string;
+  category: ScriptCategory;
+  /** Destroys data or can take a device down — the UI asks for the script
+   *  name to be typed before it runs. */
+  danger: boolean;
   updated_by: string;
   updated_at: number;
 }
+
+export type AuditCategory =
+  | 'auth'
+  | 'account'
+  | 'device'
+  | 'job'
+  | 'patch'
+  | 'remote'
+  | 'alert'
+  | 'script'
+  | 'person'
+  | 'credential'
+  | 'config'
+  | 'other';
 
 export interface AuditEvent {
   id: number;
@@ -244,6 +264,15 @@ export interface AuditEvent {
   actor: string;
   device_id: number | null;
   detail: Record<string, unknown>;
+  /** Classified server-side, so the colour here and the filter there agree. */
+  category: AuditCategory;
+  /** Part of the "Sicherheit" quick filter. */
+  security: boolean;
+}
+
+export interface AuditPage {
+  events: AuditEvent[];
+  total: number;
 }
 
 export type Severity = 'critical' | 'important' | 'moderate' | 'low' | 'other';

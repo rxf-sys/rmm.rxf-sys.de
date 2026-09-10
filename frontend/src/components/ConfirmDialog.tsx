@@ -1,3 +1,4 @@
+import { useId, useState } from 'react';
 import { Modal } from './Modal';
 
 interface Props {
@@ -7,6 +8,9 @@ interface Props {
   confirmLabel: string;
   /** Red button for anything that destroys data or runs code on a device. */
   danger?: boolean;
+  /** When set, the user must type this exact text before confirming. Reserved
+   *  for actions a misplaced click must not be able to trigger. */
+  requireText?: string;
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -26,18 +30,38 @@ export function ConfirmDialog({
   body,
   confirmLabel,
   danger = false,
+  requireText,
   busy = false,
   onConfirm,
   onCancel,
 }: Props) {
+  const [typed, setTyped] = useState('');
+  const inputId = useId();
+  const locked = requireText !== undefined && typed !== requireText;
+
   return (
     <Modal title={title} onClose={onCancel}>
       <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--tx2)' }}>{body}</div>
+      {requireText !== undefined && (
+        <label className="field" htmlFor={inputId}>
+          <span className="field-label">
+            Zum Bestätigen <span className="mono">{requireText}</span> eingeben
+          </span>
+          <input
+            id={inputId}
+            className="input"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </label>
+      )}
       <div className="row" style={{ gap: 8 }}>
         <button
           className={danger ? 'btn btn-danger' : 'btn btn-primary'}
           onClick={onConfirm}
-          disabled={busy}
+          disabled={busy || locked}
         >
           {busy ? 'Läuft…' : confirmLabel}
         </button>

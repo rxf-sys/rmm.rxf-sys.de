@@ -28,8 +28,39 @@ export function stateColor(s: DeviceState): string {
         : 'var(--ok)';
 }
 
+/** The three load metrics shown as bars. */
+export type LoadKind = 'cpu' | 'ram' | 'disk';
+
+/**
+ * Where a metric turns yellow and where it turns red.
+ *
+ * The disk row deliberately matches `deviceState()` above: if the bar and the
+ * status dot disagreed about the same device, one of them would be lying.
+ * CPU tolerates more than RAM — a box pinned at 80 % CPU is working, a box at
+ * 90 % RAM is about to start swapping.
+ */
+const LOAD_THRESHOLDS: Record<LoadKind, { warn: number; crit: number }> = {
+  cpu: { warn: 70, crit: 90 },
+  ram: { warn: 75, crit: 90 },
+  disk: { warn: 80, crit: 90 },
+};
+
+export function loadLevel(pct: number, kind: LoadKind): 'ok' | 'warn' | 'crit' {
+  const t = LOAD_THRESHOLDS[kind];
+  if (pct >= t.crit) return 'crit';
+  if (pct >= t.warn) return 'warn';
+  return 'ok';
+}
+
+/** Bar colour for a load percentage: green while fine, yellow on warning,
+ *  red once critical. */
+export function loadColor(pct: number, kind: LoadKind): string {
+  const level = loadLevel(pct, kind);
+  return level === 'crit' ? 'var(--dangerS)' : level === 'warn' ? 'var(--warn)' : 'var(--ok)';
+}
+
 export function diskColor(pct: number): string {
-  return pct >= 90 ? 'var(--dangerS)' : pct >= 80 ? 'var(--warn)' : 'var(--tx2)';
+  return loadColor(pct, 'disk');
 }
 
 const OS_SHORT: Record<string, string> = { windows: 'WIN', linux: 'LNX', darwin: 'MAC' };
