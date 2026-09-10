@@ -102,6 +102,17 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Das Dashboard bietet keinen kopierbaren Download-Link mit Token in der URL
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
 
+### Geändert
+- Build und CI laufen auf **Node 24 (LTS)** statt 22 — und beide zusammen:
+  der Major steht in `frontend/Dockerfile` und in `node-version` in `ci.yml`,
+  ein Auseinanderlaufen zeigte sich sonst erst beim Deploy. Dependabot
+  ignoriert den Node-Major deshalb; es sieht nur den Dockerfile.
+- Dependabot ignoriert außerdem die Majors von `eslint`, `@eslint/js` und
+  `typescript`: alle drei lassen sich derzeit nicht installieren
+  (`eslint-plugin-jsx-a11y` hat als Peer nur eslint ≤ 9, `typescript-eslint@8`
+  nur typescript < 6.1), und ohne die Regel legt Dependabot die PRs jede Woche
+  neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
+
 ### Behoben
 - Der `web`-Container startete nach der Härtung überhaupt nicht mehr:
   `exec /usr/bin/caddy: operation not permitted`, Exit 255, Neustartschleife,

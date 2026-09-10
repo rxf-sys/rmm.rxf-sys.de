@@ -1,5 +1,11 @@
 # --- Build stage ---
-FROM node:22-alpine AS build
+# Node-Major bewusst auf einer LTS-Linie (24 = "Krypton"). Er muss mit
+# `node-version` in .github/workflows/ci.yml übereinstimmen: sonst baut CI
+# gegen eine andere Laufzeit als das Image, und ein Fehler zeigt sich erst
+# beim Deploy. Dependabot kann das nicht sicherstellen — es sieht nur diese
+# Datei —, deshalb ist der Major-Bump dort ignoriert und wird von Hand
+# gemacht.
+FROM node:24-alpine AS build
 WORKDIR /app
 # npm ci against the committed lockfile keeps builds reproducible.
 COPY package.json package-lock.json ./

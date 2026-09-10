@@ -2,7 +2,7 @@
 
 ## Setup in unter 15 Minuten
 
-Voraussetzungen: Python ≥ 3.11, Node ≥ 22, Go ≥ 1.25.14, Git.
+Voraussetzungen: Python ≥ 3.11, Node ≥ 22 (CI und Image bauen mit 24), Go ≥ 1.25.14, Git.
 
 ```bash
 git clone https://github.com/rxf-sys/rmm.rxf-sys.de.git
