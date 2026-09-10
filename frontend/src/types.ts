@@ -227,12 +227,18 @@ export type Shell = 'bash' | 'zsh' | 'powershell';
 
 export type ScriptOs = 'windows' | 'linux' | 'darwin' | 'any';
 
+export type ScriptCategory = 'wartung' | 'sicherheit' | 'diagnose' | 'sonstiges';
+
 export interface Script {
   id: number;
   name: string;
   shell: Shell;
   os: ScriptOs;
   content: string;
+  category: ScriptCategory;
+  /** Destroys data or can take a device down — the UI asks for the script
+   *  name to be typed before it runs. */
+  danger: boolean;
   updated_by: string;
   updated_at: number;
 }

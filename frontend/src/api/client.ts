@@ -195,9 +195,26 @@ export const api = {
 
   // Scripts
   scripts: (signal?: AbortSignal) => get<{ scripts: Script[] }>('/api/scripts', signal),
-  createScript: (body: { name: string; shell: Shell; os: string; content: string }) =>
+  createScript: (body: {
+    name: string;
+    shell: Shell;
+    os: string;
+    content: string;
+    category: string;
+    danger: boolean;
+  }) =>
     post<{ script: Script }>('/api/scripts', body),
-  updateScript: (id: number, body: { name: string; shell: Shell; os: string; content: string }) =>
+  updateScript: (
+    id: number,
+    body: {
+      name: string;
+      shell: Shell;
+      os: string;
+      content: string;
+      category: string;
+      danger: boolean;
+    },
+  ) =>
     send<{ script: Script }>('PUT', `/api/scripts/${id}`, body),
   deleteScript: (id: number) => del<{ ok: boolean }>(`/api/scripts/${id}`),
 

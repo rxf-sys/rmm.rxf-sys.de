@@ -887,6 +887,83 @@ h1.page-title {
   overflow-x: auto;
 }
 
+/* ============================================================
+   Script library (components/ScriptsPage.tsx)
+   ============================================================ */
+.script-row {
+  display: flex;
+  align-items: center;
+}
+.script-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 16px 10px 4px;
+  background: none;
+  border: none;
+  color: var(--tx);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.script-row-main:hover {
+  background: var(--hover);
+}
+.star {
+  flex: none;
+  width: 30px;
+  padding: 10px 0 10px 12px;
+  background: none;
+  border: none;
+  color: var(--tx3);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.star[aria-pressed='true'] {
+  color: var(--accent);
+}
+.star:hover {
+  color: var(--accT);
+}
+.script-body {
+  margin: 0;
+  padding: 11px 16px;
+  background: var(--console);
+  color: #8b95a5;
+  font: 400 11px var(--mono);
+  max-height: 260px;
+  overflow: auto;
+  border-top: 1px solid var(--consoleLine);
+}
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+.template-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--input);
+  color: var(--tx);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+.template-card:hover {
+  border-color: var(--accLine);
+  transform: translateY(-1px);
+}
+
 /* --- Pagination footer (components/Pagination.tsx) -------------------- */
 .pager {
   display: flex;

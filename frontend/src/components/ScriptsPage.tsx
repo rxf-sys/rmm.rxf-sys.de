@@ -3,9 +3,11 @@ import { api, apiErrorMessage } from '../api/client';
 import { useConfirm } from '../hooks/useConfirm';
 import { formatRelative } from '../format';
 import { usePagination } from '../hooks/usePagination';
-import { Pagination } from './Pagination';
 import { AppleLogo, LinuxLogo, WindowsLogo } from '../icons';
-import type { Device, Script, ScriptOs, Shell } from '../types';
+import { TEMPLATES, type ScriptTemplate } from '../scriptTemplates';
+import type { Device, Script, ScriptCategory, ScriptOs, Shell } from '../types';
+import { FilterBar, type FilterOption } from './FilterBar';
+import { Pagination } from './Pagination';
 
 interface Props {
   canManage: boolean;
@@ -18,140 +20,20 @@ interface Draft {
   name: string;
   shell: Shell;
   os: ScriptOs;
+  category: ScriptCategory;
+  danger: boolean;
   content: string;
 }
 
-const EMPTY: Draft = { id: null, name: '', shell: 'bash', os: 'any', content: '' };
-
-/** Fertige Skripte für die häufigsten Aufgaben. Alle Secret-Vorlagen nutzen
- * den ##RMM-CRED##-Marker: solche Output-Zeilen fängt der Server ab und
- * speichert sie verschlüsselt in den Passwörtern des Geräts — sie erscheinen
- * nie im Job-Log. */
-const TEMPLATES: { name: string; os: ScriptOs; shell: Shell; content: string }[] = [
-  {
-    name: 'BitLocker aktivieren + Recovery-Key sichern',
-    os: 'windows',
-    shell: 'powershell',
-    content: `# BitLocker fuer das Systemlaufwerk sicherstellen und den Recovery-Key
-# verschluesselt in den Passwoertern dieses Geraets sichern (##RMM-CRED##).
-# Robust: unverschluesselt -> aktivieren; verschluesselt mit Schutz aus
-# (pausiert / "wartet auf Aktivierung") -> Schutz einschalten; aktiv ->
-# nur Key sichern. Protectoren werden nie doppelt angelegt (0x80310031).
-$ErrorActionPreference = 'Stop'
-$drive = $env:SystemDrive
-$vol = Get-BitLockerVolume -MountPoint $drive
-
-if (-not ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'RecoveryPassword')) {
-  Add-BitLockerKeyProtector -MountPoint $drive -RecoveryPasswordProtector | Out-Null
-  Write-Output 'Recovery-Password-Protector ergaenzt.'
-  $vol = Get-BitLockerVolume -MountPoint $drive
-}
-
-if (-not ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'Tpm')) {
-  $tpm = Get-Tpm -ErrorAction SilentlyContinue
-  if ($tpm -and $tpm.TpmReady) {
-    Add-BitLockerKeyProtector -MountPoint $drive -TpmProtector | Out-Null
-    Write-Output 'TPM-Protector ergaenzt.'
-  } elseif ($vol.VolumeStatus -eq 'FullyDecrypted') {
-    throw 'Kein einsatzbereites TPM — BitLocker muesste manuell eingerichtet werden.'
-  }
-  $vol = Get-BitLockerVolume -MountPoint $drive
-}
-
-if ($vol.VolumeStatus -eq 'FullyDecrypted') {
-  # manage-bde nutzt die vorhandenen Protectoren, statt neue anzulegen.
-  manage-bde -on $drive -skiphardwaretest -usedspaceonly | Out-Null
-  Write-Output 'BitLocker aktiviert - Verschluesselung laeuft im Hintergrund.'
-} elseif ($vol.ProtectionStatus -ne 'On') {
-  try {
-    Resume-BitLocker -MountPoint $drive -ErrorAction Stop | Out-Null
-    Write-Output 'BitLocker-Schutz war pausiert - wieder aktiviert.'
-  } catch {
-    manage-bde -on $drive | Out-Null
-    Write-Output "BitLocker-Schutz aktiviert (war 'wartet auf Aktivierung')."
-  }
-} else {
-  Write-Output "BitLocker ist bereits aktiv ($($vol.VolumeStatus))."
-}
-
-$vol = Get-BitLockerVolume -MountPoint $drive
-foreach ($kp in ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'RecoveryPassword')) {
-  $json = @{
-    label    = "BitLocker $drive Recovery-Key"
-    username = "$($kp.KeyProtectorId)"
-    secret   = "$($kp.RecoveryPassword)"
-    notes    = "Automatisch gesichert am $(Get-Date -Format yyyy-MM-dd)"
-  } | ConvertTo-Json -Compress
-  Write-Output "##RMM-CRED## $json"
-}`,
-  },
-  {
-    name: 'BitLocker Recovery-Keys auslesen + sichern',
-    os: 'windows',
-    shell: 'powershell',
-    content: `# Liest die Recovery-Keys ALLER BitLocker-Volumes aus und sichert sie
-# verschluesselt in den Passwoertern dieses Geraets. Die Keys selbst
-# erscheinen nicht im Job-Log.
-$found = $false
-foreach ($vol in Get-BitLockerVolume) {
-  foreach ($kp in ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'RecoveryPassword')) {
-    $found = $true
-    $json = @{
-      label    = "BitLocker $($vol.MountPoint) Recovery-Key"
-      username = "$($kp.KeyProtectorId)"
-      secret   = "$($kp.RecoveryPassword)"
-      notes    = "Automatisch gesichert am $(Get-Date -Format yyyy-MM-dd)"
-    } | ConvertTo-Json -Compress
-    Write-Output "##RMM-CRED## $json"
-  }
-}
-if (-not $found) { Write-Output 'Keine BitLocker-Recovery-Keys gefunden.' }`,
-  },
-  {
-    name: 'Lokalen Notfall-Admin anlegen/rotieren',
-    os: 'windows',
-    shell: 'powershell',
-    content: `# Legt den lokalen Notfall-Admin 'rmm-admin' an bzw. rotiert dessen
-# Passwort und sichert das neue Passwort in den Passwoertern des Geraets.
-$ErrorActionPreference = 'Stop'
-$User = 'rmm-admin'
-$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
-$bytes = New-Object byte[] 24
-$rng.GetBytes($bytes)
-$pw = [Convert]::ToBase64String($bytes)
-$sec = ConvertTo-SecureString $pw -AsPlainText -Force
-if (Get-LocalUser -Name $User -ErrorAction SilentlyContinue) {
-  Set-LocalUser -Name $User -Password $sec
-  Write-Output "Passwort von $User rotiert."
-} else {
-  New-LocalUser -Name $User -Password $sec -PasswordNeverExpires \`
-    -Description 'RMM Notfall-Admin' | Out-Null
-  # S-1-5-32-544 = lokale Administratoren-Gruppe (sprachunabhaengig)
-  Add-LocalGroupMember -SID 'S-1-5-32-544' -Member $User
-  Write-Output "$User angelegt und zur Admin-Gruppe hinzugefuegt."
-}
-$json = @{
-  label    = "Lokaler Admin $User"
-  username = $User
-  secret   = $pw
-  notes    = "Automatisch rotiert am $(Get-Date -Format yyyy-MM-dd)"
-} | ConvertTo-Json -Compress
-Write-Output "##RMM-CRED## $json"`,
-  },
-  {
-    name: 'root-Passwort rotieren + sichern',
-    os: 'linux',
-    shell: 'bash',
-    content: `#!/usr/bin/env bash
-# Rotiert das root-Passwort und sichert es verschluesselt in den
-# Passwoertern dieses Geraets (##RMM-CRED##-Zeile, nicht im Job-Log).
-set -euo pipefail
-PW="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)"
-echo "root:\${PW}" | chpasswd
-printf '##RMM-CRED## {"label":"root-Passwort","username":"root","secret":"%s","notes":"Automatisch rotiert am %s"}\\n' "$PW" "$(date +%F)"
-echo "root-Passwort rotiert und im RMM gespeichert."`,
-  },
-];
+const EMPTY: Draft = {
+  id: null,
+  name: '',
+  shell: 'bash',
+  os: 'any',
+  category: 'sonstiges',
+  danger: false,
+  content: '',
+};
 
 const OS_META: Record<ScriptOs, { label: string; icon: React.ReactNode }> = {
   windows: { label: 'Windows', icon: <WindowsLogo size={11} /> },
@@ -160,10 +42,42 @@ const OS_META: Record<ScriptOs, { label: string; icon: React.ReactNode }> = {
   any: { label: 'Alle', icon: <span style={{ fontSize: 10 }}>✳</span> },
 };
 
+const CATEGORY_LABEL: Record<ScriptCategory, string> = {
+  wartung: 'Wartung',
+  sicherheit: 'Sicherheit',
+  diagnose: 'Diagnose',
+  sonstiges: 'Sonstiges',
+};
+
+const CATEGORIES = Object.keys(CATEGORY_LABEL) as ScriptCategory[];
+
+/** 'fav' is not a category — it is the one cross-cutting shelf, so it sits in
+ *  the same control instead of being a second toggle next to it. */
+type CatFilter = 'alle' | 'fav' | ScriptCategory;
+
+const FAV_KEY = 'vulpexa-script-favorites';
+
+function loadFavorites(): number[] {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]');
+    return Array.isArray(raw) ? raw.filter((x): x is number => typeof x === 'number') : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Which library OSes a device can run: an exact match or a cross-platform
  * ("any") script. */
 function osMatchesDevice(scriptOs: ScriptOs, deviceOs: string): boolean {
   return scriptOs === 'any' || scriptOs === deviceOs;
+}
+
+function OsChip({ os }: { os: ScriptOs }) {
+  return (
+    <span className="chip" title={OS_META[os].label} style={{ flex: 'none' }}>
+      {OS_META[os].icon} {OS_META[os].label}
+    </span>
+  );
 }
 
 /** One script list row, expandable to show the content + a "run on device"
@@ -174,21 +88,29 @@ function ScriptRow({
   canManage,
   onlineDevices,
   expanded,
+  favorite,
   onToggle,
+  onToggleFavorite,
   onEdit,
+  onDuplicate,
   onDelete,
   onOpenDevice,
   onError,
+  onConfirmRun,
 }: {
   s: Script;
   canManage: boolean;
   onlineDevices: Device[];
   expanded: boolean;
+  favorite: boolean;
   onToggle: () => void;
+  onToggleFavorite: () => void;
   onEdit: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
   onOpenDevice: (id: number) => void;
   onError: (msg: string) => void;
+  onConfirmRun: (s: Script, hostname: string) => Promise<boolean>;
 }) {
   // Nur Geräte anbieten, auf denen das Skript laufen kann (OS passt).
   const runnable = onlineDevices.filter((d) => osMatchesDevice(s.os, d.os));
@@ -197,6 +119,8 @@ function ScriptRow({
 
   const run = async () => {
     if (target === '' || busy) return;
+    const hostname = runnable.find((d) => d.id === target)?.hostname ?? `Gerät ${target}`;
+    if (!(await onConfirmRun(s, hostname))) return;
     setBusy(true);
     try {
       await api.createScriptJob(target, s.id);
@@ -210,59 +134,47 @@ function ScriptRow({
 
   return (
     <div style={{ borderBottom: '1px solid var(--line2)' }}>
-      <button
-        className="row"
-        style={{
-          gap: 10,
-          padding: '10px 16px',
-          width: '100%',
-          background: expanded ? 'var(--hover)' : 'none',
-          border: 'none',
-          cursor: 'pointer',
-          color: 'var(--tx)',
-          textAlign: 'left',
-        }}
-        onClick={onToggle}
-      >
-        <span style={{ color: 'var(--tx3)', fontSize: 10, width: 12 }}>{expanded ? '▾' : '▸'}</span>
-        <span
-          className="chip"
-          title={OS_META[s.os].label}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flex: 'none' }}
+      <div className="script-row">
+        <button
+          type="button"
+          className="star"
+          aria-pressed={favorite}
+          aria-label={favorite ? `${s.name} aus Favoriten entfernen` : `${s.name} zu Favoriten`}
+          onClick={onToggleFavorite}
         >
-          {OS_META[s.os].icon} {OS_META[s.os].label}
-        </span>
-        <span style={{ fontWeight: 700, fontSize: 12.5 }}>{s.name}</span>
-        <span className="badge badge-accent mono" style={{ fontSize: 9.5 }}>
-          {s.shell}
-        </span>
-        <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 10.5, flex: 'none' }}>
-          {s.updated_by} · {formatRelative(s.updated_at)}
-        </span>
-      </button>
+          {favorite ? '★' : '☆'}
+        </button>
+        <button className="script-row-main" onClick={onToggle} aria-expanded={expanded}>
+          <span style={{ color: 'var(--tx3)', fontSize: 10, width: 12, flex: 'none' }}>
+            {expanded ? '▾' : '▸'}
+          </span>
+          <OsChip os={s.os} />
+          <span style={{ fontWeight: 700, fontSize: 12.5 }}>{s.name}</span>
+          {s.danger && (
+            <span className="badge badge-danger" title="Destruktiv — Ausführen verlangt den Namen">
+              ⚠ destruktiv
+            </span>
+          )}
+          <span className="chip">{CATEGORY_LABEL[s.category]}</span>
+          <span className="badge badge-accent mono" style={{ fontSize: 9.5 }}>
+            {s.shell}
+          </span>
+          <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 10.5, flex: 'none' }}>
+            {s.updated_by} · {formatRelative(s.updated_at)}
+          </span>
+        </button>
+      </div>
       {expanded && (
         <>
-          <pre
-            style={{
-              margin: 0,
-              padding: '11px 16px',
-              background: 'var(--console)',
-              color: '#8b95a5',
-              font: '400 11px var(--mono)',
-              maxHeight: 260,
-              overflow: 'auto',
-              borderTop: '1px solid var(--consoleLine)',
-            }}
-          >
-            {s.content}
-          </pre>
+          <pre className="script-body">{s.content}</pre>
           {canManage && (
-            <div className="row" style={{ gap: 7, padding: '10px 16px', borderTop: '1px solid var(--line2)' }}>
+            <div className="row" style={{ gap: 7, padding: '10px 16px', borderTop: '1px solid var(--line2)', flexWrap: 'wrap' }}>
               <select
                 className="input btn-sm"
                 style={{ padding: '5px 8px' }}
                 value={target}
                 onChange={(e) => setTarget(e.target.value ? Number(e.target.value) : '')}
+                aria-label="Zielgerät"
               >
                 {runnable.length === 0 && (
                   <option value="">
@@ -277,11 +189,18 @@ function ScriptRow({
                   </option>
                 ))}
               </select>
-              <button className="btn btn-accent btn-sm" onClick={() => void run()} disabled={busy || target === ''}>
+              <button
+                className={s.danger ? 'btn btn-danger btn-sm' : 'btn btn-accent btn-sm'}
+                onClick={() => void run()}
+                disabled={busy || target === ''}
+              >
                 ▶ Ausführen
               </button>
               <button className="btn btn-sm" onClick={onEdit}>
                 Bearbeiten
+              </button>
+              <button className="btn btn-sm" onClick={onDuplicate}>
+                Duplizieren
               </button>
               <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={onDelete}>
                 Löschen
@@ -294,6 +213,49 @@ function ScriptRow({
   );
 }
 
+/** The template gallery: what the library can do, before anything is in it. */
+function TemplateGallery({
+  onUse,
+  onClose,
+}: {
+  onUse: (t: ScriptTemplate) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="row" style={{ gap: 10 }}>
+        <span className="card-title">Vorlagen</span>
+        <span className="muted" style={{ fontSize: 11.5 }}>
+          Fertige Skripte als Startpunkt — sie landen im Editor und lassen sich vor dem Speichern
+          anpassen.
+        </span>
+        <button className="btn btn-sm grow" style={{ marginLeft: 'auto' }} onClick={onClose}>
+          Schließen
+        </button>
+      </div>
+      <div className="template-grid">
+        {TEMPLATES.map((t, i) => (
+          <button key={`${t.name}-${t.os}-${i}`} className="template-card" onClick={() => onUse(t)}>
+            <span className="row" style={{ gap: 7 }}>
+              <OsChip os={t.os} />
+              <span className="chip">{CATEGORY_LABEL[t.category]}</span>
+              {t.danger && <span className="badge badge-danger">⚠ destruktiv</span>}
+            </span>
+            <span style={{ fontWeight: 700, fontSize: 12.5 }}>{t.name}</span>
+            <span className="muted" style={{ fontSize: 11, lineHeight: 1.5 }}>
+              {t.summary}
+            </span>
+          </button>
+        ))}
+      </div>
+      <span className="muted" style={{ fontSize: 11 }}>
+        BitLocker-Keys und rotierte Passwörter landen automatisch verschlüsselt in den Passwörtern
+        des Geräts, statt im Job-Log zu stehen.
+      </span>
+    </div>
+  );
+}
+
 export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
   const { ask, dialog: confirmDialog } = useConfirm();
   const [scripts, setScripts] = useState<Script[] | null>(null);
@@ -302,6 +264,9 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [q, setQ] = useState('');
   const [osFilter, setOsFilter] = useState<ScriptOs | 'all'>('all');
+  const [catFilter, setCatFilter] = useState<CatFilter>('alle');
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [favorites, setFavorites] = useState<number[]>(loadFavorites);
 
   const load = () =>
     api
@@ -313,6 +278,18 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
     void load();
   }, []);
 
+  const toggleFavorite = (id: number) => {
+    setFavorites((f) => {
+      const next = f.includes(id) ? f.filter((x) => x !== id) : [...f, id];
+      try {
+        localStorage.setItem(FAV_KEY, JSON.stringify(next));
+      } catch {
+        // A browser that refuses storage still gets the toggle for this visit.
+      }
+      return next;
+    });
+  };
+
   const save = async () => {
     if (!draft) return;
     setError(null);
@@ -321,6 +298,8 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
         name: draft.name.trim(),
         shell: draft.shell,
         os: draft.os,
+        category: draft.category,
+        danger: draft.danger,
         content: draft.content,
       };
       if (draft.id === null) await api.createScript(body);
@@ -332,37 +311,97 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
     }
   };
 
-  const remove = async (id: number) => {
+  const remove = async (s: Script) => {
     const ok = await ask({
       title: 'Skript löschen',
-      body: 'Das Skript wird aus der Bibliothek entfernt. Bereits gelaufene Jobs bleiben im Verlauf.',
+      body: (
+        <>
+          <strong>{s.name}</strong> wird aus der Bibliothek entfernt. Bereits gelaufene Jobs
+          bleiben im Verlauf.
+        </>
+      ),
       confirmLabel: 'Skript löschen',
       danger: true,
     });
     if (!ok) return;
     try {
-      await api.deleteScript(id);
+      await api.deleteScript(s.id);
       await load();
     } catch (e) {
       setError(apiErrorMessage(e));
     }
   };
 
+  // A destructive script asks for its own name before it runs. A misplaced
+  // click on "Ausführen" reaches a real machine as root; one that reformats a
+  // disk or forces a reboot should cost a deliberate second step.
+  const confirmRun = (s: Script, hostname: string) =>
+    ask({
+      title: s.danger ? `Destruktives Skript auf ${hostname}` : `Skript auf ${hostname} ausführen`,
+      body: s.danger ? (
+        <>
+          <strong>{s.name}</strong> ist als destruktiv markiert und läuft auf{' '}
+          <strong>{hostname}</strong> mit vollen Rechten. Es kann Daten zerstören oder das Gerät
+          lahmlegen.
+        </>
+      ) : (
+        <>
+          <strong>{s.name}</strong> läuft auf <strong>{hostname}</strong> mit vollen Rechten.
+        </>
+      ),
+      confirmLabel: 'Jetzt ausführen',
+      danger: s.danger,
+      requireText: s.danger ? s.name : undefined,
+    });
+
+  const useTemplate = (t: ScriptTemplate) => {
+    setShowTemplates(false);
+    setDraft({
+      id: null,
+      name: t.name,
+      shell: t.shell,
+      os: t.os,
+      category: t.category,
+      danger: t.danger,
+      content: t.content,
+    });
+  };
+
+  const duplicate = (s: Script) => {
+    setExpandedId(null);
+    setDraft({
+      id: null,
+      name: `${s.name} (Kopie)`,
+      shell: s.shell,
+      os: s.os,
+      category: s.category,
+      danger: s.danger,
+      content: s.content,
+    });
+  };
+
   const online = devices.filter((d) => d.online);
+  const all = scripts ?? [];
 
-  // Zähler pro OS für die Filter-Chips (nur OS mit Skripten anbieten).
-  const counts: Record<string, number> = { all: scripts?.length ?? 0 };
-  for (const s of scripts ?? []) counts[s.os] = (counts[s.os] ?? 0) + 1;
-  const osChips: (ScriptOs | 'all')[] = [
-    'all',
-    ...(['windows', 'linux', 'darwin', 'any'] as ScriptOs[]).filter((o) => counts[o]),
-  ];
-
-  const visible = (scripts ?? [])
+  const bySearchAndOs = all
     .filter((s) => osFilter === 'all' || s.os === osFilter)
     .filter((s) => !q.trim() || s.name.toLowerCase().includes(q.trim().toLowerCase()));
 
-  const pager = usePagination(visible, 'scripts', `${osFilter}|${q.trim()}`);
+  const matchesCat = (s: Script, f: CatFilter) =>
+    f === 'alle' ? true : f === 'fav' ? favorites.includes(s.id) : s.category === f;
+
+  const visible = bySearchAndOs.filter((s) => matchesCat(s, catFilter));
+  const pager = usePagination(visible, 'scripts', `${osFilter}|${catFilter}|${q.trim()}`);
+
+  const catOptions: FilterOption<CatFilter>[] = [
+    { id: 'alle', label: 'Alle' },
+    { id: 'fav', label: '★ Favoriten', count: bySearchAndOs.filter((s) => favorites.includes(s.id)).length },
+    ...CATEGORIES.map((c) => ({
+      id: c as CatFilter,
+      label: CATEGORY_LABEL[c],
+      count: bySearchAndOs.filter((s) => s.category === c).length,
+    })),
+  ];
 
   return (
     <div className="screen">
@@ -377,32 +416,47 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Skript suchen…"
+            aria-label="Skript suchen"
           />
         )}
         {canManage && !draft && (
-          <button className="btn btn-primary grow" style={{ marginLeft: 'auto' }} onClick={() => setDraft({ ...EMPTY })}>
-            + Neues Skript
-          </button>
+          <div className="row grow" style={{ marginLeft: 'auto', gap: 8, flex: 'none' }}>
+            <button className="btn" onClick={() => setShowTemplates((v) => !v)}>
+              Vorlagen ({TEMPLATES.length})
+            </button>
+            <button className="btn btn-primary" onClick={() => setDraft({ ...EMPTY })}>
+              + Neues Skript
+            </button>
+          </div>
         )}
       </div>
 
+      {showTemplates && canManage && (
+        <TemplateGallery onUse={useTemplate} onClose={() => setShowTemplates(false)} />
+      )}
+
       {scripts !== null && scripts.length > 0 && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          {osChips.map((o) => (
-            <button
-              key={o}
-              className={osFilter === o ? 'btn btn-accent btn-sm' : 'btn btn-sm'}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
-              onClick={() => setOsFilter(o)}
-            >
-              {o === 'all' ? '📚 Alle' : (
-                <>
-                  {OS_META[o].icon} {OS_META[o].label}
-                </>
-              )}
-              <span className="muted" style={{ fontSize: 10 }}>{counts[o] ?? 0}</span>
-            </button>
-          ))}
+        <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+          <FilterBar
+            options={catOptions}
+            value={catFilter}
+            onChange={setCatFilter}
+            label="Skripte nach Kategorie filtern"
+          />
+          <select
+            className={osFilter === 'all' ? 'input btn-sm' : 'input btn-sm accent-border'}
+            style={{ padding: '7px 10px' }}
+            value={osFilter}
+            onChange={(e) => setOsFilter(e.target.value as ScriptOs | 'all')}
+            aria-label="Nach Betriebssystem filtern"
+          >
+            <option value="all">Alle Betriebssysteme</option>
+            {(['windows', 'linux', 'darwin', 'any'] as ScriptOs[]).map((o) => (
+              <option key={o} value={o}>
+                {OS_META[o].label}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
@@ -411,19 +465,20 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
       {draft && (
         <div className="card card-pad" style={{ borderColor: 'var(--accLine)', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <span className="card-title">{draft.id === null ? 'Neues Skript' : 'Skript bearbeiten'}</span>
-          <div className="row" style={{ gap: 9 }}>
+          <div className="row" style={{ gap: 9, flexWrap: 'wrap' }}>
             <input
               className="input grow"
-              style={{ flex: 1 }}
+              style={{ flex: 1, minWidth: 180 }}
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
               placeholder="Name, z. B. Drucker-Spooler-Reset"
+              aria-label="Name des Skripts"
             />
             <select
               className="input"
               value={draft.os}
               onChange={(e) => setDraft({ ...draft, os: e.target.value as ScriptOs })}
-              title="Betriebssystem"
+              aria-label="Betriebssystem"
             >
               <option value="any">Alle OS</option>
               <option value="windows">Windows</option>
@@ -432,37 +487,38 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
             </select>
             <select
               className="input"
+              value={draft.category}
+              onChange={(e) => setDraft({ ...draft, category: e.target.value as ScriptCategory })}
+              aria-label="Kategorie"
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {CATEGORY_LABEL[c]}
+                </option>
+              ))}
+            </select>
+            <select
+              className="input"
               value={draft.shell}
               onChange={(e) => setDraft({ ...draft, shell: e.target.value as Shell })}
+              aria-label="Shell"
             >
               <option value="bash">bash</option>
               <option value="zsh">zsh</option>
               <option value="powershell">powershell</option>
             </select>
           </div>
-          {draft.id === null && (
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <select
-                className="input btn-sm"
-                style={{ padding: '5px 8px' }}
-                value=""
-                onChange={(e) => {
-                  const t = TEMPLATES[Number(e.target.value)];
-                  if (t) setDraft({ ...draft, name: t.name, os: t.os, shell: t.shell, content: t.content });
-                }}
-              >
-                <option value="">Vorlage einfügen…</option>
-                {TEMPLATES.map((t, i) => (
-                  <option key={t.name} value={i}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-              <span className="muted" style={{ fontSize: 11 }}>
-                BitLocker-Keys &amp; rotierte Passwörter landen automatisch verschlüsselt in den Passwörtern des Geräts.
-              </span>
-            </div>
-          )}
+          <label className="row" style={{ gap: 8, fontSize: 12 }}>
+            <input
+              type="checkbox"
+              checked={draft.danger}
+              onChange={(e) => setDraft({ ...draft, danger: e.target.checked })}
+            />
+            <span>
+              <b>Destruktiv</b> — zerstört Daten oder legt das Gerät lahm. Vor dem Ausführen muss
+              dann der Skriptname eingetippt werden.
+            </span>
+          </label>
           <textarea
             className="code-area"
             value={draft.content}
@@ -470,6 +526,7 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
             spellCheck={false}
             rows={10}
             placeholder="#!/usr/bin/env bash"
+            aria-label="Skript-Inhalt"
           />
           <p className="muted" style={{ fontSize: 11, margin: 0 }}>
             Tipp: Gibt das Skript eine Zeile{' '}
@@ -489,14 +546,18 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
         </div>
       )}
 
-      {scripts !== null && scripts.length === 0 && !draft && (
+      {scripts !== null && scripts.length === 0 && !draft && !showTemplates && (
         <div className="empty">
           <h2>Noch keine Skripte</h2>
           <p className="muted">
-            Beim Anlegen stehen Vorlagen bereit — z. B. BitLocker-Recovery-Keys sichern oder
-            Notfall-Admin-Passwörter rotieren (Secrets landen automatisch in den Passwörtern des
-            Geräts). Weitere Ideen: Temp-Cleanup, Drucker-Spooler-Reset, Netzwerk-Diagnose.
+            {TEMPLATES.length} Vorlagen stehen bereit — BitLocker-Keys sichern, Notfall-Admin
+            rotieren, Temp-Dateien aufräumen, Netzwerk und Speicherplatz diagnostizieren.
           </p>
+          {canManage && (
+            <button className="btn btn-primary" style={{ marginTop: 4 }} onClick={() => setShowTemplates(true)}>
+              Vorlagen ansehen
+            </button>
+          )}
         </div>
       )}
 
@@ -509,16 +570,22 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
               canManage={canManage}
               onlineDevices={online}
               expanded={expandedId === s.id}
+              favorite={favorites.includes(s.id)}
               onToggle={() => setExpandedId(expandedId === s.id ? null : s.id)}
+              onToggleFavorite={() => toggleFavorite(s.id)}
               onEdit={() => setDraft({ ...s })}
-              onDelete={() => void remove(s.id)}
+              onDuplicate={() => duplicate(s)}
+              onDelete={() => void remove(s)}
               onOpenDevice={onOpenDevice}
               onError={setError}
+              onConfirmRun={confirmRun}
             />
           ))}
           {visible.length === 0 && (
             <div className="muted" style={{ padding: '16px' }}>
-              Keine Skripte für diesen Filter.
+              {catFilter === 'fav'
+                ? 'Noch keine Favoriten — mit dem Stern links markieren.'
+                : 'Keine Skripte für diesen Filter.'}
             </div>
           )}
           <Pagination {...pager} label="Skripte" />
