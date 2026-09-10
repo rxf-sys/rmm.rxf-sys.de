@@ -888,6 +888,86 @@ h1.page-title {
 }
 
 /* ============================================================
+   Audit log (components/AuditPage.tsx)
+   ============================================================ */
+.audit-day {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 7px 18px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  font-weight: 800;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tx3);
+}
+.audit-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 18px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line2);
+  color: var(--tx);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+.audit-row:hover,
+.audit-row.open {
+  background: var(--hover);
+}
+.audit-arrow {
+  flex: none;
+  width: 10px;
+  font-size: 10px;
+  color: var(--tx3);
+}
+.audit-time {
+  flex: none;
+  width: 62px;
+  font-size: 11px;
+  color: var(--tx3);
+}
+.audit-cat {
+  flex: none;
+  width: 96px;
+  text-align: center;
+}
+.audit-actor {
+  flex: none;
+  width: 92px;
+  font-weight: 700;
+  font-size: 11.5px;
+  color: var(--tx2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audit-text {
+  font-weight: 600;
+  font-size: 12.5px;
+  min-width: 0;
+}
+.audit-shield {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+}
+.audit-detail {
+  padding: 12px 18px 14px 52px;
+  background: var(--console);
+  border-bottom: 1px solid var(--line2);
+}
+.audit-detail-val {
+  word-break: break-word;
+}
+
+/* ============================================================
    Script library (components/ScriptsPage.tsx)
    ============================================================ */
 .script-row {

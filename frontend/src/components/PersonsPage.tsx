@@ -71,7 +71,7 @@ export function PersonsPage({
       .then((r) => setAccounts(r.accounts))
       .catch(() => setAccounts([]));
     api
-      .audit(200, ctrl.signal)
+      .audit({ limit: 200 }, ctrl.signal)
       .then((r) => setActivity(r.events))
       .catch(() => setActivity([]));
     return () => ctrl.abort();

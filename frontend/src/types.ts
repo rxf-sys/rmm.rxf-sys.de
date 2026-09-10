@@ -243,6 +243,20 @@ export interface Script {
   updated_at: number;
 }
 
+export type AuditCategory =
+  | 'auth'
+  | 'account'
+  | 'device'
+  | 'job'
+  | 'patch'
+  | 'remote'
+  | 'alert'
+  | 'script'
+  | 'person'
+  | 'credential'
+  | 'config'
+  | 'other';
+
 export interface AuditEvent {
   id: number;
   ts: number;
@@ -250,6 +264,15 @@ export interface AuditEvent {
   actor: string;
   device_id: number | null;
   detail: Record<string, unknown>;
+  /** Classified server-side, so the colour here and the filter there agree. */
+  category: AuditCategory;
+  /** Part of the "Sicherheit" quick filter. */
+  security: boolean;
+}
+
+export interface AuditPage {
+  events: AuditEvent[];
+  total: number;
 }
 
 export type Severity = 'critical' | 'important' | 'moderate' | 'low' | 'other';
