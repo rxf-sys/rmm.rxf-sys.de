@@ -512,6 +512,77 @@ h1.page-title {
   cursor: pointer;
 }
 
+/* ============================================================
+   Segmented control (components/FilterBar.tsx)
+   One track, one raised active segment — so a set of filters reads
+   as a single choice instead of a row of unrelated buttons.
+   ============================================================ */
+.segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--input);
+  border: 1px solid var(--line);
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.segmented::-webkit-scrollbar {
+  display: none;
+}
+.segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--tx2);
+  font-weight: 700;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.segment:hover {
+  color: var(--tx);
+  background: var(--hover);
+}
+.segment.active {
+  background: var(--panel);
+  color: var(--tx);
+  box-shadow: var(--shadow);
+}
+.segment:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.segment-count {
+  font: 700 10px var(--mono);
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--chip);
+  color: var(--tx3);
+}
+.segment.active .segment-count {
+  color: var(--tx2);
+}
+.segment-count.tone-warn {
+  background: var(--warnBg);
+  color: var(--warn);
+}
+.segment-count.tone-danger {
+  background: var(--dangerBg);
+  color: var(--dangerS);
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--line);
