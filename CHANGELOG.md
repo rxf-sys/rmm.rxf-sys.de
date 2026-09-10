@@ -73,6 +73,22 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - `.env.example` enthält jetzt auch `CLEANUP_INTERVAL_S`, `ALERT_INTERVAL_S`,
   `METRICS_RAW_RETENTION_H` und `METRICS_HOURLY_RETENTION_D`.
 
+### Hinzugefügt (Fortsetzung)
+- Neue Skript-Vorlage **„Proxmox: alle LXC-Container aktualisieren"**: läuft
+  auf dem Proxmox-Host, geht per `pct` durch jeden laufenden Container und
+  aktualisiert dessen Pakete — Debian/Ubuntu, Alpine, Fedora/Rocky, openSUSE
+  und Arch werden am Paketmanager erkannt. Ausgeschlossen sind ab Werk
+  cloudflared (CT 104) und das RMM selbst (CT 111), weil ein Neustart dieser
+  beiden die Verbindung kappt, über die der Job gerade läuft. Startet nichts
+  neu, meldet nur, wo ein Neustart nötig wäre, und hört zwischen zwei
+  Containern auf, wenn das Zeitbudget knapp wird — abgebrochenes `dpkg`
+  hinterlässt eine halb konfigurierte Paketdatenbank.
+- Längere Vorlagen liegen jetzt als echte Datei unter
+  `frontend/src/templates/` und werden per `?raw` eingebunden, statt als
+  Template-Literal im TypeScript zu stehen: dort müsste jedes `${…}` von Hand
+  escapt werden, und ein übersehenes Escape verfälscht still ein Skript, das
+  später als root läuft.
+
 ### Geändert
 - Alle Module öffnen die Datenbank über einen gemeinsamen Helfer
   (`app/db.py`), der Fremdschlüssel einschaltet. Vorher taten das zwei von
