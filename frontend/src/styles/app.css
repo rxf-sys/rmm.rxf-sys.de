@@ -637,6 +637,9 @@ h1.page-title {
   color: var(--tx2);
 }
 .chip-mono {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font: 500 9px var(--mono);
   color: var(--tx3);
   border: 1px solid var(--line);
@@ -817,6 +820,68 @@ h1.page-title {
   color: var(--tx2);
   width: 28px;
   text-align: right;
+}
+
+/* --- Device list row (components/DevicesPage.tsx) --------------------- */
+.device-row {
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+.cell-device {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.cell-device-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cell-device-top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.cell-device-top .name {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* OS and tags on their own line: the tags column they replace cost as much
+   width as a whole metric and still truncated after two entries. */
+.cell-device-sub {
+  font-size: 10.5px;
+  color: var(--tx3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Labelled load bars ---------------------------------------------- */
+.cell-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.meter-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.meter-key {
+  font: 700 9px var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--tx3);
+  text-transform: uppercase;
+}
+.meter-val {
+  margin-left: auto;
+  font: 600 10.5px var(--mono);
 }
 .tbl-scroll {
   overflow-x: auto;
