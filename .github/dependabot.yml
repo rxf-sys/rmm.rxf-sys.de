@@ -25,6 +25,24 @@ updates:
     groups:
       frontend-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # Diese drei Majors lassen sich derzeit nicht einmal installieren —
+      # `npm ci` bricht mit einem Peer-Konflikt ab, geprüft in den PRs
+      # #39/#40/#41:
+      #   eslint 10        → eslint-plugin-jsx-a11y@6.10.2 hat als Peer
+      #                      nur "^3 || … || ^9"
+      #   @eslint/js 10    → verlangt eslint ^10, hängt also an obigem
+      #   typescript 7     → typescript-eslint@8 hat als Peer
+      #                      "typescript >=4.8.4 <6.1.0"
+      # Ohne diese Regeln legt Dependabot die PRs jeden Montag neu an.
+      # Wieder entfernen, sobald jsx-a11y bzw. typescript-eslint nachziehen;
+      # Minor- und Patch-Updates dieser Pakete laufen unverändert weiter.
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      - dependency-name: "@eslint/js"
+        update-types: [version-update:semver-major]
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: gomod
     directory: /agent
@@ -46,3 +64,13 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+    ignore:
+      # Der Node-Major steht an zwei Stellen: frontend/Dockerfile und
+      # `node-version` in ci.yml. Dependabot sieht nur die erste und würde
+      # Image und CI auf verschiedene Majors setzen. Dazu kommt, dass nur die
+      # geraden Node-Majors LTS sind — ein automatischer Bump landet auf einer
+      # Linie, die in ein paar Monaten keine Sicherheitsupdates mehr bekommt.
+      # Node-Sprünge deshalb von Hand und beide Stellen zusammen.
+      # Patch- und Minor-Updates des Images kommen weiterhin automatisch.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
