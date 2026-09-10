@@ -1247,6 +1247,176 @@ textarea.input {
   gap: 14px;
   align-items: start;
 }
+
+/* ============================================================
+   Persons: list on the left, everything about one person on the
+   right (components/PersonsPage.tsx, components/PersonDetail.tsx)
+   ============================================================ */
+.persons-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 2fr;
+  gap: 14px;
+  align-items: start;
+}
+.person-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.person-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line2);
+  border-left: 2px solid transparent;
+  color: var(--tx);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+.person-item:hover {
+  background: var(--hover);
+}
+.person-item.active {
+  background: var(--accBg);
+  border-left-color: var(--accent);
+}
+.person-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.person-item-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 12.5px;
+}
+.person-item-role {
+  margin-left: auto;
+  flex: none;
+}
+.person-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.person-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+.person-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+.avatar-lg {
+  width: 40px;
+  height: 40px;
+  font-size: 15px;
+}
+.person-note {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.person-cols {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.person-device {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line2);
+  color: var(--tx);
+  text-align: left;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.person-device:hover {
+  background: var(--hover);
+}
+
+/* KPI strip: the numbers that answer "is anything wrong here?" */
+.kpi-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 10px;
+  padding-top: 4px;
+}
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.kpi-val {
+  font-weight: 800;
+  font-size: 19px;
+  line-height: 1.1;
+}
+.kpi-key {
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tx3);
+}
+
+/* Definition list used for account facts. */
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 12px;
+}
+.kv dt {
+  color: var(--tx3);
+  font-weight: 600;
+}
+.kv dd {
+  margin: 0;
+  font-weight: 600;
+}
+.activity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+.activity-row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+.activity-when {
+  flex: none;
+  width: 82px;
+  font: 500 10px var(--mono);
+  color: var(--tx3);
+}
 .col {
   display: flex;
   flex-direction: column;
@@ -1369,6 +1539,10 @@ textarea.input {
     grid-template-columns: repeat(2, 1fr);
   }
   .grid-detail {
+    grid-template-columns: 1fr;
+  }
+  .persons-layout,
+  .person-cols {
     grid-template-columns: 1fr;
   }
 }
