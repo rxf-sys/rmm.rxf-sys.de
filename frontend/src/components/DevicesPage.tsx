@@ -6,6 +6,8 @@ import { OsIcon } from '../icons';
 import type { Device, InventoryMatch, PatchSummary, Person } from '../types';
 import { Dot, Skeleton } from '../ui';
 import { FilterBar, type FilterOption } from './FilterBar';
+import { Pagination } from './Pagination';
+import { usePagination } from '../hooks/usePagination';
 import { deviceState, loadColor, stateColor, type LoadKind } from '../deviceStatus';
 
 interface Props {
@@ -159,6 +161,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
   }, [devices, persons, q, personFilter]);
 
   const shown = useMemo(() => base.filter((d) => matchesFilter(d, filter)), [base, filter]);
+  const pager = usePagination(shown, 'devices', `${filter}|${personFilter}|${q.trim()}`);
 
   const filterOptions: FilterOption<Filter>[] = (
     ['alle', 'probleme', 'server', 'familie', 'offline'] as Filter[]
@@ -226,7 +229,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
               Keine Geräte gefunden.
             </div>
           ) : (
-            shown.map((d) => {
+            pager.items.map((d) => {
               const st = deviceState(d);
               const disk = Math.round(Math.max(0, ...(d.heartbeat.disks ?? []).map((x) => x.used_pct)));
               const cpu = Math.round(d.heartbeat.cpu_pct ?? 0);
@@ -298,6 +301,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
             })
           )}
         </div>
+        <Pagination {...pager} label="Geräte" />
       </div>
 
       {devices.length > 0 && <SoftwareSearch onOpenDevice={onOpenDevice} />}

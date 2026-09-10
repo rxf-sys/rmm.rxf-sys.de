@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { useConfirm } from '../hooks/useConfirm';
 import { formatRelative } from '../format';
+import { usePagination } from '../hooks/usePagination';
+import { Pagination } from './Pagination';
 import { AppleLogo, LinuxLogo, WindowsLogo } from '../icons';
 import type { Device, Script, ScriptOs, Shell } from '../types';
 
@@ -360,6 +362,8 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
     .filter((s) => osFilter === 'all' || s.os === osFilter)
     .filter((s) => !q.trim() || s.name.toLowerCase().includes(q.trim().toLowerCase()));
 
+  const pager = usePagination(visible, 'scripts', `${osFilter}|${q.trim()}`);
+
   return (
     <div className="screen">
       {confirmDialog}
@@ -498,7 +502,7 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
 
       {scripts !== null && scripts.length > 0 && (
         <div className="card" style={{ overflow: 'hidden' }}>
-          {visible.map((s) => (
+          {pager.items.map((s) => (
             <ScriptRow
               key={s.id}
               s={s}
@@ -517,6 +521,7 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
               Keine Skripte für diesen Filter.
             </div>
           )}
+          <Pagination {...pager} label="Skripte" />
         </div>
       )}
     </div>

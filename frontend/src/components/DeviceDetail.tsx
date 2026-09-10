@@ -3,6 +3,7 @@ import { api, apiErrorMessage } from '../api/client';
 import { formatBytes, formatRate, formatRelative, osLabel } from '../format';
 import { useConfirm } from '../hooks/useConfirm';
 import { useJobStream } from '../hooks/useJobStream';
+import { usePagination } from '../hooks/usePagination';
 import type {
   Alert,
   AlertStats,
@@ -22,6 +23,7 @@ import type {
 import { Dot } from '../ui';
 import { deviceState, diskColor, stateColor } from '../deviceStatus';
 import { IconKey, IconPower, IconTerminal, IconWrench, OsIcon } from '../icons';
+import { Pagination } from './Pagination';
 // (osShort available via ../format if needed by future tab work)
 
 interface Props {
@@ -1524,6 +1526,7 @@ function JobsTab({ deviceId }: { deviceId: number }) {
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [openJob, setOpenJob] = useState<number | null>(null);
   const stream = useJobStream(openJob);
+  const pager = usePagination(jobs ?? [], 'device-jobs');
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -1549,7 +1552,7 @@ function JobsTab({ deviceId }: { deviceId: number }) {
         ) : jobs.length === 0 ? (
           <div style={{ padding: '14px 16px' }} className="muted">Noch keine Jobs.</div>
         ) : (
-          jobs.map((j) => (
+          pager.items.map((j) => (
             <button key={j.id} className="row" style={{ gap: 12, padding: '10px 16px', width: '100%', background: openJob === j.id ? 'var(--hover)' : 'none', border: 'none', borderBottom: '1px solid var(--line2)', cursor: 'pointer', color: 'var(--tx)', textAlign: 'left' }} onClick={() => setOpenJob(j.id)}>
               <span className={`badge ${jobBadge(j.status)}`} style={{ width: 90, textAlign: 'center', flex: 'none' }}>{JOB_STATUS_LABEL[j.status]}</span>
               <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1559,6 +1562,7 @@ function JobsTab({ deviceId }: { deviceId: number }) {
             </button>
           ))
         )}
+        <Pagination {...pager} label="Jobs" />
       </div>
       {openJob !== null && (
         <div className="console">
