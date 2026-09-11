@@ -9,6 +9,10 @@ export interface Fleet {
   persons: Person[];
   loading: boolean;
   error: string | null;
+  /** Sekunden seit Epoch der letzten erfolgreichen Abfrage, sonst null.
+   *  Fällt der Server aus, sagt die Oberfläche damit, wie alt das ist, was
+   *  sie gerade zeigt — vorher blieben die alten Zahlen kommentarlos stehen. */
+  loadedAt: number | null;
   refresh: () => void;
 }
 
@@ -31,6 +35,7 @@ export function useFleet(): Fleet {
   const [persons, setPersons] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadedAt, setLoadedAt] = useState<number | null>(null);
 
   const load = useCallback((signal?: AbortSignal) => {
     return Promise.all([
@@ -45,6 +50,7 @@ export function useFleet(): Fleet {
         setPatchSummary(p.summary);
         setPersons(pe.persons);
         setError(null);
+        setLoadedAt(Math.floor(Date.now() / 1000));
         setLoading(false);
       })
       .catch((e) => {
@@ -116,5 +122,14 @@ export function useFleet(): Fleet {
     };
   }, [load]);
 
-  return { devices, alerts, patchSummary, persons, loading, error, refresh: () => void load() };
+  return {
+    devices,
+    alerts,
+    patchSummary,
+    persons,
+    loading,
+    error,
+    loadedAt,
+    refresh: () => void load(),
+  };
 }

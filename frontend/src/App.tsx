@@ -1,32 +1,52 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { AdminPage } from './components/AdminPage';
 import { AlertsPage } from './components/AlertsPage';
-import { AuditPage } from './components/AuditPage';
-import { AutomationPage } from './components/AutomationPage';
 import { CommandPalette } from './components/CommandPalette';
-import { DeviceDetail } from './components/DeviceDetail';
+import { ConnectionBanner } from './components/ConnectionBanner';
 import { DevicesPage } from './components/DevicesPage';
-import { DocsPage } from './components/DocsPage';
 import { EnrollModal } from './components/EnrollModal';
 import { Header } from './components/Header';
 import { LoginPage } from './components/LoginPage';
 import { OverviewPage } from './components/OverviewPage';
-import { PatchesPage } from './components/PatchesPage';
-import { PersonsPage } from './components/PersonsPage';
-import { ScriptsPage } from './components/ScriptsPage';
 import { Sidebar, type PageId } from './components/Sidebar';
+import { Skeleton } from './ui';
 import { useAuth } from './hooks/useAuth';
 import { useFleet } from './hooks/useFleet';
 import { useTheme } from './hooks/useTheme';
 import { PAGE_LABEL, PAGE_PATH, devicePath, pageForPath } from './routes';
 
-const FAV_KEY = 'ryntra-favorites';
+// Übersicht und Geräteliste tragen das erste Bild und bleiben im Hauptbündel.
+// Alles andere wird beim ersten Aufruf nachgeladen: die Detailseite, die
+// Doku und die Administration machten zusammen den größten Teil eines
+// Bündels aus, das jeder Login vollständig herunterlud.
+const AdminPage = lazy(() => import('./components/AdminPage').then((m) => ({ default: m.AdminPage })));
+const AuditPage = lazy(() => import('./components/AuditPage').then((m) => ({ default: m.AuditPage })));
+const AutomationPage = lazy(() =>
+  import('./components/AutomationPage').then((m) => ({ default: m.AutomationPage })),
+);
+const DeviceDetail = lazy(() =>
+  import('./components/DeviceDetail').then((m) => ({ default: m.DeviceDetail })),
+);
+const DocsPage = lazy(() => import('./components/DocsPage').then((m) => ({ default: m.DocsPage })));
+const PatchesPage = lazy(() =>
+  import('./components/PatchesPage').then((m) => ({ default: m.PatchesPage })),
+);
+const PersonsPage = lazy(() =>
+  import('./components/PersonsPage').then((m) => ({ default: m.PersonsPage })),
+);
+const ScriptsPage = lazy(() =>
+  import('./components/ScriptsPage').then((m) => ({ default: m.ScriptsPage })),
+);
+
+const FAV_KEY = 'vulpexa-favorites';
+// Das Produkt hieß einmal anders; wer Favoriten hat, soll sie behalten.
+const LEGACY_FAV_KEY = 'ryntra-favorites';
 
 function loadFavorites(): number[] {
   try {
-    const raw = JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]');
-    return Array.isArray(raw) ? raw.filter((x) => typeof x === 'number') : [];
+    const stored = localStorage.getItem(FAV_KEY) ?? localStorage.getItem(LEGACY_FAV_KEY);
+    const raw: unknown = JSON.parse(stored ?? '[]');
+    return Array.isArray(raw) ? raw.filter((x): x is number => typeof x === 'number') : [];
   } catch {
     return [];
   }
@@ -95,7 +115,11 @@ export default function App() {
   const toggleFavorite = useCallback((id: number) => {
     setFavorites((f) => {
       const next = f.includes(id) ? f.filter((x) => x !== id) : [...f, id];
-      localStorage.setItem(FAV_KEY, JSON.stringify(next));
+      try {
+        localStorage.setItem(FAV_KEY, JSON.stringify(next));
+      } catch {
+        // Speicher blockiert oder voll: der Favorit gilt für diese Sitzung.
+      }
       return next;
     });
   }, []);
@@ -192,7 +216,12 @@ export default function App() {
           onToggleNav={() => setNavOpen((o) => !o)}
         />
         <div className="content">
-          <Routes>
+          <ConnectionBanner error={fleet.error} loadedAt={fleet.loadedAt} onRetry={fleet.refresh} />
+          {/* Ein Skelett statt eines leeren Rahmens, solange ein Seitenbündel
+              unterwegs ist — im LAN ist das ein Wimpernschlag, über eine
+              schlechte Leitung nicht. */}
+          <Suspense fallback={<div className="screen"><Skeleton h={160} /></div>}>
+            <Routes>
             <Route
               path={PAGE_PATH.overview}
               element={
@@ -253,6 +282,7 @@ export default function App() {
               path={PAGE_PATH.alerts}
               element={
                 <AlertsPage
+                  persons={fleet.persons}
                   alerts={fleet.alerts}
                   devices={fleet.devices}
                   onOpenDevice={openDevice}
@@ -264,6 +294,8 @@ export default function App() {
               path={PAGE_PATH.patches}
               element={
                 <PatchesPage
+                  onRefresh={fleet.refresh}
+                  isOperator={isOperator}
                   devices={fleet.devices}
                   patchSummary={fleet.patchSummary}
                   persons={fleet.persons}
@@ -300,7 +332,8 @@ export default function App() {
             {/* An unknown path is a typo or a stale bookmark, not something
                 that deserves a page of its own. */}
             <Route path="*" element={<Navigate to={PAGE_PATH.overview} replace />} />
-          </Routes>
+            </Routes>
+          </Suspense>
         </div>
       </div>
 

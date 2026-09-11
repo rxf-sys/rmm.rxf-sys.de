@@ -21,7 +21,7 @@ import type {
   Shell,
 } from '../types';
 import { Dot } from '../ui';
-import { deviceState, diskColor, stateColor } from '../deviceStatus';
+import { deviceState, loadColor, stateColor } from '../deviceStatus';
 import { IconKey, IconPower, IconTerminal, IconWrench, OsIcon } from '../icons';
 import { Pagination } from './Pagination';
 // (osShort available via ../format if needed by future tab work)
@@ -233,7 +233,7 @@ export function DeviceDetail({
     <div className="screen" style={{ paddingTop: 18 }}>
       {confirmDialog}
       <div className="row" style={{ gap: 12 }}>
-        <button className="btn-icon sq30" onClick={onBack}>
+        <button className="btn-icon sq30" onClick={onBack} aria-label="Zurück zur Geräteliste">
           ←
         </button>
         <Dot color={stateColor(st)} lg />
@@ -267,7 +267,13 @@ export function DeviceDetail({
               ▶ Remote-Sitzung
             </button>
           )}
-          <button className="btn-icon" onClick={() => setMenuOpen((o) => !o)}>
+          <button
+            className="btn-icon"
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-label="Weitere Aktionen"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+          >
             ⋯
           </button>
           {menuOpen && (
@@ -641,18 +647,24 @@ function OverviewTab({ detail, onGoTab }: { detail: DeviceDetailData; onGoTab: (
   const gateway = typeof hw.gateway === 'string' ? hw.gateway : '';
   const dnsList = (Array.isArray(hw.dns) ? hw.dns : []) as string[];
   const hb = d.heartbeat;
+  // Farbe kommt aus der Last, nicht aus der Metrik: eine feste Serienfarbe je
+  // Balken hieß, dass 29 % RAM rot aussahen und 12 % CPU orange — dieselbe
+  // Skala wie in der Geräteliste, damit dasselbe Gerät nicht auf zwei Seiten
+  // unterschiedlich dramatisch wirkt.
+  const cpuPct = Math.round(hb.cpu_pct ?? 0);
+  const ramPct = Math.round(hb.mem_pct ?? 0);
   const meters = [
-    { label: 'CPU', pct: Math.round(hb.cpu_pct ?? 0), color: 'var(--accent)', val: '' },
+    { label: 'CPU', pct: cpuPct, color: loadColor(cpuPct, 'cpu'), val: '' },
     {
       label: 'RAM',
-      pct: Math.round(hb.mem_pct ?? 0),
-      color: 'var(--violet)',
+      pct: ramPct,
+      color: loadColor(ramPct, 'ram'),
       val: hb.mem_used_b && hb.mem_total_b ? `${formatBytes(hb.mem_used_b)} / ${formatBytes(hb.mem_total_b)}` : '',
     },
     ...disks.map((x) => ({
       label: `Disk ${x.mount}`,
       pct: Math.round(x.used_pct),
-      color: diskColor(x.used_pct),
+      color: loadColor(x.used_pct, 'disk'),
       val: x.total_b
         ? `${formatBytes(x.used_b ?? (x.total_b * x.used_pct) / 100)} / ${formatBytes(x.total_b)}`
         : '',

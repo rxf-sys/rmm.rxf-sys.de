@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 from .. import automation, persons, scripts
 from ..audit import record as audit_record
 from ..auth import require_admin, verify_session
+from ..config import Settings, get_settings
 
 router = APIRouter(prefix="/api/automation", tags=["automation"])
 
@@ -68,11 +69,16 @@ async def _validate_scope(body: RuleRequest) -> None:
         raise HTTPException(status_code=422, detail="Person nicht gefunden")
 
 
-async def _full_state() -> dict:
+async def _full_state(settings: Settings | None = None) -> dict:
     cfg = await automation.get_config()
     cfg["rules"] = await automation.list_rules()
     cfg["schedules"] = await automation.list_schedules()
     cfg["patch_window_last_run"] = await automation.patch_window_last_run()
+    # Der tägliche Update-Scan wird über die Serverkonfiguration gesteuert,
+    # nicht über diese Tabelle. Er gehört aber auf dieselbe Seite: sonst ist
+    # die einzige Automatik, die jedes Gerät betrifft, nirgends sichtbar.
+    s = settings or get_settings()
+    cfg["patch_scan"] = {"enabled": s.patch_scan_enabled, "hour": s.patch_scan_hour}
     return cfg
 
 
@@ -104,8 +110,10 @@ async def _validate_schedule(body: ScheduleRequest) -> None:
 
 
 @router.get("")
-async def get_automation(user: dict = Depends(verify_session)) -> dict:
-    return await _full_state()
+async def get_automation(
+    user: dict = Depends(verify_session), settings: Settings = Depends(get_settings)
+) -> dict:
+    return await _full_state(settings)
 
 
 @router.put("")

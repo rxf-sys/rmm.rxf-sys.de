@@ -8,6 +8,48 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Alarm-Center neu:** eine Zeile je Alarm mit farbigem Streifen statt einer
+  Karte je Alarm, die Dauer („seit 9 Std.") neben der Meldung, die auslösende
+  Regel samt Geltungsbereich darunter, eine Filterleiste für offen / quittiert
+  / behoben und „Alle quittieren". Behobene Alarme stehen als kompakte Liste
+  mit der Angabe, wie lange sie offen waren.
+- **Automatisierung liest sich als Satz.** Aus vier nebeneinanderstehenden
+  Klappfeldern wird „Jeden Montag um 03:00 installiert Vulpexa nur
+  Sicherheitsupdates auf Online-Geräten mit dem Tag server." — mit den
+  Bedienelementen im Satz. Dazu „Läuft das nächste Mal am …" samt betroffener
+  Geräte, und die Alarmregeln stehen ebenfalls als Satz da statt als
+  „Gerät offline · 300 Sekunden".
+- **Der tägliche Update-Scan hat eine Karte** auf der Automatisierungsseite:
+  Slot, Zustand und wie viele Geräte seit dem letzten Slot geprüft sind.
+  Eingestellt bleibt er in der Serverkonfiguration; die Seite zeigt ihn an.
+- **Skript-Bibliothek:** zwei Zeilen je Skript statt einer Kette aus Chips,
+  das Betriebssystem als feste Marke links, und „Ausführen" samt Zielgerät
+  direkt in der Zeile — das Aufklappen ist jetzt für den Quelltext da.
+  Der OS-Filter ist eine zweite Segmentleiste mit Trefferzahlen.
+- **Patch-Management:** Filter als segmentierte Leisten mit Trefferzahlen
+  (neu darin: „Nie geprüft") und eine Sammelaktion, die alle erreichbaren
+  Geräte der aktuellen Auswahl scannt. Die Ringe bleiben, wie sie sind.
+- **Ein Serverausfall ist jetzt sichtbar.** Bricht das Backend weg, liefen die
+  Abfragen bisher stumm ins Leere und das Dashboard zeigte den letzten
+  bekannten Stand weiter — eine ruhige Flotte, obwohl man in Wahrheit nichts
+  sah. Ein Streifen über dem Inhalt datiert die Anzeige („Stand von vor 4
+  Minuten") und bietet einen erneuten Versuch an, ohne die alten Zahlen
+  wegzunehmen.
+- **Die Seiten werden einzeln geladen.** Übersicht und Geräteliste bleiben im
+  Hauptbündel, alles andere (Gerätedetail, Skripte, Doku, Administration,
+  Automatisierung, Patches, Personen, Audit) kommt beim ersten Aufruf dazu:
+  460 kB → 309 kB beim Login, 135 kB → 97 kB übertragen.
+- **Filter „In Ordnung"** in der Geräteliste — das Gegenstück zu „Probleme",
+  damit jede Zeile des Zustandsbalkens auf der Übersicht auch wirklich auf
+  ihre Auswahl verlinkt.
+- **Flottenlast-Diagramm überarbeitet:** Die y-Achse skaliert jetzt auf die
+  tatsächlichen Werte (10/25/50/100 %) statt fest auf 0–100 — eine Flotte, die
+  bei 5 bis 10 % dümpelt, war vorher eine gerade Linie am unteren Rand. Dazu
+  beschriftete Gitterlinien, Zeitmarken alle sechs Stunden statt zweimal
+  derselben Uhrzeit an beiden Rändern, und eine Fußzeile mit Mittelwert und
+  Spitzenwert. Die x-Position kommt aus dem Zeitstempel statt aus dem Index:
+  eine fehlende Stunde verschob vorher alles danach, jetzt bleibt sie eine
+  Lücke und die Linie wird dort nicht durchgezogen.
 - **Übersichtsseite neu gebaut.** Statt Kennzahlen, die anderswo schon stehen,
   beginnt die Seite mit einer Liste „Zu tun": volle Platten, offene
   Sicherheitsupdates, länger abwesende Geräte, überfällige Update-Scans,
@@ -169,6 +211,32 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
 
 ### Behoben
+- Der Knopf „Scannen" im Patch-Management öffnete nur das Gerät, statt einen
+  Scan anzufordern. Er tut jetzt, was er sagt; dazu eine Spalte „zuletzt
+  geprüft", und ein nie gescanntes Gerät steht nicht mehr als „aktuell" da.
+- Die Dringlichkeit eines Alarms hing allein am Regeltyp: ein Server, der eine
+  Minute nicht antwortet, war „kritisch", ein seit Wochen offenes
+  Sicherheitsupdate dauerhaft „Warnung". Jetzt entscheidet mit, wie lange der
+  Zustand schon anhält.
+- Die Karte „Letzte Aktivität" auf der Übersicht stand für Techniker und
+  Betrachter dauerhaft leer da, weil das Audit-Log Admin-Sache ist — sie
+  erscheint dort jetzt gar nicht erst.
+- Die Aufgabenliste der Übersicht zeigte höchstens sechs Punkte, ohne Weg zum
+  Rest; die Überschrift zählte sie trotzdem mit.
+- `useTheme` las `localStorage` ungeschützt: im privaten Fenster oder bei
+  blockierten Site-Daten riss eine Farbeinstellung die gesamte Oberfläche in
+  die Fehlerseite.
+- Die Speicher-Schlüssel hießen noch nach dem früheren Produktnamen
+  (`ryntra-theme`, `ryntra-favorites`). Sie heißen jetzt `vulpexa-*`,
+  Bestehendes wird einmalig übernommen.
+- Nur noch die Latein-Subsets von IBM Plex Mono landen im Image — vorher auch
+  Kyrillisch, Griechisch und Vietnamesisch, 36 statt 18 Schriftdateien.
+- Der Zurück-Pfeil und das „⋯"-Menü der Geräteseite hatten keinen Namen für
+  Screenreader, der Theme-Umschalter nur ein `title`.
+- Die Live-Metriken auf der Geräteseite färbten nach Metrik statt nach Last:
+  29 % RAM sahen rot aus, 12 % CPU orange. Jetzt gilt dieselbe Skala wie in
+  der Geräteliste, damit dasselbe Gerät nicht auf zwei Seiten unterschiedlich
+  dramatisch wirkt.
 - Offline-Geräte zählten gleichzeitig als „Problem"-Geräte: dieselbe Maschine
   stand unter beiden Filtern und die Trefferzahlen ergaben zusammen mehr als
   die Flotte. Offline ist jetzt eine eigene Lage — was auf einem nicht
