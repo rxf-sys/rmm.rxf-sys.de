@@ -124,7 +124,7 @@ jobs:
           npm audit --audit-level=high
 
       - if: matrix.tool == 'govulncheck'
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
