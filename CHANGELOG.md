@@ -8,6 +8,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Namen statt Nummern im Audit-Log und in den Aktivitäten.** Der Server
+  schreibt Host- und Skriptname beim Ereignis mit, damit „nas-fritz entfernt"
+  auch dann noch lesbar ist, wenn es das Gerät nicht mehr gibt; ältere
+  Einträge löst das Dashboard aus der laufenden Liste auf. Außerdem hat jetzt
+  jedes Ereignis einen eigenen Satz — vorher fiel ein Dutzend Typen
+  (Wake-on-LAN, Passwörter, Personen, Automatisierung) auf den rohen
+  Ereignisnamen zurück.
 - **Geräteliste neu:** Statuspunkt, Hostname, OS-Chip und eine Unterzeile
   `OS · Tag · Tag` bilden einen Block; die eigene Tags-Spalte entfällt. CPU,
   RAM und Disk sind beschriftete Balken, deren Farbe auf die Last reagiert —
@@ -89,6 +96,19 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   escapt werden, und ein übersehenes Escape verfälscht still ein Skript, das
   später als root läuft.
 
+- **Täglicher Update-Scan über den Heartbeat.** Jedes Gerät wird einmal am Tag
+  zum Scan aufgefordert; der Slot liegt bei `PATCH_SCAN_HOUR` (Default 3 Uhr
+  lokal) und verteilt sich über die Stunde (`ID % 60`), damit nicht die halbe
+  Flotte gleichzeitig scannt. Ausgelöst wird das nicht von einer Uhr im Agent,
+  sondern vom Heartbeat: Ein Gerät, das zur Slot-Zeit aus war, holt den Scan
+  beim nächsten Online-Heartbeat nach, statt den Tag zu überspringen. Als
+  erledigt zählt erst der eingetroffene Bericht — eine Anfrage, die nie
+  beantwortet wird, wird nach einer Stunde wiederholt. Während einer laufenden
+  Installation wird nicht gescannt. Abschaltbar über `PATCH_SCAN_ENABLED`.
+- Der Gerätereiter „Updates" zeigt jetzt, wann zuletzt wirklich gescannt
+  wurde. Eine leere Liste sah vorher aus wie „alles aktuell", auch wenn nie
+  jemand nachgesehen hatte.
+
 ### Geändert
 - Alle Module öffnen die Datenbank über einen gemeinsamen Helfer
   (`app/db.py`), der Fremdschlüssel einschaltet. Vorher taten das zwei von
@@ -123,6 +143,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   der Major steht in `frontend/Dockerfile` und in `node-version` in `ci.yml`,
   ein Auseinanderlaufen zeigte sich sonst erst beim Deploy. Dependabot
   ignoriert den Node-Major deshalb; es sieht nur den Dockerfile.
+- Das Backend-Image bringt `tzdata` mit und der Container bekommt
+  `TZ` (Default `Europe/Berlin`). Ohne beides rechnet der tägliche Update-Scan
+  in UTC, und der eingestellte Slot läge im Sommer zwei Stunden daneben.
+- Der Ping/Pong-Barrier in den Agent-WS-Tests sammelt unaufgeforderte Frames
+  ein, statt anzunehmen, dass die nächste Nachricht das Pong ist. Der Kanal
+  ist kein Request/Response — der Server schickt von sich aus (Update-Angebot,
+  Scan-Aufforderung).
 - Dependabot ignoriert außerdem die Majors von `eslint`, `@eslint/js` und
   `typescript`: alle drei lassen sich derzeit nicht installieren
   (`eslint-plugin-jsx-a11y` hat als Peer nur eslint ≤ 9, `typescript-eslint@8`
@@ -130,6 +157,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
 
 ### Behoben
+- Offline-Geräte zählten gleichzeitig als „Problem"-Geräte: dieselbe Maschine
+  stand unter beiden Filtern und die Trefferzahlen ergaben zusammen mehr als
+  die Flotte. Offline ist jetzt eine eigene Lage — was auf einem nicht
+  erreichbaren Gerät kaputt ist, lässt sich ohnehin erst beheben, wenn es
+  wieder antwortet.
 - Der `web`-Container startete nach der Härtung überhaupt nicht mehr:
   `exec /usr/bin/caddy: operation not permitted`, Exit 255, Neustartschleife,
   Port 80 tot. Ursache ist nicht ein Schreibrecht, sondern `execve` selbst:

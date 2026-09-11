@@ -7,7 +7,18 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app import accounts, alerts, audit, devices, jobs, metrics, patches, releases, scripts
+from app import (
+    accounts,
+    alerts,
+    audit,
+    devices,
+    jobs,
+    metrics,
+    patch_scan,
+    patches,
+    releases,
+    scripts,
+)
 from app.agents_ws import manager
 from app.config import Settings, get_settings
 from app.main import app
@@ -48,11 +59,21 @@ def _auth_header(creds: dict) -> dict:
     return {"Authorization": f"Bearer {creds['device_id']}:{creds['device_secret']}"}
 
 
-def _sync(ws) -> None:
+def _sync(ws) -> list[dict]:
     """Ping/pong barrier: once the pong is back, everything sent before the
-    ping has been processed server-side."""
+    ping has been processed server-side.
+
+    The channel is not request/response — the server pushes on its own (update
+    offer, daily patch_scan), so anything before the pong is collected and
+    returned rather than asserted away."""
     ws.send_json({"type": "ping"})
-    assert ws.receive_json() == {"type": "pong"}
+    pushed: list[dict] = []
+    for _ in range(20):
+        msg = ws.receive_json()
+        if msg == {"type": "pong"}:
+            return pushed
+        pushed.append(msg)
+    raise AssertionError(f"no pong after 20 frames: {pushed}")
 
 
 def test_ws_rejects_missing_and_bad_credentials(ws_client: TestClient):
@@ -344,3 +365,45 @@ def test_patch_scan_and_install_end_to_end(ws_client: TestClient):
     assert asyncio.run(jobs.get_job(job_id))["status"] == "done"
     remaining = asyncio.run(patches.list_for_device(device_id))
     assert {p["patch_id"] for p in remaining} == {"vim"}
+
+
+def test_ws_heartbeat_requests_a_due_scan(ws_client: TestClient, settings: Settings):
+    """Never scanned → past the slot → the server asks on the first heartbeat."""
+    patch_scan._requested.clear()
+    creds = _enroll(hostname="scan-pc")
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as ws:
+        _sync(ws)
+        ws.send_json({"type": "heartbeat", "payload": {"ts": int(time.time()), "cpu_pct": 1.0}})
+        pushed = _sync(ws)
+    assert {"type": "patch_scan"} in pushed
+
+
+def test_ws_heartbeat_stays_quiet_when_scans_are_disabled(
+    ws_client: TestClient, settings: Settings
+):
+    patch_scan._requested.clear()
+    settings.patch_scan_enabled = False
+    creds = _enroll(hostname="quiet-pc")
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as ws:
+        _sync(ws)
+        ws.send_json({"type": "heartbeat", "payload": {"ts": int(time.time()), "cpu_pct": 1.0}})
+        pushed = _sync(ws)
+    assert pushed == []
+
+
+def test_ws_patch_report_marks_the_device_scanned(ws_client: TestClient, settings: Settings):
+    """Only a report counts as a scan — that is what the daily check reads."""
+    creds = _enroll(hostname="report-pc")
+    device_id = creds["device_id"]
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as ws:
+        _sync(ws)
+        ws.send_json(
+            {
+                "type": "patch_report",
+                "payload": {"patches": [{"patch_id": "openssl", "severity": "important"}]},
+            }
+        )
+        _sync(ws)
+    device = asyncio.run(devices.get_device(device_id, 300))
+    assert device is not None
+    assert device["last_patch_scan_at"] >= int(time.time()) - 60

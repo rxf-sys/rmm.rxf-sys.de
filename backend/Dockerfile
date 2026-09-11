@@ -4,6 +4,13 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
+# Zeitzonendaten. Der tägliche Update-Scan (PATCH_SCAN_HOUR) rechnet in
+# lokaler Zeit, und ohne /usr/share/zoneinfo fällt TZ=Europe/Berlin stillschweigend
+# auf UTC zurück — der Slot läge dann im Sommer zwei Stunden daneben.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY pyproject.toml ./
 RUN pip install --upgrade pip && pip install .

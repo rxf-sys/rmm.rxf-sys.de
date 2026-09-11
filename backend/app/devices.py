@@ -104,6 +104,13 @@ async def _migrate_devices(db: aiosqlite.Connection) -> None:
     if "maintenance_until" not in cols:
         await db.execute("ALTER TABLE devices ADD COLUMN maintenance_until INTEGER")
         log.info("devices.migrated", column="maintenance_until")
+    if "last_patch_scan_at" not in cols:
+        # 0 = never scanned, which makes every existing device due at once —
+        # intended: that is exactly the state the daily scan is meant to fix.
+        await db.execute(
+            "ALTER TABLE devices ADD COLUMN last_patch_scan_at INTEGER NOT NULL DEFAULT 0"
+        )
+        log.info("devices.migrated", column="last_patch_scan_at")
 
 
 def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
@@ -150,6 +157,11 @@ def _row_to_device(row: aiosqlite.Row, offline_after_s: int) -> dict[str, Any]:
             and row["maintenance_until"] is not None
             and int(row["maintenance_until"]) > time.time()
             else None
+        ),
+        "last_patch_scan_at": (
+            int(row["last_patch_scan_at"])
+            if "last_patch_scan_at" in row.keys() and row["last_patch_scan_at"]  # noqa: SIM118
+            else 0
         ),
         "created_at": int(row["created_at"]),
         "last_seen_at": last_seen,
@@ -534,6 +546,17 @@ async def device_macs(device_id: int) -> list[str]:
         return [str(m) for m in macs] if isinstance(macs, list) else []
     except (ValueError, TypeError):
         return []
+
+
+async def mark_patch_scan(device_id: int, when: int | None = None) -> None:
+    """Remember that a scan *report* arrived. The daily schedule reads this,
+    so a request that never comes back does not count as a scan."""
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE devices SET last_patch_scan_at = ? WHERE id = ?",
+            (int(time.time()) if when is None else when, device_id),
+        )
+        await db.commit()
 
 
 async def hostname_of(device_id: int) -> str:

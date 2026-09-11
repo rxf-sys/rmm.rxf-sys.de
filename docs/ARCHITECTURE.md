@@ -187,7 +187,7 @@ Lifespan (`backend/app/main.py:115-126`).
 | `users` | Konten, Rolle, Argon2-Hash, TOTP-Secret, Backup-Codes, `person_id` | `accounts.py:42` |
 | `sessions` | Session-Hash, Präfix, Ablauf; FK auf `users` mit CASCADE | `accounts.py:53` |
 | `app_settings` | Laufzeit-Einstellungen (z. B. ntfy-Override) | `accounts.py:64` |
-| `devices` | Gerät, OS, Agent-Version, Secret-Hash, letzter Heartbeat, `person_id`, Wartungsfenster | `devices.py:30` |
+| `devices` | Gerät, OS, Agent-Version, Secret-Hash, letzter Heartbeat, `person_id`, Wartungsfenster, letzter Update-Scan | `devices.py:30` |
 | `enrollment_tokens` | Einmal-Token: Hash, Ablauf, Verbrauchszeitpunkt | `devices.py:46` |
 | `inventory` | Inventar je Gerät und Art (Hardware/Software/Netz) | `devices.py:55` |
 | `jobs` | Auftrag, Kommando, Status, Exit-Code, gekappter Output | `jobs.py:32` |

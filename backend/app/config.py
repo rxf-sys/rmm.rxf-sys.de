@@ -75,6 +75,17 @@ class Settings(BaseSettings):
     # otherwise the server discards the agent's late result.
     patch_job_timeout_s: int = 4500
 
+    # ---- Update scans ----
+    # Every device is asked to scan for updates once a day. The trigger is the
+    # heartbeat the server already receives, not a clock in the agent: a
+    # machine that was asleep at its slot scans on its next heartbeat instead
+    # of skipping the day. False leaves scanning entirely manual.
+    patch_scan_enabled: bool = True
+    # Local hour of that daily slot. Devices are spread across the hour by id,
+    # so a fleet does not scan in one burst. Local means the container's TZ —
+    # set it, or this is UTC (see docs/CONFIGURATION.md).
+    patch_scan_hour: int = Field(default=3, ge=0, le=23)
+
     # ---- Metrics history ----
     # Raw heartbeat samples (one row per heartbeat) are kept this long, then
     # dropped — the hourly aggregate carries the long tail.

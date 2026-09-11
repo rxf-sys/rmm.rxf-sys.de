@@ -14,7 +14,18 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from .. import alerts, credentials, devices, jobs, metrics, patches, persons, releases, wol
+from .. import (
+    alerts,
+    credentials,
+    devices,
+    jobs,
+    metrics,
+    patch_scan,
+    patches,
+    persons,
+    releases,
+    wol,
+)
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..auth import device_visible, person_scope, require_operator, verify_session
@@ -286,6 +297,7 @@ async def delete_device(device_id: int, user: dict = Depends(require_operator)) 
     await patches.delete_for_device(device_id)
     await credentials.delete_for_device(device_id)
     await alerts.delete_for_device(device_id)
+    patch_scan.forget(device_id)
     await audit_record(
         "devices.deleted", user=user["username"], device_id=device_id, hostname=hostname
     )

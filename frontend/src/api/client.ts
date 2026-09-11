@@ -252,7 +252,7 @@ export const api = {
   patchSummary: (signal?: AbortSignal) =>
     get<{ summary: PatchSummary }>('/api/patches/summary', signal),
   devicePatches: (deviceId: number, signal?: AbortSignal) =>
-    get<{ patches: Patch[]; installing_job: number | null }>(
+    get<{ patches: Patch[]; installing_job: number | null; last_scan_at: number }>(
       `/api/devices/${deviceId}/patches`,
       signal,
     ),

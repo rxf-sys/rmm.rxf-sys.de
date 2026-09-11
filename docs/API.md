@@ -240,7 +240,7 @@ Unbekannte Typen werden geloggt und ignoriert.
 | `type` | Payload | Wann |
 |---|---|---|
 | `job` | `job_id`, `kind`, `command`, `shell`, optional `patch_ids`, `timeout_s` | Beim Anlegen eines Jobs |
-| `patch_scan` | — | `POST /api/devices/{id}/patches/scan` |
+| `patch_scan` | — | `POST /api/devices/{id}/patches/scan` und einmal täglich beim Heartbeat (siehe `PATCH_SCAN_HOUR`) |
 | `get_logs` | — | `GET /api/devices/{id}/agent-logs` |
 | `update` | `version`, `url`, `sha256`, `sig` | Einmal pro Verbindung beim ersten Heartbeat, oder auf Anforderung |
 | `pong` | — | Antwort auf `ping` |
