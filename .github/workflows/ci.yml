@@ -26,7 +26,7 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
@@ -46,7 +46,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           # Muss zum Build-Stage-Image in frontend/Dockerfile passen.
@@ -69,7 +69,7 @@ jobs:
       run:
         working-directory: agent
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: agent/go.mod
@@ -93,7 +93,7 @@ jobs:
       matrix:
         tool: [pip-audit, npm-audit, govulncheck]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - if: matrix.tool == 'pip-audit'
         uses: actions/setup-python@v6
