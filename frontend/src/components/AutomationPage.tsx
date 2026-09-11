@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
 import { useConfirm } from '../hooks/useConfirm';
 import { formatRelative } from '../format';
+import { RULE_META, affectedDevices, ruleSentence, scopeLabel } from '../ruleText';
+import { lastScanSlot, nextWeekdayHour, whenLabel } from '../schedule';
 import type { AlertRule, AutomationConfig, Device, Person, RuleType, ScopeKind } from '../types';
 import { Skeleton } from '../ui';
 import { ScheduledScripts } from './ScheduledScripts';
@@ -12,10 +14,11 @@ interface Props {
   isAdmin: boolean;
 }
 
-const RULE_META: Record<RuleType, { label: string; unit: string; defaultHint: string }> = {
-  offline: { label: 'Gerät offline', unit: 'Sekunden', defaultHint: 'Standard: 300 s' },
-  disk: { label: 'Disk-Belegung', unit: '%', defaultHint: 'Standard: 90 %' },
-  patch_age: { label: 'Überfällige Sicherheitsupdates', unit: 'Tage', defaultHint: 'Standard: 30 Tage' },
+/** Farbe des Streifens je Regeltyp — dieselbe Zuordnung wie im Alarm-Center. */
+const RULE_TONE: Record<RuleType, string> = {
+  offline: 'var(--dangerS)',
+  disk: 'var(--warn)',
+  patch_age: 'var(--accent)',
 };
 
 const WEEKDAYS = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
@@ -44,6 +47,14 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
   const [draft, setDraft] = useState<RuleDraft | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  // Für „läuft das nächste Mal am …": ohne laufende Uhr steht die Angabe
+  // still, solange der Tab offen bleibt.
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -77,21 +88,8 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
   };
 
   // --- rules --------------------------------------------------------------
-  const scopeLabel = (r: AlertRule) => {
-    if (r.scope_kind === 'tag') return `Tag „${r.scope_value}"`;
-    if (r.scope_kind === 'person') {
-      const p = persons.find((x) => String(x.id) === r.scope_value);
-      return p ? `Person ${p.name}` : `Person #${r.scope_value}`;
-    }
-    return 'Alle Geräte';
-  };
-
-  const affectedCount = (r: AlertRule) => {
-    if (r.scope_kind === 'tag') return devices.filter((d) => d.tags.includes(r.scope_value)).length;
-    if (r.scope_kind === 'person')
-      return devices.filter((d) => String(d.person_id ?? '') === r.scope_value).length;
-    return devices.length;
-  };
+  const scopeOf = (r: AlertRule) => scopeLabel(r, persons);
+  const affectedCount = (r: AlertRule) => affectedDevices(r, devices).length;
 
   const toggleRule = async (r: AlertRule) => {
     setError('');
@@ -114,7 +112,7 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
       title: 'Alarmregel entfernen',
       body: (
         <>
-          Die Regel <strong>{RULE_META[r.type].label}</strong> ({scopeLabel(r)}) wird gelöscht.
+          Die Regel <strong>{RULE_META[r.type].label}</strong> ({scopeOf(r)}) wird gelöscht.
           Betroffene Geräte lösen danach keinen Alarm dieses Typs mehr aus.
         </>
       ),
@@ -157,6 +155,14 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
     ? devices.filter((d) => !pw.tag || d.tags.includes(pw.tag)).map((d) => d.hostname)
     : [];
 
+  // Welche Geräte haben ihren heutigen Update-Scan noch vor sich? Dieselbe
+  // Rechnung wie im Server (patch_scan.py), nur um sie hier anzuzeigen.
+  const pendingScan = cfg
+    ? devices
+        .filter((d) => d.last_patch_scan_at < lastScanSlot(cfg.patch_scan.hour, now))
+        .map((d) => d.hostname)
+    : [];
+
   return (
     <div className="screen">
       {confirmDialog}
@@ -188,64 +194,139 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
                   style={{ marginLeft: 'auto' }}
                   role="switch"
                   aria-checked={pw.enabled}
+                  aria-label="Patch-Fenster ein- oder ausschalten"
                   disabled={!isAdmin}
                   onClick={() => void saveWindow({ enabled: !pw.enabled })}
                 >
                   <span className="knob" />
                 </button>
               </div>
-              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+
+              {/* Ein Satz statt einer Reihe gleich aussehender Klappfelder:
+                  was eingestellt ist, muss sich nicht mehr aus vier
+                  Feldstellungen erschließen lassen. */}
+              <p className="auto-sentence">
+                Jeden{' '}
                 <select
-                  className="input"
-                  style={{ width: 130 }}
+                  className="inline-ctl"
                   value={pw.weekday}
                   disabled={!isAdmin}
+                  aria-label="Wochentag des Patch-Fensters"
                   onChange={(e) => void saveWindow({ weekday: Number(e.target.value) })}
                 >
                   {WEEKDAYS.map((w, i) => (
-                    <option key={w} value={i}>{w}s</option>
+                    <option key={w} value={i}>{w}</option>
                   ))}
-                </select>
+                </select>{' '}
+                um{' '}
                 <select
-                  className="input"
-                  style={{ width: 92 }}
+                  className="inline-ctl"
                   value={pw.hour}
                   disabled={!isAdmin}
+                  aria-label="Uhrzeit des Patch-Fensters"
                   onChange={(e) => void saveWindow({ hour: Number(e.target.value) })}
                 >
                   {Array.from({ length: 24 }, (_, h) => (
                     <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
                   ))}
-                </select>
-                <input
-                  className="input"
-                  style={{ width: 130 }}
+                </select>{' '}
+                installiert Vulpexa{' '}
+                <select
+                  className="inline-ctl"
+                  value={pw.security_only ? 'security' : 'all'}
+                  disabled={!isAdmin}
+                  aria-label="Umfang der Installation"
+                  onChange={(e) => void saveWindow({ security_only: e.target.value === 'security' })}
+                >
+                  <option value="security">nur Sicherheitsupdates</option>
+                  <option value="all">alle Updates</option>
+                </select>{' '}
+                auf Online-Geräten{' '}
+                <select
+                  className="inline-ctl"
                   value={pw.tag}
                   disabled={!isAdmin}
-                  placeholder="Tag (leer = alle)"
-                  onChange={(e) =>
-                    setCfg((c) => (c ? { ...c, patch_window: { ...c.patch_window, tag: e.target.value } } : c))
-                  }
-                  onBlur={(e) => void saveWindow({ tag: e.target.value.trim() })}
-                />
-                <label className="row" style={{ gap: 6, fontSize: 12, color: 'var(--tx2)', fontWeight: 600 }}>
-                  <input
-                    type="checkbox"
-                    checked={pw.security_only}
-                    disabled={!isAdmin}
-                    onChange={(e) => void saveWindow({ security_only: e.target.checked })}
-                  />
-                  nur Sicherheitsupdates
-                </label>
+                  aria-label="Auf welche Geräte sich das Fenster bezieht"
+                  onChange={(e) => void saveWindow({ tag: e.target.value })}
+                >
+                  <option value="">ohne Einschränkung</option>
+                  {allTags.map((t) => (
+                    <option key={t} value={t}>mit dem Tag „{t}"</option>
+                  ))}
+                </select>
+                .
+              </p>
+
+              <div className="auto-next">
+                <span className="dot" style={{ background: pw.enabled ? 'var(--accent)' : 'var(--tx3)' }} />
+                <span>
+                  {pw.enabled ? (
+                    <>
+                      Läuft das nächste Mal{' '}
+                      <b>{whenLabel(nextWeekdayHour(pw.weekday, pw.hour, now))}</b>
+                      {windowDevices.length > 0
+                        ? ' — betrifft heute '
+                        : ' — aktuell passt kein Gerät dazu.'}
+                      {windowDevices.length > 0 && <b>{windowDevices.join(', ')}</b>}
+                      {windowDevices.length > 0 && '.'}
+                    </>
+                  ) : (
+                    'Ausgeschaltet — es wird nichts automatisch installiert.'
+                  )}
+                </span>
+                <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 11 }}>
+                  zuletzt gelaufen:{' '}
+                  {cfg.patch_window_last_run ? formatRelative(cfg.patch_window_last_run) : 'noch nie'}
+                </span>
               </div>
+            </div>
+
+            {/* Der tägliche Update-Scan wird über die Serverkonfiguration
+                gesteuert und ist hier nur ablesbar — er gehört trotzdem auf
+                diese Seite: es ist die Automatik, die jedes Gerät betrifft. */}
+            <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="row" style={{ gap: 10 }}>
+                <span className="card-title">Täglicher Update-Scan</span>
+                <span className={cfg.patch_scan.enabled ? 'badge badge-ok' : 'badge'}>
+                  {cfg.patch_scan.enabled ? 'aktiv' : 'aus'}
+                </span>
+              </div>
+              {cfg.patch_scan.enabled ? (
+                <>
+                  <p className="auto-sentence" style={{ margin: 0 }}>
+                    Jedes Gerät wird täglich ab{' '}
+                    <b className="inline-fixed">{String(cfg.patch_scan.hour).padStart(2, '0')}:00</b>{' '}
+                    zum Update-Scan aufgefordert, über die Stunde verteilt.
+                  </p>
+                  <div className="auto-next">
+                    <span
+                      className="dot"
+                      style={{ background: pendingScan.length === 0 ? 'var(--ok)' : 'var(--warn)' }}
+                    />
+                    <span>
+                      <b>
+                        {devices.length - pendingScan.length} von {devices.length} Geräten
+                      </b>{' '}
+                      seit dem letzten Slot geprüft.
+                      {pendingScan.length > 0 && (
+                        <>
+                          {' '}
+                          Offen: <b>{pendingScan.join(', ')}</b> — der Scan wird beim nächsten
+                          Heartbeat nachgeholt.
+                        </>
+                      )}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <span className="muted" style={{ fontSize: 11.5 }}>
+                  Abgeschaltet über <span className="mono">PATCH_SCAN_ENABLED</span>. Update-Scans
+                  laufen dann nur von Hand.
+                </span>
+              )}
               <span className="muted" style={{ fontSize: 11 }}>
-                {WEEKDAYS[pw.weekday]}s {String(pw.hour).padStart(2, '0')}:00 Uhr · installiert auf
-                Online-Geräten{pw.tag ? ` mit Tag „${pw.tag}"` : ' (alle Tags)'} ·{' '}
-                {windowDevices.length ? `aktuell: ${windowDevices.join(', ')}` : 'aktuell kein passendes Gerät'}
-              </span>
-              <span className="muted" style={{ fontSize: 11 }}>
-                Zuletzt gelaufen:{' '}
-                {cfg.patch_window_last_run ? formatRelative(cfg.patch_window_last_run) : 'noch nie'}
+                Eingestellt in der Serverkonfiguration (<span className="mono">PATCH_SCAN_HOUR</span>),
+                nicht hier — siehe docs/CONFIGURATION.md.
               </span>
             </div>
 
@@ -368,25 +449,19 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
             )}
 
             {cfg.rules.map((r) => (
-              <div
-                key={r.id}
-                className="row"
-                style={{ gap: 10, padding: '11px 16px', borderBottom: '1px solid var(--line2)', opacity: r.enabled ? 1 : 0.55 }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                  <span style={{ fontWeight: 700, fontSize: 12.5 }}>
-                    {RULE_META[r.type].label}
-                    {r.threshold !== null && (
-                      <span className="mono" style={{ fontSize: 10.5, color: 'var(--accent)' }}>
-                        {' '}· {r.threshold} {RULE_META[r.type].unit}
-                      </span>
-                    )}
-                  </span>
-                  <span className="muted" style={{ fontSize: 11 }}>
-                    {scopeLabel(r)} · betrifft {affectedCount(r)} Gerät{affectedCount(r) === 1 ? '' : 'e'}
+              <div key={r.id} className="auto-rule" style={{ opacity: r.enabled ? 1 : 0.55 }}>
+                {/* Farbstreifen nach Typ, damit sich die Regeln in der Liste
+                    unterscheiden lassen, ohne sie zu lesen. */}
+                <span className="auto-rule-rail" style={{ background: RULE_TONE[r.type] }} />
+                <div className="auto-rule-body">
+                  <span className="auto-rule-text">{ruleSentence(r.type, r.threshold)}</span>
+                  <span className="auto-rule-scope">
+                    <span className="chip">{scopeOf(r)}</span>
+                    betrifft {affectedCount(r)} Gerät{affectedCount(r) === 1 ? '' : 'e'}
+                    {!r.enabled && ' · ausgeschaltet'}
                   </span>
                 </div>
-                <div className="row grow" style={{ marginLeft: 'auto', gap: 6, flex: 'none' }}>
+                <div className="auto-rule-actions">
                   {isAdmin && (
                     <>
                       <button
@@ -413,6 +488,7 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
                     className={r.enabled ? 'switch on' : 'switch'}
                     role="switch"
                     aria-checked={r.enabled}
+                    aria-label={`Regel „${RULE_META[r.type].label}" ein- oder ausschalten`}
                     disabled={!isAdmin}
                     onClick={() => void toggleRule(r)}
                   >

@@ -282,6 +282,7 @@ export default function App() {
               path={PAGE_PATH.alerts}
               element={
                 <AlertsPage
+                  persons={fleet.persons}
                   alerts={fleet.alerts}
                   devices={fleet.devices}
                   onOpenDevice={openDevice}

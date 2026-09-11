@@ -4,7 +4,11 @@ import { AlertsPage } from '../AlertsPage';
 import type { Alert, Device } from '../../types';
 
 vi.mock('../../api/client', () => ({
-  api: { ackAlert: () => Promise.resolve({ ok: true }) },
+  api: {
+    ackAlert: () => Promise.resolve({ ok: true }),
+    // Die Herkunftszeile holt die Regeln nach; hier ohne Belang.
+    automation: () => Promise.resolve({ rules: [] }),
+  },
   apiErrorMessage: (e: unknown) => String(e),
 }));
 
@@ -27,7 +31,15 @@ const alert = (over: Partial<Alert> = {}): Alert => ({
 const devices: Device[] = [];
 
 const show = (a: Alert) =>
-  render(<AlertsPage alerts={[a]} devices={devices} onOpenDevice={() => {}} onRefresh={() => {}} />);
+  render(
+    <AlertsPage
+      alerts={[a]}
+      devices={devices}
+      persons={[]}
+      onOpenDevice={() => {}}
+      onRefresh={() => {}}
+    />,
+  );
 
 describe('AlertsPage severity', () => {
   it('treats a fresh outage as a warning, not as a catastrophe', () => {

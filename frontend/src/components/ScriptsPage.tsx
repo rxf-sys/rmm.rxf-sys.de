@@ -134,6 +134,10 @@ function ScriptRow({
 
   return (
     <div style={{ borderBottom: '1px solid var(--line2)' }}>
+      {/* Zwei Zeilen statt einer Kette aus Chips: oben der Name und das, was
+          wirklich warnt, unten in einer ruhigen Zeile die Einordnung. Das
+          Betriebssystem sitzt als feste Marke links, damit die Namen
+          untereinander an derselben Stelle beginnen. */}
       <div className="script-row">
         <button
           type="button"
@@ -145,57 +149,68 @@ function ScriptRow({
           {favorite ? '★' : '☆'}
         </button>
         <button className="script-row-main" onClick={onToggle} aria-expanded={expanded}>
-          <span style={{ color: 'var(--tx3)', fontSize: 10, width: 12, flex: 'none' }}>
-            {expanded ? '▾' : '▸'}
+          <span className="os-mark" title={OS_META[s.os].label}>
+            {OS_META[s.os].icon}
           </span>
-          <OsChip os={s.os} />
-          <span style={{ fontWeight: 700, fontSize: 12.5 }}>{s.name}</span>
-          {s.danger && (
-            <span className="badge badge-danger" title="Destruktiv — Ausführen verlangt den Namen">
-              ⚠ destruktiv
+          <span className="script-body">
+            <span className="script-name">
+              {s.name}
+              {s.danger && (
+                <span className="badge badge-danger" title="Destruktiv — Ausführen verlangt den Namen">
+                  ⚠ destruktiv
+                </span>
+              )}
             </span>
-          )}
-          <span className="chip">{CATEGORY_LABEL[s.category]}</span>
-          <span className="badge badge-accent mono" style={{ fontSize: 9.5 }}>
-            {s.shell}
+            <span className="script-meta">
+              {CATEGORY_LABEL[s.category]}
+              <span className="sep">·</span>
+              <span className="mono">{s.shell}</span>
+              <span className="sep">·</span>
+              {s.updated_by}, {formatRelative(s.updated_at)}
+            </span>
           </span>
-          <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 10.5, flex: 'none' }}>
-            {s.updated_by} · {formatRelative(s.updated_at)}
-          </span>
+          <span className="script-caret">{expanded ? '▾' : '▸'}</span>
         </button>
+        {canManage && (
+          <span className="script-run">
+            <select
+              className="input btn-sm"
+              style={{ padding: '4px 7px', maxWidth: 150 }}
+              value={target}
+              onChange={(e) => setTarget(e.target.value ? Number(e.target.value) : '')}
+              aria-label={`Zielgerät für „${s.name}"`}
+            >
+              {runnable.length === 0 && (
+                <option value="">
+                  {onlineDevices.length === 0
+                    ? 'kein Gerät online'
+                    : `kein ${OS_META[s.os].label}-Gerät online`}
+                </option>
+              )}
+              {runnable.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.hostname}
+                </option>
+              ))}
+            </select>
+            <button
+              className={s.danger ? 'btn btn-danger btn-sm' : 'btn btn-accent btn-sm'}
+              onClick={() => void run()}
+              disabled={busy || target === ''}
+              title={s.danger ? 'Destruktiv — verlangt vorher den Gerätenamen' : 'Jetzt ausführen'}
+            >
+              ▶ Ausführen
+            </button>
+          </span>
+        )}
       </div>
       {expanded && (
         <>
           <pre className="script-body">{s.content}</pre>
           {canManage && (
             <div className="row" style={{ gap: 7, padding: '10px 16px', borderTop: '1px solid var(--line2)', flexWrap: 'wrap' }}>
-              <select
-                className="input btn-sm"
-                style={{ padding: '5px 8px' }}
-                value={target}
-                onChange={(e) => setTarget(e.target.value ? Number(e.target.value) : '')}
-                aria-label="Zielgerät"
-              >
-                {runnable.length === 0 && (
-                  <option value="">
-                    {onlineDevices.length === 0
-                      ? 'kein Gerät online'
-                      : `kein passendes ${OS_META[s.os].label}-Gerät online`}
-                  </option>
-                )}
-                {runnable.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.hostname}
-                  </option>
-                ))}
-              </select>
-              <button
-                className={s.danger ? 'btn btn-danger btn-sm' : 'btn btn-accent btn-sm'}
-                onClick={() => void run()}
-                disabled={busy || target === ''}
-              >
-                ▶ Ausführen
-              </button>
+              {/* Ausführen sitzt in der Zeile darüber — hier steht, was den
+                  Quelltext betrifft. */}
               <button className="btn btn-sm" onClick={onEdit}>
                 Bearbeiten
               </button>
@@ -390,6 +405,12 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
   const matchesCat = (s: Script, f: CatFilter) =>
     f === 'alle' ? true : f === 'fav' ? favorites.includes(s.id) : s.category === f;
 
+  // Was der jeweils andere Filter übrig lässt — Grundlage für die Zahlen an
+  // beiden Leisten, damit jede Zahl sagt, was ein Klick wirklich zeigt.
+  const byCategory = all
+    .filter((s) => !q.trim() || s.name.toLowerCase().includes(q.trim().toLowerCase()))
+    .filter((s) => matchesCat(s, catFilter));
+
   const visible = bySearchAndOs.filter((s) => matchesCat(s, catFilter));
   const pager = usePagination(visible, 'scripts', `${osFilter}|${catFilter}|${q.trim()}`);
 
@@ -402,6 +423,17 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
       count: bySearchAndOs.filter((s) => s.category === c).length,
     })),
   ];
+
+  // Zahlen zählen über die Menge, die der andere Filter übrig lässt — so
+  // sagt jede Zahl vorab, was ein Klick wirklich zeigt.
+  const osOptions: FilterOption<ScriptOs | 'all'>[] = (
+    ['all', 'windows', 'linux', 'darwin', 'any'] as (ScriptOs | 'all')[]
+  ).map((id) => ({
+    id,
+    label: id === 'all' ? 'Alle' : OS_META[id].label,
+    icon: id === 'all' ? undefined : OS_META[id].icon,
+    count: id === 'all' ? undefined : byCategory.filter((s) => s.os === id).length,
+  }));
 
   return (
     <div className="screen">
@@ -443,20 +475,12 @@ export function ScriptsPage({ canManage, devices, onOpenDevice }: Props) {
             onChange={setCatFilter}
             label="Skripte nach Kategorie filtern"
           />
-          <select
-            className={osFilter === 'all' ? 'input btn-sm' : 'input btn-sm accent-border'}
-            style={{ padding: '7px 10px' }}
+          <FilterBar
+            options={osOptions}
             value={osFilter}
-            onChange={(e) => setOsFilter(e.target.value as ScriptOs | 'all')}
-            aria-label="Nach Betriebssystem filtern"
-          >
-            <option value="all">Alle Betriebssysteme</option>
-            {(['windows', 'linux', 'darwin', 'any'] as ScriptOs[]).map((o) => (
-              <option key={o} value={o}>
-                {OS_META[o].label}
-              </option>
-            ))}
-          </select>
+            onChange={setOsFilter}
+            label="Skripte nach Betriebssystem filtern"
+          />
         </div>
       )}
 

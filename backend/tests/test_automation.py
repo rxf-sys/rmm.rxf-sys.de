@@ -50,6 +50,9 @@ async def test_get_returns_seeded_state(admin_client: AsyncClient):
     assert cfg["patch_window"]["enabled"] is False
     assert cfg["patch_window"]["weekday"] == 5
     assert cfg["patch_window_last_run"] is None
+    # Der tägliche Update-Scan steht in der Serverkonfiguration, wird aber
+    # hier mitgeliefert — die Automatisierungsseite zeigt ihn an.
+    assert cfg["patch_scan"] == {"enabled": True, "hour": 3}
     # Stock rules: offline scoped to tag 'server', disk + patch_age fleet-wide.
     by_type = {r["type"]: r for r in cfg["rules"]}
     assert set(by_type) == {"offline", "disk", "patch_age"}

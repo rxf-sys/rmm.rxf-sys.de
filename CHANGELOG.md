@@ -8,6 +8,27 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Alarm-Center neu:** eine Zeile je Alarm mit farbigem Streifen statt einer
+  Karte je Alarm, die Dauer („seit 9 Std.") neben der Meldung, die auslösende
+  Regel samt Geltungsbereich darunter, eine Filterleiste für offen / quittiert
+  / behoben und „Alle quittieren". Behobene Alarme stehen als kompakte Liste
+  mit der Angabe, wie lange sie offen waren.
+- **Automatisierung liest sich als Satz.** Aus vier nebeneinanderstehenden
+  Klappfeldern wird „Jeden Montag um 03:00 installiert Vulpexa nur
+  Sicherheitsupdates auf Online-Geräten mit dem Tag server." — mit den
+  Bedienelementen im Satz. Dazu „Läuft das nächste Mal am …" samt betroffener
+  Geräte, und die Alarmregeln stehen ebenfalls als Satz da statt als
+  „Gerät offline · 300 Sekunden".
+- **Der tägliche Update-Scan hat eine Karte** auf der Automatisierungsseite:
+  Slot, Zustand und wie viele Geräte seit dem letzten Slot geprüft sind.
+  Eingestellt bleibt er in der Serverkonfiguration; die Seite zeigt ihn an.
+- **Skript-Bibliothek:** zwei Zeilen je Skript statt einer Kette aus Chips,
+  das Betriebssystem als feste Marke links, und „Ausführen" samt Zielgerät
+  direkt in der Zeile — das Aufklappen ist jetzt für den Quelltext da.
+  Der OS-Filter ist eine zweite Segmentleiste mit Trefferzahlen.
+- **Patch-Management:** Filter als segmentierte Leisten mit Trefferzahlen
+  (neu darin: „Nie geprüft") und eine Sammelaktion, die alle erreichbaren
+  Geräte der aktuellen Auswahl scannt. Die Ringe bleiben, wie sie sind.
 - **Ein Serverausfall ist jetzt sichtbar.** Bricht das Backend weg, liefen die
   Abfragen bisher stumm ins Leere und das Dashboard zeigte den letzten
   bekannten Stand weiter — eine ruhige Flotte, obwohl man in Wahrheit nichts

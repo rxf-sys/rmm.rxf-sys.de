@@ -5,6 +5,7 @@ import type { Device, PatchSummary, Person } from '../types';
 import { Dot } from '../ui';
 import { deviceState, stateColor } from '../deviceStatus';
 import { usePagination } from '../hooks/usePagination';
+import { FilterBar, type FilterOption } from './FilterBar';
 import { Pagination } from './Pagination';
 import type { ReactNode } from 'react';
 import { AppleLogo, LinuxLogo, ServerRack, WindowsLogo } from '../icons';
@@ -82,7 +83,15 @@ function Ring({ pct, label, icon, count }: { pct: number; label: string; icon: R
 }
 
 type Availability = 'alle' | 'online' | 'offline';
-type PatchState = 'alle' | 'offen' | 'aktuell' | 'sicherheit';
+
+const STATE_LABEL: Record<PatchState, string> = {
+  alle: 'Alle',
+  sicherheit: 'Sicherheit',
+  offen: 'Updates offen',
+  aktuell: 'Aktuell',
+  ungeprueft: 'Nie geprüft',
+};
+type PatchState = 'alle' | 'sicherheit' | 'offen' | 'aktuell' | 'ungeprueft';
 
 export function PatchesPage({
   devices,
@@ -96,6 +105,21 @@ export function PatchesPage({
   // Gerät, für das gerade ein Scan angefordert wurde, und der letzte Fehler.
   const [scanning, setScanning] = useState<number | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+
+  const scanAll = async () => {
+    setScanning(-1);
+    setScanError(null);
+    try {
+      // Nacheinander statt parallel: der Server schickt jede Anfrage über den
+      // offenen Agent-Socket, und eine Fehlermeldung soll das Gerät benennen.
+      for (const d of scannable) await api.scanPatches(d.id);
+      setTimeout(onRefresh, 2500);
+    } catch (e) {
+      setScanError(apiErrorMessage(e));
+    } finally {
+      setScanning(null);
+    }
+  };
 
   const scan = async (id: number) => {
     setScanning(id);
@@ -133,21 +157,66 @@ export function PatchesPage({
   const patchedTotal = devices.filter((d) => pending(d) === 0).length;
   const overallPct = devices.length ? Math.round((patchedTotal / devices.length) * 100) : 0;
 
-  const shown = useMemo(() => {
-    return [...devices]
-      .filter((d) => {
+  /** Ein Prädikat je Filter — damit die Zahl an der Leiste und die Zeilen
+   *  darunter nie etwas Verschiedenes behaupten. */
+  const matchesState = (d: Device, f: PatchState) => {
+    switch (f) {
+      case 'sicherheit':
+        return security(d) > 0;
+      case 'offen':
+        return pending(d) > 0;
+      case 'aktuell':
+        return pending(d) === 0 && d.last_patch_scan_at > 0;
+      case 'ungeprueft':
+        // Nie ein Bericht eingetroffen: „aktuell" wäre hier eine Behauptung.
+        return d.last_patch_scan_at === 0;
+      default:
+        return true;
+    }
+  };
+
+  // Person, Gerätetyp und Verfügbarkeit engen die Menge ein, über die die
+  // Statusleiste zählt.
+  const base = useMemo(
+    () =>
+      devices.filter((d) => {
         if (personFilter !== 'alle' && d.person_id !== personFilter) return false;
         if (osFilter !== 'alle' && categoryOf(d) !== osFilter) return false;
         if (availability === 'online' && !d.online) return false;
         if (availability === 'offline' && d.online) return false;
-        if (patchState === 'offen' && pending(d) === 0) return false;
-        if (patchState === 'aktuell' && pending(d) > 0) return false;
-        if (patchState === 'sicherheit' && security(d) === 0) return false;
         return true;
-      })
-      .sort((a, b) => pending(b) - pending(a));
+      }),
+    [devices, personFilter, osFilter, availability],
+  );
+
+  const shown = useMemo(
+    () => [...base].filter((d) => matchesState(d, patchState)).sort((a, b) => pending(b) - pending(a)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [devices, patchSummary, personFilter, osFilter, availability, patchState]);
+    [base, patchSummary, patchState],
+  );
+
+  const stateOptions: FilterOption<PatchState>[] = (
+    ['alle', 'sicherheit', 'offen', 'aktuell', 'ungeprueft'] as PatchState[]
+  ).map((id) => ({
+    id,
+    label: STATE_LABEL[id],
+    count: id === 'alle' ? undefined : base.filter((d) => matchesState(d, id)).length,
+    tone:
+      id === 'sicherheit' ? 'danger' : id === 'offen' ? 'warn' : id === 'aktuell' ? 'ok' : 'neutral',
+  }));
+
+  const osOptions: FilterOption<OsCategory | 'alle'>[] = [
+    { id: 'alle' as const, label: 'Alle Typen' },
+    ...CATEGORIES.map((c) => ({
+      id: c.id as OsCategory | 'alle',
+      label: c.label,
+      icon: c.icon,
+      count: devices.filter((d) => categoryOf(d) === c.id).length,
+    })),
+  ];
+
+  // Was sich gerade überhaupt scannen lässt: online, in der aktuellen Auswahl.
+  const scannable = shown.filter((d) => d.online);
 
   const pager = usePagination(
     shown,
@@ -197,14 +266,34 @@ export function PatchesPage({
         </div>
       </div>
 
-      {/* Filter row */}
-      <div className="row" style={{ gap: 7, flexWrap: 'wrap' }}>
+      {/* Filter: dieselbe segmentierte Leiste wie auf der Geräteseite und im
+          Audit-Log, mit Trefferzahlen. Vier gleich aussehende Klappfelder
+          sagten vorab nichts darüber, was ein Filter übrig lässt. */}
+      <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+        <FilterBar
+          options={stateOptions}
+          value={patchState}
+          onChange={setPatchState}
+          label="Nach Patch-Status filtern"
+        />
+        <FilterBar
+          options={osOptions}
+          value={osFilter}
+          onChange={setOsFilter}
+          label="Nach Gerätetyp filtern"
+        />
+      </div>
+
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         {persons.length > 0 && (
           <select
             className={chipCls(personFilter !== 'alle')}
             style={{ padding: '5px 9px' }}
             value={personFilter}
-            onChange={(e) => setPersonFilter(e.target.value === 'alle' ? 'alle' : Number(e.target.value))}
+            aria-label="Nach Person filtern"
+            onChange={(e) =>
+              setPersonFilter(e.target.value === 'alle' ? 'alle' : Number(e.target.value))
+            }
           >
             <option value="alle">Personen · alle</option>
             {persons.map((p) => (
@@ -213,38 +302,20 @@ export function PatchesPage({
           </select>
         )}
         <select
-          className={chipCls(osFilter !== 'alle')}
-          style={{ padding: '5px 9px' }}
-          value={osFilter}
-          onChange={(e) => setOsFilter(e.target.value as OsCategory | 'alle')}
-        >
-          <option value="alle">Gerätetypen · alle</option>
-          {CATEGORIES.map((c) => (
-            <option key={c.id} value={c.id}>{c.label}</option>
-          ))}
-        </select>
-        <select
           className={chipCls(availability !== 'alle')}
           style={{ padding: '5px 9px' }}
           value={availability}
+          aria-label="Nach Verfügbarkeit filtern"
           onChange={(e) => setAvailability(e.target.value as Availability)}
         >
           <option value="alle">Verfügbarkeit · alle</option>
           <option value="online">online</option>
           <option value="offline">offline</option>
         </select>
-        <select
-          className={chipCls(patchState !== 'alle')}
-          style={{ padding: '5px 9px' }}
-          value={patchState}
-          onChange={(e) => setPatchState(e.target.value as PatchState)}
-        >
-          <option value="alle">Patch-Status · alle</option>
-          <option value="offen">Updates offen</option>
-          <option value="sicherheit">Sicherheitsupdates offen</option>
-          <option value="aktuell">aktuell</option>
-        </select>
-        {(personFilter !== 'alle' || osFilter !== 'alle' || availability !== 'alle' || patchState !== 'alle') && (
+        {(personFilter !== 'alle' ||
+          osFilter !== 'alle' ||
+          availability !== 'alle' ||
+          patchState !== 'alle') && (
           <button
             className="btn btn-sm"
             onClick={() => {
@@ -257,7 +328,18 @@ export function PatchesPage({
             ✕ Filter zurücksetzen
           </button>
         )}
-        <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 11 }}>
+        {isOperator && scannable.length > 0 && (
+          <button
+            className="btn btn-sm"
+            style={{ marginLeft: 'auto' }}
+            disabled={scanning !== null}
+            title="Fordert bei allen online erreichbaren Geräten der Auswahl einen Update-Scan an"
+            onClick={() => void scanAll()}
+          >
+            {scanning === -1 ? 'Scannt…' : `${scannable.length} Geräte scannen`}
+          </button>
+        )}
+        <span className="muted" style={{ fontSize: 11, marginLeft: isOperator ? 0 : 'auto' }}>
           {shown.length} von {devices.length} Geräten
         </span>
       </div>

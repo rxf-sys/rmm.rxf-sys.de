@@ -162,6 +162,9 @@ export interface AutomationConfig {
   schedules: ScriptSchedule[];
   patch_window: PatchWindow;
   patch_window_last_run: number | null;
+  /** Täglicher Update-Scan — steht in der Serverkonfiguration
+   *  (`PATCH_SCAN_ENABLED`/`PATCH_SCAN_HOUR`) und ist hier nur ablesbar. */
+  patch_scan: { enabled: boolean; hour: number };
 }
 
 export interface NtfyConfig {
