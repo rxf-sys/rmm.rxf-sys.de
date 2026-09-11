@@ -1769,3 +1769,326 @@ textarea.input {
   color: var(--tx3);
   padding: 8px 10px 3px;
 }
+
+/* --- Übersicht (components/OverviewPage.tsx) -------------------------- */
+/* Eigener `ov-`-Namensraum: .card/.card-head gehören schon dem Rest der App,
+   und die Übersicht braucht engere Maße als die Detailseiten. */
+
+.ov-head h1 {
+  margin: 0;
+}
+.ov-verdict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ov-pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/* Aufgabenliste — der Kern der Seite. */
+.ov-tasks {
+  overflow: hidden;
+}
+.ov-tasks-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 13px 16px 11px;
+  border-bottom: 1px solid var(--line);
+}
+.ov-tasks-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+.ov-count {
+  font: 600 11px var(--mono);
+  color: var(--tx3);
+}
+.ov-nothing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  font-size: 12.5px;
+  color: var(--tx2);
+}
+.ov-task {
+  display: grid;
+  grid-template-columns: 3px auto 1fr auto;
+  align-items: center;
+  gap: 0 12px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  border-bottom: 1px solid var(--line2);
+  color: var(--tx);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ov-task:last-child {
+  border-bottom: none;
+}
+.ov-task:hover {
+  background: var(--hover);
+}
+.ov-rail {
+  align-self: stretch;
+}
+.ov-sev {
+  font: 700 9px var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 5px;
+  margin-left: 13px;
+  white-space: nowrap;
+}
+.ov-sev-crit {
+  color: var(--dangerS);
+  background: var(--dangerBg);
+}
+.ov-sev-warn {
+  color: var(--warn);
+  background: var(--warnBg);
+}
+.ov-sev-info {
+  color: var(--tx2);
+  background: var(--chip);
+}
+.ov-task-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 11px 0;
+  min-width: 0;
+}
+.ov-task-title {
+  font-weight: 700;
+  font-size: 13px;
+}
+.ov-task-why {
+  color: var(--tx3);
+  font-size: 11.5px;
+}
+.ov-go {
+  color: var(--tx3);
+  font-size: 12px;
+  padding-right: 16px;
+  white-space: nowrap;
+}
+.ov-task:hover .ov-go {
+  color: var(--accent);
+}
+
+/* Kennzahlen. */
+.ov-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.ov-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 15px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  cursor: pointer;
+  color: var(--tx);
+  font-family: inherit;
+  text-align: left;
+}
+.ov-kpi:hover {
+  border-color: var(--accLine);
+}
+.ov-k {
+  font: 700 9px var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tx3);
+}
+.ov-v {
+  font-weight: 800;
+  font-size: 24px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.ov-n {
+  color: var(--tx3);
+  font-size: 11px;
+}
+
+/* Zwei-Spalten-Band: Diagramm links, Zustand rechts. */
+.ov-band {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.ov-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 13px 16px 0;
+}
+.ov-card-head h2 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+.ov-note {
+  color: var(--tx3);
+  font-size: 11px;
+  margin-left: auto;
+}
+.ov-card-body {
+  padding: 8px 16px 14px;
+}
+
+/* Diagramm. */
+.ov-chart {
+  position: relative;
+}
+.ov-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.ov-tick {
+  font: 500 9.5px var(--mono);
+  fill: var(--tx3);
+}
+.ov-tip {
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+  transform: translate(-50%, -110%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: var(--shadow);
+}
+.ov-tip b {
+  font: 600 11.5px var(--mono);
+  color: var(--tx);
+}
+
+/* Zustandsbalken. */
+.ov-statebar {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  gap: 2px;
+  margin: 4px 0 12px;
+}
+.ov-statebar span {
+  display: block;
+}
+.ov-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.ov-legend-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 3px 0;
+  background: none;
+  border: none;
+  color: var(--tx);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.ov-legend-row:hover {
+  color: var(--accent);
+}
+.ov-sw {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.ov-num {
+  font: 600 12px var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--tx2);
+}
+.ov-footnote {
+  color: var(--tx3);
+  font-size: 11px;
+  margin: 12px 0 0;
+}
+
+/* Aktivität. */
+.ov-act {
+  display: flex;
+  flex-direction: column;
+}
+.ov-act-row {
+  display: grid;
+  grid-template-columns: 52px 92px 1fr;
+  gap: 11px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line2);
+}
+.ov-act-row:last-child {
+  border-bottom: none;
+}
+.ov-act-time {
+  font: 500 10px var(--mono);
+  color: var(--tx3);
+}
+.ov-act-cat {
+  justify-self: start;
+}
+.ov-act-text {
+  font-size: 12px;
+  color: var(--tx2);
+}
+
+@media (max-width: 980px) {
+  .ov-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .ov-band {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .ov-kpis {
+    grid-template-columns: 1fr;
+  }
+  .ov-task {
+    grid-template-columns: 3px auto 1fr;
+  }
+  .ov-go {
+    display: none;
+  }
+  .ov-act-row {
+    grid-template-columns: 46px 1fr;
+  }
+  .ov-act-cat {
+    display: none;
+  }
+}

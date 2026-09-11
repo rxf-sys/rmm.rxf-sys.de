@@ -103,13 +103,41 @@ def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
     return db_connect(_db_path)
 
 
+async def _name_of(db: aiosqlite.Connection, sql: str, row_id: int) -> str:
+    """One id → one display name, or '' if the row is gone."""
+    async with db.execute(sql, (row_id,)) as cur:
+        row = await cur.fetchone()
+    return str(row[0]) if row and row[0] else ""
+
+
 async def record(event: str, **fields: Any) -> None:
     """Append an audit event. ``user``/``actor`` and ``device_id`` are lifted
-    into their own columns; everything else is JSON in ``detail``."""
+    into their own columns; everything else is JSON in ``detail``.
+
+    Device and script names are resolved here and stored alongside the id, so
+    the log stays readable: "Gerät 4" means nothing a week later, and by then
+    the device may not exist to look up at all. The id stays the join key; the
+    name is a snapshot of what it was called when this happened.
+
+    A caller that already knows the name passes it and skips the lookup — that
+    is also how the delete paths work, where the row is gone by the time this
+    runs.
+    """
     actor = str(fields.pop("user", fields.pop("actor", "")) or "")
     device_id = fields.pop("device_id", None)
-    detail = json.dumps(fields, separators=(",", ":"), default=str)
+    script_id = fields.get("script_id")
     async with _connect() as db:
+        # Direct SQL rather than importing devices/scripts: this module is
+        # imported by both of them, and a name lookup is not worth a cycle.
+        if isinstance(device_id, int) and not fields.get("hostname"):
+            name = await _name_of(db, "SELECT hostname FROM devices WHERE id = ?", device_id)
+            if name:
+                fields["hostname"] = name
+        if isinstance(script_id, int) and not fields.get("script"):
+            name = await _name_of(db, "SELECT name FROM scripts WHERE id = ?", script_id)
+            if name:
+                fields["script"] = name
+        detail = json.dumps(fields, separators=(",", ":"), default=str)
         await db.execute(
             "INSERT INTO audit_log (ts, event, actor, device_id, detail) VALUES (?, ?, ?, ?, ?)",
             (int(time.time()), event, actor, device_id, detail),

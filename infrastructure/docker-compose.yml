@@ -7,6 +7,10 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env
+    environment:
+      # Der tägliche Update-Scan rechnet in lokaler Zeit; ohne TZ wäre das UTC
+      # und PATCH_SCAN_HOUR=3 läge im Sommer um 05:00 Ortszeit.
+      TZ: ${TZ:-Europe/Berlin}
     expose:
       - "8080"
     volumes:

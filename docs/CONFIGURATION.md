@@ -104,6 +104,22 @@ Angriffsfläche · ⚪ funktional.
 | `DISK_ALERT_CLEAR_PCT` | Rückfallschwelle (Hysterese, muss < `DISK_ALERT_PCT` sein) | `85.0` | nein | ⚪ |
 | `PATCH_ALERT_AGE_DAYS` | Ab wann ein offener Sicherheitspatch als überfällig gilt | `30` | nein | 🟡 |
 
+### Update-Scans
+
+| Variable | Zweck | Default | Pflicht | Sec |
+|---|---|---|---|---|
+| `PATCH_SCAN_ENABLED` | Täglicher Update-Scan über den Heartbeat | `true` | nein | 🟡 |
+| `PATCH_SCAN_HOUR` | Stunde des Slots (lokale Zeit des Containers, 0–23) | `3` | nein | ⚪ |
+
+> Der Scan hängt am Heartbeat, nicht an einem Cron: Der Server prüft bei jedem
+> Heartbeat, ob das Gerät seinen heutigen Slot hinter sich hat. Damit holt ein
+> Gerät, das zur Slot-Zeit aus war, den Scan beim nächsten Online-Heartbeat
+> automatisch nach. Die Geräte verteilen sich über die Stunde (`ID % 60`), und
+> als erledigt gilt erst der eingetroffene Bericht — ein Scan, der nie
+> zurückkommt, wird nach einer Stunde erneut angefordert.
+>
+> **Lokale Zeit heißt Container-Zeit.** Ohne `TZ` im Compose-File ist das UTC.
+
 ### Benachrichtigung (ntfy)
 
 | Variable | Zweck | Default | Pflicht | Sec |

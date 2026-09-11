@@ -104,6 +104,55 @@ async def history(device_id: int, hours: int) -> list[dict[str, Any]]:
     ]
 
 
+async def fleet_history(hours: int, device_ids: list[int] | None = None) -> list[dict[str, Any]]:
+    """Average load per hour across the fleet, oldest first.
+
+    One bucket per hour rather than one point per device: the overview asks
+    "how busy was everything today", and 40 overlapping lines answer that
+    worse than one. ``samples`` and ``devices`` travel along so an hour backed
+    by a single machine cannot silently look like the whole fleet.
+
+    ``device_ids`` narrows the aggregate to what the caller may see — None
+    means the whole fleet, an empty list means nothing is visible."""
+    now = int(time.time())
+    since = (now - hours * 3600) // 3600 * 3600
+    where = "ts >= ?"
+    args: list[Any] = [since]
+    if device_ids is not None:
+        if not device_ids:
+            return []
+        where += f" AND device_id IN ({','.join('?' for _ in device_ids)})"
+        args.extend(device_ids)
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            # `where` is built from literal SQL plus bound "?" placeholders.
+            f"""
+            SELECT ts / 3600 * 3600 AS hour_ts,
+                   AVG(cpu_pct)      AS cpu_avg,
+                   AVG(mem_pct)      AS mem_avg,
+                   MAX(disk_max_pct) AS disk_max,
+                   COUNT(*)          AS samples,
+                   COUNT(DISTINCT device_id) AS devices
+            FROM metrics WHERE {where}
+            GROUP BY hour_ts ORDER BY hour_ts ASC
+            """,  # noqa: S608
+            args,
+        ) as cur:
+            rows = await cur.fetchall()
+    return [
+        {
+            "ts": int(r["hour_ts"]),
+            "cpu_avg": round(float(r["cpu_avg"]), 1),
+            "mem_avg": round(float(r["mem_avg"]), 1),
+            "disk_max": round(float(r["disk_max"]), 1),
+            "samples": int(r["samples"]),
+            "devices": int(r["devices"]),
+        }
+        for r in rows
+    ]
+
+
 async def aggregate_and_cleanup(settings: Settings) -> None:
     """Roll completed hours up into metrics_hourly, then apply retention.
 

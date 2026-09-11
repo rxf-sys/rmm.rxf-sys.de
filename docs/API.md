@@ -105,7 +105,7 @@ Bestandsskripte bekommen `sonstiges` und `danger = false`.
 | Methode | Pfad | Auth | Zweck |
 |---|---|---|---|
 | GET | `/api/patches/summary` | Session | Flottenweite Übersicht, für Viewer gefiltert |
-| GET | `/api/devices/{device_id}/patches` | Session | Ausstehende Patches eines Geräts |
+| GET | `/api/devices/{device_id}/patches` | Session | Ausstehende Patches eines Geräts, dazu `last_scan_at` |
 | POST | `/api/devices/{device_id}/patches/scan` | Operator | Scan anstoßen. 409 ohne offene Agent-Verbindung |
 | POST | `/api/devices/{device_id}/patches/install` | Operator | Installations-Job. 409 ohne Verbindung oder bei bereits laufender Installation, 422 wenn nichts aussteht |
 
@@ -201,6 +201,7 @@ pflegen.
 | GET | `/api/settings/ntfy` | Admin | ntfy-Konfiguration (Token maskiert) |
 | PUT | `/api/settings/ntfy` | Admin | ntfy zur Laufzeit umkonfigurieren |
 | POST | `/api/settings/ntfy/test` | Admin | Testnachricht senden |
+| GET | `/api/fleet/metrics` | Session | Durchschnittslast der Flotte je Stunde (`?hours=`, 1–48, Default 24), für Viewer auf deren Geräte eingeschränkt |
 | WS | `/api/fleet/ws` | Session | Refresh-Hinweise, siehe unten |
 
 ---
@@ -240,7 +241,7 @@ Unbekannte Typen werden geloggt und ignoriert.
 | `type` | Payload | Wann |
 |---|---|---|
 | `job` | `job_id`, `kind`, `command`, `shell`, optional `patch_ids`, `timeout_s` | Beim Anlegen eines Jobs |
-| `patch_scan` | — | `POST /api/devices/{id}/patches/scan` |
+| `patch_scan` | — | `POST /api/devices/{id}/patches/scan` und einmal täglich beim Heartbeat (siehe `PATCH_SCAN_HOUR`) |
 | `get_logs` | — | `GET /api/devices/{id}/agent-logs` |
 | `update` | `version`, `url`, `sha256`, `sig` | Einmal pro Verbindung beim ersten Heartbeat, oder auf Anforderung |
 | `pong` | — | Antwort auf `ping` |

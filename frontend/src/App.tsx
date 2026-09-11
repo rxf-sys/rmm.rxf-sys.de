@@ -134,9 +134,11 @@ export default function App() {
     setPaletteOpen(false);
     setNavOpen(false);
   };
-  const goPage = (p: PageId) => {
+  // `query` trägt Filter mit (z. B. die Übersicht, die auf die Geräteseite mit
+  // genau einem Filter verweist) — der Pfad bleibt die Wahrheit über die Seite.
+  const goPage = (p: PageId, query?: string) => {
     closeOverlays();
-    navigate(PAGE_PATH[p]);
+    navigate(query ? `${PAGE_PATH[p]}?${query}` : PAGE_PATH[p]);
   };
   const openDevice = (id: number) => {
     closeOverlays();
@@ -290,7 +292,7 @@ export default function App() {
               }
             />
             <Route path={PAGE_PATH.docs} element={<DocsPage />} />
-            <Route path={PAGE_PATH.audit} element={isAdmin ? <AuditPage /> : <Forbidden />} />
+            <Route path={PAGE_PATH.audit} element={isAdmin ? <AuditPage devices={fleet.devices} /> : <Forbidden />} />
             <Route
               path={PAGE_PATH.admin}
               element={isAdmin ? <AdminPage currentUser={user} /> : <Forbidden />}

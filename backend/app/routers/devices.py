@@ -14,7 +14,18 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from .. import alerts, credentials, devices, jobs, metrics, patches, persons, releases, wol
+from .. import (
+    alerts,
+    credentials,
+    devices,
+    jobs,
+    metrics,
+    patch_scan,
+    patches,
+    persons,
+    releases,
+    wol,
+)
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..auth import device_visible, person_scope, require_operator, verify_session
@@ -272,6 +283,10 @@ async def set_maintenance(
 
 @router.delete("/{device_id}")
 async def delete_device(device_id: int, user: dict = Depends(require_operator)) -> dict:
+    # Den Namen holen, solange es die Zeile noch gibt — danach kann ihn
+    # niemand mehr nachschlagen, und "Gerät 4 entfernt" sagt im Audit-Log
+    # nichts mehr aus.
+    hostname = await devices.hostname_of(device_id)
     # Kill the live socket first so a connected agent can't keep reporting
     # into a row that's about to disappear; its reconnect then fails auth.
     await manager.disconnect(device_id)
@@ -282,5 +297,8 @@ async def delete_device(device_id: int, user: dict = Depends(require_operator)) 
     await patches.delete_for_device(device_id)
     await credentials.delete_for_device(device_id)
     await alerts.delete_for_device(device_id)
-    await audit_record("devices.deleted", user=user["username"], device_id=device_id)
+    patch_scan.forget(device_id)
+    await audit_record(
+        "devices.deleted", user=user["username"], device_id=device_id, hostname=hostname
+    )
     return {"ok": True}

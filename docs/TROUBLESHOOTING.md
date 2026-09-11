@@ -162,6 +162,22 @@ zugehörige Job).
 | Windows | Scan hängt | Die COM-API kann mehrere Minuten brauchen; Timeout ist 5 min (`agent/patches.go`) |
 | macOS | leeres Ergebnis | `softwareupdate -l` liefert nur Systemupdates, keine App-Store-Apps |
 
+### Der tägliche Scan läuft nicht
+
+Der Scan hängt am Heartbeat: Der Server fordert ihn an, sobald ein Gerät
+seinen heutigen Slot hinter sich hat (`PATCH_SCAN_HOUR`, verteilt über die
+Stunde per `ID % 60`). In dieser Reihenfolge prüfen:
+
+| Prüfen | Wie |
+|---|---|
+| Ist der Scan aktiv? | `PATCH_SCAN_ENABLED` — `false` schaltet ihn komplett ab |
+| Stimmt die Zeitzone? | `docker compose exec backend date` — ohne `TZ` rechnet der Container in UTC |
+| Wurde angefordert? | Backend-Log, Ereignis `patch.scan_scheduled`; im Audit-Log `patch.scan_requested` mit Akteur `automation` |
+| Kam ein Bericht? | Gerät → Updates zeigt „zuletzt geprüft". Bleibt es bei „noch nie geprüft", antwortet der Agent nicht — dann oben weiterlesen |
+
+Läuft gerade eine Installation auf dem Gerät, wird der Scan bewusst
+ausgelassen; er kommt beim nächsten Heartbeat danach.
+
 Der Agent läuft als root bzw. SYSTEM; fehlende Rechte scheiden als Ursache
 aus. Zum Gegenprüfen dasselbe Kommando manuell auf dem Gerät ausführen:
 
