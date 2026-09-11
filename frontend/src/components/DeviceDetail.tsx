@@ -233,7 +233,7 @@ export function DeviceDetail({
     <div className="screen" style={{ paddingTop: 18 }}>
       {confirmDialog}
       <div className="row" style={{ gap: 12 }}>
-        <button className="btn-icon sq30" onClick={onBack}>
+        <button className="btn-icon sq30" onClick={onBack} aria-label="Zurück zur Geräteliste">
           ←
         </button>
         <Dot color={stateColor(st)} lg />
@@ -267,7 +267,13 @@ export function DeviceDetail({
               ▶ Remote-Sitzung
             </button>
           )}
-          <button className="btn-icon" onClick={() => setMenuOpen((o) => !o)}>
+          <button
+            className="btn-icon"
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-label="Weitere Aktionen"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+          >
             ⋯
           </button>
           {menuOpen && (

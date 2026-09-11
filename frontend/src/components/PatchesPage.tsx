@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { osLabel } from '../format';
+import { api, apiErrorMessage } from '../api/client';
+import { formatRelative, osLabel } from '../format';
 import type { Device, PatchSummary, Person } from '../types';
 import { Dot } from '../ui';
 import { deviceState, stateColor } from '../deviceStatus';
@@ -13,9 +14,12 @@ interface Props {
   patchSummary: PatchSummary;
   persons: Person[];
   onOpenDevice: (id: number) => void;
+  /** Nach einem Scan-Auftrag die Flottendaten neu holen. */
+  onRefresh: () => void;
+  isOperator: boolean;
 }
 
-const COLS = '16fr 8fr 8fr 8fr 8fr 10fr 10fr';
+const COLS = '16fr 8fr 7fr 7fr 7fr 10fr 10fr 10fr';
 
 type OsCategory = 'win_pc' | 'win_server' | 'mac' | 'linux';
 
@@ -80,8 +84,33 @@ function Ring({ pct, label, icon, count }: { pct: number; label: string; icon: R
 type Availability = 'alle' | 'online' | 'offline';
 type PatchState = 'alle' | 'offen' | 'aktuell' | 'sicherheit';
 
-export function PatchesPage({ devices, patchSummary, persons, onOpenDevice }: Props) {
+export function PatchesPage({
+  devices,
+  patchSummary,
+  persons,
+  onOpenDevice,
+  onRefresh,
+  isOperator,
+}: Props) {
   const [personFilter, setPersonFilter] = useState<number | 'alle'>('alle');
+  // Gerät, für das gerade ein Scan angefordert wurde, und der letzte Fehler.
+  const [scanning, setScanning] = useState<number | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  const scan = async (id: number) => {
+    setScanning(id);
+    setScanError(null);
+    try {
+      await api.scanPatches(id);
+      // Der Bericht kommt asynchron über den Agent-Socket; kurz warten und
+      // dann neu laden, statt dem Nutzer ein leeres Ergebnis zu zeigen.
+      setTimeout(onRefresh, 2500);
+    } catch (e) {
+      setScanError(apiErrorMessage(e));
+    } finally {
+      setScanning(null);
+    }
+  };
   const [osFilter, setOsFilter] = useState<OsCategory | 'alle'>('alle');
   const [availability, setAvailability] = useState<Availability>('alle');
   const [patchState, setPatchState] = useState<PatchState>('alle');
@@ -233,6 +262,8 @@ export function PatchesPage({ devices, patchSummary, persons, onOpenDevice }: Pr
         </span>
       </div>
 
+      {scanError && <p className="err">{scanError}</p>}
+
       {devices.length === 0 ? (
         <div className="empty">
           <h2>Keine Geräte</h2>
@@ -241,12 +272,13 @@ export function PatchesPage({ devices, patchSummary, persons, onOpenDevice }: Pr
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
           <div className="tbl-scroll">
-            <div className="tbl-head" style={{ gridTemplateColumns: COLS, minWidth: 780 }}>
+            <div className="tbl-head" style={{ gridTemplateColumns: COLS, minWidth: 880 }}>
               <span>Gerät</span>
               <span>Person</span>
               <span>OS</span>
               <span style={{ textAlign: 'right' }}>Ausstehend</span>
               <span style={{ textAlign: 'right' }}>Sicherheit</span>
+              <span>Zuletzt geprüft</span>
               <span>Status</span>
               <span style={{ textAlign: 'right' }}>Aktion</span>
             </div>
@@ -262,7 +294,7 @@ export function PatchesPage({ devices, patchSummary, persons, onOpenDevice }: Pr
                   <div
                     key={d.id}
                     className="tbl-row"
-                    style={{ gridTemplateColumns: COLS, cursor: 'default', minWidth: 780 }}
+                    style={{ gridTemplateColumns: COLS, cursor: 'default', minWidth: 880 }}
                   >
                     <span className="cell-name">
                       <Dot color={stateColor(st)} />
@@ -281,16 +313,40 @@ export function PatchesPage({ devices, patchSummary, persons, onOpenDevice }: Pr
                     <span style={{ textAlign: 'right' }}>
                       {s.security > 0 ? <span className="badge badge-danger">{s.security}</span> : '—'}
                     </span>
+                    <span
+                      className="muted"
+                      style={{ fontSize: 11.5, color: d.last_patch_scan_at ? undefined : 'var(--warn)' }}
+                    >
+                      {d.last_patch_scan_at ? formatRelative(d.last_patch_scan_at) : 'nie'}
+                    </span>
                     <span className="muted" style={{ fontSize: 11.5 }}>
-                      {d.online ? (s.pending ? 'Updates verfügbar' : 'aktuell') : 'offline'}
+                      {!d.online
+                        ? 'offline'
+                        : s.pending
+                          ? 'Updates verfügbar'
+                          : d.last_patch_scan_at
+                            ? 'aktuell'
+                            : 'nicht geprüft'}
                     </span>
                     <span style={{ textAlign: 'right' }}>
-                      <button
-                        className={s.pending ? 'btn btn-accent btn-sm' : 'btn btn-sm'}
-                        onClick={() => onOpenDevice(d.id)}
-                      >
-                        {s.pending ? 'Installieren' : 'Scannen'}
-                      </button>
+                      {s.pending > 0 ? (
+                        <button className="btn btn-accent btn-sm" onClick={() => onOpenDevice(d.id)}>
+                          Installieren
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-sm"
+                          disabled={!isOperator || !d.online || scanning === d.id}
+                          title={
+                            d.online
+                              ? 'Update-Scan jetzt anfordern'
+                              : 'Ein Scan braucht eine offene Agent-Verbindung'
+                          }
+                          onClick={() => void scan(d.id)}
+                        >
+                          {scanning === d.id ? 'Scannt…' : 'Scannen'}
+                        </button>
+                      )}
                     </span>
                   </div>
                 );

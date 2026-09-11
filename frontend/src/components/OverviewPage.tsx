@@ -231,11 +231,16 @@ export function OverviewPage({
   canEnroll,
 }: Props) {
   const { devices, alerts, patchSummary, loading } = fleet;
+  // null = noch nicht geladen, [] = geladen und leer. Für Nicht-Admins
+  // antwortet der Audit-Endpunkt mit 403; dann bleibt die Karte ganz weg,
+  // statt „Keine Ereignisse" zu behaupten.
   const [activity, setActivity] = useState<AuditEvent[] | null>(null);
+  const [activityAllowed, setActivityAllowed] = useState(true);
   const [samples, setSamples] = useState<FleetSample[]>([]);
   // Die Aufgaben rechnen mit „jetzt" („seit 3 Tagen offline"), also muss die
   // Uhr laufen — sonst altert die Seite still, solange der Tab offen bleibt.
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+  const [allTasks, setAllTasks] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60_000);
@@ -249,7 +254,9 @@ export function OverviewPage({
     api
       .audit({ limit: 6 }, ctrl.signal)
       .then((r) => setActivity(r.events))
-      .catch(() => setActivity([]));
+      .catch(() => {
+        if (!ctrl.signal.aborted) setActivityAllowed(false);
+      });
     return () => ctrl.abort();
   }, []);
 
@@ -346,7 +353,16 @@ export function OverviewPage({
               </span>
             </div>
           ) : (
-            tasks.slice(0, MAX_TASKS).map((t) => <TaskRow key={t.id} task={t} onGo={go} />)
+            <>
+              {(allTasks ? tasks : tasks.slice(0, MAX_TASKS)).map((t) => (
+                <TaskRow key={t.id} task={t} onGo={go} />
+              ))}
+              {!allTasks && tasks.length > MAX_TASKS && (
+                <button className="ov-more" type="button" onClick={() => setAllTasks(true)}>
+                  {tasks.length - MAX_TASKS} weitere anzeigen
+                </button>
+              )}
+            </>
           )}
         </section>
       )}
@@ -463,6 +479,7 @@ export function OverviewPage({
         </section>
       </div>
 
+      {activityAllowed && (
       <section className="card" aria-labelledby="ov-act-h">
         <div className="ov-card-head">
           <h2 id="ov-act-h">Letzte Aktivität</h2>
@@ -492,6 +509,7 @@ export function OverviewPage({
           )}
         </div>
       </section>
+      )}
     </div>
   );
 }

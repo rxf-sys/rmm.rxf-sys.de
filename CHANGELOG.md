@@ -8,6 +8,19 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Ein Serverausfall ist jetzt sichtbar.** Bricht das Backend weg, liefen die
+  Abfragen bisher stumm ins Leere und das Dashboard zeigte den letzten
+  bekannten Stand weiter — eine ruhige Flotte, obwohl man in Wahrheit nichts
+  sah. Ein Streifen über dem Inhalt datiert die Anzeige („Stand von vor 4
+  Minuten") und bietet einen erneuten Versuch an, ohne die alten Zahlen
+  wegzunehmen.
+- **Die Seiten werden einzeln geladen.** Übersicht und Geräteliste bleiben im
+  Hauptbündel, alles andere (Gerätedetail, Skripte, Doku, Administration,
+  Automatisierung, Patches, Personen, Audit) kommt beim ersten Aufruf dazu:
+  460 kB → 309 kB beim Login, 135 kB → 97 kB übertragen.
+- **Filter „In Ordnung"** in der Geräteliste — das Gegenstück zu „Probleme",
+  damit jede Zeile des Zustandsbalkens auf der Übersicht auch wirklich auf
+  ihre Auswahl verlinkt.
 - **Flottenlast-Diagramm überarbeitet:** Die y-Achse skaliert jetzt auf die
   tatsächlichen Werte (10/25/50/100 %) statt fest auf 0–100 — eine Flotte, die
   bei 5 bis 10 % dümpelt, war vorher eine gerade Linie am unteren Rand. Dazu
@@ -177,6 +190,28 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
 
 ### Behoben
+- Der Knopf „Scannen" im Patch-Management öffnete nur das Gerät, statt einen
+  Scan anzufordern. Er tut jetzt, was er sagt; dazu eine Spalte „zuletzt
+  geprüft", und ein nie gescanntes Gerät steht nicht mehr als „aktuell" da.
+- Die Dringlichkeit eines Alarms hing allein am Regeltyp: ein Server, der eine
+  Minute nicht antwortet, war „kritisch", ein seit Wochen offenes
+  Sicherheitsupdate dauerhaft „Warnung". Jetzt entscheidet mit, wie lange der
+  Zustand schon anhält.
+- Die Karte „Letzte Aktivität" auf der Übersicht stand für Techniker und
+  Betrachter dauerhaft leer da, weil das Audit-Log Admin-Sache ist — sie
+  erscheint dort jetzt gar nicht erst.
+- Die Aufgabenliste der Übersicht zeigte höchstens sechs Punkte, ohne Weg zum
+  Rest; die Überschrift zählte sie trotzdem mit.
+- `useTheme` las `localStorage` ungeschützt: im privaten Fenster oder bei
+  blockierten Site-Daten riss eine Farbeinstellung die gesamte Oberfläche in
+  die Fehlerseite.
+- Die Speicher-Schlüssel hießen noch nach dem früheren Produktnamen
+  (`ryntra-theme`, `ryntra-favorites`). Sie heißen jetzt `vulpexa-*`,
+  Bestehendes wird einmalig übernommen.
+- Nur noch die Latein-Subsets von IBM Plex Mono landen im Image — vorher auch
+  Kyrillisch, Griechisch und Vietnamesisch, 36 statt 18 Schriftdateien.
+- Der Zurück-Pfeil und das „⋯"-Menü der Geräteseite hatten keinen Namen für
+  Screenreader, der Theme-Umschalter nur ein `title`.
 - Die Live-Metriken auf der Geräteseite färbten nach Metrik statt nach Last:
   29 % RAM sahen rot aus, 12 % CPU orange. Jetzt gilt dieselbe Skala wie in
   der Geräteliste, damit dasselbe Gerät nicht auf zwei Seiten unterschiedlich

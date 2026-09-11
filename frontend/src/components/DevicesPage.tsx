@@ -90,12 +90,13 @@ function SoftwareSearch({ onOpenDevice }: { onOpenDevice: (id: number) => void }
   );
 }
 
-type Filter = 'alle' | 'probleme' | 'server' | 'familie' | 'offline';
+type Filter = 'alle' | 'ok' | 'probleme' | 'server' | 'familie' | 'offline';
 
-const FILTERS: Filter[] = ['alle', 'probleme', 'server', 'familie', 'offline'];
+const FILTERS: Filter[] = ['alle', 'ok', 'probleme', 'server', 'familie', 'offline'];
 
 const FILTER_LABEL: Record<Filter, string> = {
   alle: 'Alle',
+  ok: 'In Ordnung',
   probleme: 'Probleme',
   server: 'Server',
   familie: 'Familie',
@@ -106,6 +107,10 @@ const FILTER_LABEL: Record<Filter, string> = {
  *  counts on the chips and the rows below can never drift apart. */
 function matchesFilter(d: Device, f: Filter): boolean {
   switch (f) {
+    case 'ok':
+      // Erreichbar und ohne Befund — das Gegenstück zu 'probleme', damit der
+      // Zustandsbalken der Übersicht auf jede seiner Zeilen verlinken kann.
+      return d.online && !hasProblem(d);
     case 'server':
       return d.tags.includes('server');
     case 'familie':
@@ -175,12 +180,12 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
   const pager = usePagination(shown, 'devices', `${filter}|${personFilter}|${q.trim()}`);
 
   const filterOptions: FilterOption<Filter>[] = (
-    ['alle', 'probleme', 'server', 'familie', 'offline'] as Filter[]
+    ['alle', 'ok', 'probleme', 'server', 'familie', 'offline'] as Filter[]
   ).map((id) => ({
     id,
     label: FILTER_LABEL[id],
     count: id === 'alle' ? undefined : base.filter((d) => matchesFilter(d, id)).length,
-    tone: id === 'probleme' ? 'danger' : id === 'offline' ? 'warn' : 'neutral',
+    tone: id === 'probleme' ? 'danger' : id === 'offline' ? 'warn' : id === 'ok' ? 'ok' : 'neutral',
   }));
 
   return (

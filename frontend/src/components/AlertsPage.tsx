@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { formatRelative } from '../format';
 import { usePagination } from '../hooks/usePagination';
@@ -18,15 +18,41 @@ const RULE_LABEL: Record<string, string> = {
   patch_age: 'Überfällige Sicherheitsupdates',
 };
 
-function severity(rule: string): { label: string; color: string; bg: string } {
-  if (rule === 'disk' || rule === 'offline')
-    return { label: 'kritisch', color: 'var(--dangerS)', bg: 'var(--dangerBg)' };
-  return { label: 'warnung', color: 'var(--warn)', bg: 'var(--warnBg)' };
+/**
+ * Wie dringend ist das?
+ *
+ * Vorher hing das allein am Regeltyp: `disk` und `offline` kritisch, alles
+ * andere Warnung — womit ein seit Wochen offenes Sicherheitsupdate dauerhaft
+ * unter „Warnung" stand, während ein Server, der eine Minute lang nicht
+ * antwortet, als kritisch geführt wurde. Entscheidend ist, wie lange etwas
+ * schon so ist: ein frischer Alarm ist eine Meldung, ein alter ein Zustand.
+ */
+const ESCALATE_AFTER_S: Record<string, number> = {
+  // Ab hier ist es kein Ausrutscher mehr.
+  offline: 24 * 3600,
+  disk: 6 * 3600,
+  patch_age: 0, // Die Regel feuert erst nach ihrer eigenen Frist — sofort kritisch.
+};
+
+function severity(rule: string, firedAt: number, now: number): { label: string; color: string; bg: string } {
+  const after = ESCALATE_AFTER_S[rule];
+  const critical = after !== undefined && now - firedAt >= after;
+  return critical
+    ? { label: 'kritisch', color: 'var(--dangerS)', bg: 'var(--dangerBg)' }
+    : { label: 'warnung', color: 'var(--warn)', bg: 'var(--warnBg)' };
 }
 
 export function AlertsPage({ alerts, devices, onOpenDevice, onRefresh }: Props) {
   // Optimistic overlay while the poll catches up with the server-side ack.
   const [justAcked, setJustAcked] = useState<number[]>([]);
+  // Die Einstufung hängt am Alter des Alarms, also braucht sie eine Uhr, die
+  // läuft — sonst altert die Seite still, solange der Tab offen bleibt.
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   const ack = async (id: number) => {
     setJustAcked((a) => (a.includes(id) ? a : [...a, id]));
@@ -63,7 +89,7 @@ export function AlertsPage({ alerts, devices, onOpenDevice, onRefresh }: Props) 
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {openPager.items.map((a) => {
-            const sev = severity(a.rule);
+            const sev = severity(a.rule, a.fired_at, now);
             const isAcked = a.acked_at !== null || justAcked.includes(a.id);
             return (
               <div
@@ -117,9 +143,11 @@ export function AlertsPage({ alerts, devices, onOpenDevice, onRefresh }: Props) 
             Behoben
           </div>
           {resolvedPager.items.map((a) => (
-            <div key={a.id} className="card" style={{ padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 12, opacity: 0.6 }}>
+            <div key={a.id} className="card" style={{ padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
               <span className="dot" style={{ background: 'var(--ok)' }} />
-              <span style={{ fontWeight: 600, fontSize: 12.5, textDecoration: 'line-through' }}>{a.message}</span>
+              {/* Kein Durchstreichen und keine halbe Deckkraft mehr: behoben
+                  heißt erledigt, nicht unleserlich. */}
+              <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--tx2)' }}>{a.message}</span>
               <span className="muted" style={{ fontSize: 11 }}>{deviceName(a.device_id)}</span>
               <span className="grow" style={{ marginLeft: 'auto', fontWeight: 500, fontSize: 11, color: 'var(--ok)' }}>
                 behoben {formatRelative(a.resolved_at)}

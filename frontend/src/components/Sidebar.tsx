@@ -187,6 +187,7 @@ export function Sidebar({
               className="btn-icon"
               style={{ width: 28, height: 28 }}
               title="Theme wechseln"
+              aria-label={theme === 'dark' ? 'Zur hellen Ansicht wechseln' : 'Zur dunklen Ansicht wechseln'}
               onClick={onToggleTheme}
             >
               {theme === 'dark' ? <IconMoon /> : <IconSun />}

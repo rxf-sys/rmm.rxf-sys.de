@@ -5,8 +5,8 @@ export interface FilterOption<T extends string> {
   label: string;
   /** Rendered as a small pill after the label. Omit to show no count. */
   count?: number;
-  /** Tints the count pill — used for "Probleme"/"Offline"-style filters. */
-  tone?: 'neutral' | 'warn' | 'danger';
+  /** Tints the count pill — used for "In Ordnung"/"Probleme"/"Offline". */
+  tone?: 'neutral' | 'ok' | 'warn' | 'danger';
   /** Optional leading glyph (OS logo, icon). */
   icon?: React.ReactNode;
 }

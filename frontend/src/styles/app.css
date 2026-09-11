@@ -574,6 +574,10 @@ h1.page-title {
 .segment.active .segment-count {
   color: var(--tx2);
 }
+.segment-count.tone-ok {
+  background: var(--okBg);
+  color: var(--ok);
+}
 .segment-count.tone-warn {
   background: var(--warnBg);
   color: var(--warn);
@@ -2091,4 +2095,68 @@ textarea.input {
   .ov-act-cat {
     display: none;
   }
+}
+
+/* --- Verbindungsstreifen (components/ConnectionBanner.tsx) ------------ */
+/* Sitzt über dem Seiteninhalt, nimmt ihn aber nicht weg: die alten Zahlen
+   bleiben lesbar, nur eben datiert. */
+.conn-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--dangerS) 45%, transparent);
+  border-radius: 10px;
+  background: var(--dangerBg);
+  font-size: 12px;
+}
+.conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--dangerS);
+  animation: vPulse 1.6s ease-in-out infinite;
+}
+.conn-text {
+  color: var(--tx);
+}
+.conn-text b {
+  font-weight: 800;
+}
+.conn-detail {
+  color: var(--tx3);
+  font-size: 10.5px;
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conn-banner .btn {
+  margin-left: auto;
+  flex: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .conn-dot {
+    animation: none;
+  }
+}
+
+/* Rest der Aufgabenliste aufklappen (components/OverviewPage.tsx). */
+.ov-more {
+  width: 100%;
+  padding: 9px 16px;
+  border: none;
+  border-top: 1px solid var(--line2);
+  background: none;
+  color: var(--tx3);
+  font: 600 11.5px inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ov-more:hover {
+  background: var(--hover);
+  color: var(--accent);
 }
