@@ -76,10 +76,6 @@ export function loadColor(pct: number, kind: LoadKind): string {
   return level === 'crit' ? 'var(--dangerS)' : level === 'warn' ? 'var(--warn)' : 'var(--ok)';
 }
 
-export function diskColor(pct: number): string {
-  return loadColor(pct, 'disk');
-}
-
 const OS_SHORT: Record<string, string> = { windows: 'WIN', linux: 'LNX', darwin: 'MAC' };
 export function osShort(os: string): string {
   return OS_SHORT[os] ?? os.slice(0, 3).toUpperCase();

@@ -8,6 +8,14 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Flottenlast-Diagramm überarbeitet:** Die y-Achse skaliert jetzt auf die
+  tatsächlichen Werte (10/25/50/100 %) statt fest auf 0–100 — eine Flotte, die
+  bei 5 bis 10 % dümpelt, war vorher eine gerade Linie am unteren Rand. Dazu
+  beschriftete Gitterlinien, Zeitmarken alle sechs Stunden statt zweimal
+  derselben Uhrzeit an beiden Rändern, und eine Fußzeile mit Mittelwert und
+  Spitzenwert. Die x-Position kommt aus dem Zeitstempel statt aus dem Index:
+  eine fehlende Stunde verschob vorher alles danach, jetzt bleibt sie eine
+  Lücke und die Linie wird dort nicht durchgezogen.
 - **Übersichtsseite neu gebaut.** Statt Kennzahlen, die anderswo schon stehen,
   beginnt die Seite mit einer Liste „Zu tun": volle Platten, offene
   Sicherheitsupdates, länger abwesende Geräte, überfällige Update-Scans,
@@ -169,6 +177,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
 
 ### Behoben
+- Die Live-Metriken auf der Geräteseite färbten nach Metrik statt nach Last:
+  29 % RAM sahen rot aus, 12 % CPU orange. Jetzt gilt dieselbe Skala wie in
+  der Geräteliste, damit dasselbe Gerät nicht auf zwei Seiten unterschiedlich
+  dramatisch wirkt.
 - Offline-Geräte zählten gleichzeitig als „Problem"-Geräte: dieselbe Maschine
   stand unter beiden Filtern und die Trefferzahlen ergaben zusammen mehr als
   die Flotte. Offline ist jetzt eine eigene Lage — was auf einem nicht

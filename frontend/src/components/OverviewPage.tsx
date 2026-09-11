@@ -4,6 +4,7 @@ import { AUDIT_CATEGORY, auditNamesFrom, describeAudit } from '../auditText';
 import { deviceState } from '../deviceStatus';
 import { formatRelative } from '../format';
 import type { Fleet } from '../hooks/useFleet';
+import { niceCeiling, segmentsOf } from '../fleetChart';
 import { buildTasks, verdict, type OverviewTask, type TaskTarget } from '../overviewTasks';
 import type { Account, AuditEvent, FleetSample } from '../types';
 import { Skeleton } from '../ui';
@@ -67,16 +68,19 @@ function TaskRow({ task, onGo }: { task: OverviewTask; onGo: (t: TaskTarget) => 
 /**
  * Ein Flächendiagramm über die Stundenmittel der ganzen Flotte.
  *
- * Vorher stand hier eine Polylinie über die *aktuelle* CPU je Gerät — ein
- * Balkendiagramm ohne Achse, dessen x-Achse die Gerätereihenfolge war. Das
- * sah aus wie ein Verlauf und war keiner.
+ * Zwei Dinge, die ein Diagramm ehrlich machen und die das erste noch nicht
+ * konnte: die x-Position kommt aus dem Zeitstempel und nicht aus dem Index
+ * (eine fehlende Stunde verschob sonst alles danach), und die y-Achse ist
+ * beschriftet und auf die tatsächlichen Werte skaliert.
  */
-function LoadChart({ samples }: { samples: FleetSample[] }) {
+function LoadChart({ samples, now }: { samples: FleetSample[]; now: number }) {
   const [hover, setHover] = useState<number | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
-  const W = 600;
-  const H = 150;
-  const PAD_B = 18;
+  const W = 640;
+  const H = 168;
+  const PAD_L = 34;
+  const PAD_B = 20;
+  const PAD_T = 8;
 
   if (samples.length < 2) {
     return (
@@ -87,18 +91,39 @@ function LoadChart({ samples }: { samples: FleetSample[] }) {
     );
   }
 
-  const x = (i: number) => (i / (samples.length - 1)) * W;
-  const y = (v: number) => (H - PAD_B) - (v / 100) * (H - PAD_B);
-  const line = samples.map((s, i) => `${x(i).toFixed(1)},${y(s.cpu_avg).toFixed(1)}`).join(' ');
-  const area = `${x(0)},${H - PAD_B} ${line} ${x(samples.length - 1)},${H - PAD_B}`;
+  const from = now - CHART_HOURS * 3600;
+  const top = niceCeiling(Math.max(...samples.map((s) => s.cpu_avg)));
+  const x = (ts: number) => PAD_L + ((ts - from) / (now - from)) * (W - PAD_L);
+  const y = (v: number) => H - PAD_B - (v / top) * (H - PAD_B - PAD_T);
+  const path = (rows: FleetSample[]) =>
+    rows.map((s) => `${x(s.ts).toFixed(1)},${y(s.cpu_avg).toFixed(1)}`).join(' ');
+
+  const segments = segmentsOf(samples);
   const peak = samples.reduce((a, s) => (s.cpu_avg > a.cpu_avg ? s : a), samples[0] as FleetSample);
+  const mean = samples.reduce((a, s) => a + s.cpu_avg, 0) / samples.length;
   const active = hover === null ? null : samples[hover];
+
+  // Beschriftete Gitterlinien statt nackter Striche.
+  const grid = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(top * f));
+  // Alle sechs Stunden eine Marke — zwei gleich aussehende Ränder („13:00"
+  // links wie rechts) lasen sich wie ein Fehler.
+  const ticks: number[] = [];
+  for (let t = Math.ceil(from / (6 * 3600)) * 6 * 3600; t <= now; t += 6 * 3600) ticks.push(t);
 
   const pick = (clientX: number) => {
     const box = boxRef.current?.getBoundingClientRect();
     if (!box || box.width === 0) return;
+    // Aus der Pixelposition die Zeit, aus der Zeit den nächstgelegenen Punkt:
+    // über den Index ginge das bei Lücken daneben.
     const ratio = Math.min(1, Math.max(0, (clientX - box.left) / box.width));
-    setHover(Math.round(ratio * (samples.length - 1)));
+    // Umkehrung von x(): Pixel → SVG-Koordinate → Zeit.
+    const svgX = ratio * W;
+    const ts = from + ((svgX - PAD_L) / (W - PAD_L)) * (now - from);
+    let best = 0;
+    for (let i = 1; i < samples.length; i += 1) {
+      if (Math.abs(samples[i]!.ts - ts) < Math.abs(samples[best]!.ts - ts)) best = i;
+    }
+    setHover(best);
   };
 
   return (
@@ -108,57 +133,89 @@ function LoadChart({ samples }: { samples: FleetSample[] }) {
         width="100%"
         height="auto"
         role="img"
-        aria-label={`Durchschnittliche CPU-Last der Flotte über ${CHART_HOURS} Stunden, Höchstwert ${Math.round(peak.cpu_avg)} Prozent`}
+        aria-label={`Durchschnittliche CPU-Last der Flotte über ${CHART_HOURS} Stunden: im Mittel ${Math.round(mean)} Prozent, Spitze ${Math.round(peak.cpu_avg)} Prozent um ${hhmm(peak.ts)}`}
         onMouseMove={(e) => pick(e.clientX)}
         onMouseLeave={() => setHover(null)}
       >
         <defs>
           <linearGradient id="ov-load" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.32" />
             <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
           </linearGradient>
         </defs>
-        {[25, 50, 75].map((g) => (
-          <line key={g} x1="0" x2={W} y1={y(g)} y2={y(g)} stroke="var(--line2)" strokeWidth="1" />
+
+        {grid.map((v) => (
+          <g key={v}>
+            <line
+              x1={PAD_L}
+              x2={W}
+              y1={y(v)}
+              y2={y(v)}
+              stroke="var(--line2)"
+              strokeWidth="1"
+            />
+            <text className="ov-tick" x={PAD_L - 6} y={y(v) + 3} textAnchor="end">
+              {v}%
+            </text>
+          </g>
         ))}
-        <polygon points={area} fill="url(#ov-load)" />
-        <polyline
-          points={line}
-          fill="none"
-          stroke="var(--accent)"
-          strokeWidth="2"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
+
+        {segments.map((seg) => (
+          <g key={seg[0]!.ts}>
+            {seg.length > 1 && (
+              <polygon
+                points={`${x(seg[0]!.ts)},${y(0)} ${path(seg)} ${x(seg[seg.length - 1]!.ts)},${y(0)}`}
+                fill="url(#ov-load)"
+              />
+            )}
+            {seg.length > 1 ? (
+              <polyline
+                points={path(seg)}
+                fill="none"
+                stroke="var(--accent)"
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            ) : (
+              <circle cx={x(seg[0]!.ts)} cy={y(seg[0]!.cpu_avg)} r="2" fill="var(--accent)" />
+            )}
+          </g>
+        ))}
+
         {active && (
           <>
             <line
-              x1={x(hover ?? 0)}
-              x2={x(hover ?? 0)}
-              y1="0"
+              x1={x(active.ts)}
+              x2={x(active.ts)}
+              y1={PAD_T}
               y2={H - PAD_B}
               stroke="var(--accLine)"
               strokeWidth="1"
             />
-            <circle cx={x(hover ?? 0)} cy={y(active.cpu_avg)} r="3.5" fill="var(--accent)" />
+            <circle cx={x(active.ts)} cy={y(active.cpu_avg)} r="3.5" fill="var(--accent)" />
           </>
         )}
-        <text className="ov-tick" x="0" y={H - 4}>
-          {hhmm(samples[0]!.ts)}
-        </text>
-        <text className="ov-tick" x={W} y={H - 4} textAnchor="end">
-          {hhmm(samples[samples.length - 1]!.ts)}
-        </text>
+
+        {ticks.map((t) => (
+          <text key={t} className="ov-tick" x={x(t)} y={H - 4} textAnchor="middle">
+            {hhmm(t)}
+          </text>
+        ))}
       </svg>
       {active && (
         <div
           className="ov-tip"
-          style={{ left: `${((hover ?? 0) / (samples.length - 1)) * 100}%`, opacity: 1 }}
+          style={{ left: `${(x(active.ts) / W) * 100}%` }}
         >
           <b>{Math.round(active.cpu_avg)} %</b> um {hhmm(active.ts)} · {active.devices} Gerät
           {active.devices === 1 ? '' : 'e'}
         </div>
       )}
+      <p className="ov-footnote" style={{ marginTop: 8 }}>
+        Ø {Math.round(mean)} % über {CHART_HOURS} Stunden · Spitze {Math.round(peak.cpu_avg)} % um{' '}
+        {hhmm(peak.ts)}
+      </p>
     </div>
   );
 }
@@ -337,7 +394,7 @@ export function OverviewPage({
             <span className="ov-note">Ø CPU über alle Geräte, die gemeldet haben</span>
           </div>
           <div className="ov-card-body">
-            <LoadChart samples={samples} />
+            <LoadChart samples={samples} now={now} />
           </div>
         </section>
 

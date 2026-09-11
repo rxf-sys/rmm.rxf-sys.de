@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deviceState, diskColor, hasProblem, loadColor, loadLevel } from '../deviceStatus';
+import { deviceState, hasProblem, loadColor, loadLevel } from '../deviceStatus';
 import type { Device } from '../types';
 
 function device(over: Partial<Device> = {}): Device {
@@ -56,7 +56,7 @@ describe('loadColor', () => {
   });
 });
 
-describe('diskColor and deviceState', () => {
+describe('disk colour and deviceState', () => {
   // If these two disagreed, one row would show a green status dot next to a
   // red disk bar for the same device.
   it.each([50, 79, 80, 89, 90, 100])('agree at %i%%', (pct) => {
@@ -64,7 +64,7 @@ describe('diskColor and deviceState', () => {
     const state = deviceState(d);
     const expected =
       state === 'crit' ? 'var(--dangerS)' : state === 'warn' ? 'var(--warn)' : 'var(--ok)';
-    expect(diskColor(pct)).toBe(expected);
+    expect(loadColor(pct, 'disk')).toBe(expected);
   });
 });
 
