@@ -3,7 +3,7 @@ import { api } from '../api/client';
 import { formatRate, formatRelative } from '../format';
 import type { Account, AuditEvent, Device } from '../types';
 import type { Fleet } from '../hooks/useFleet';
-import { describeAudit } from '../auditText';
+import { auditNamesFrom, describeAudit } from '../auditText';
 import type { PageId } from './Sidebar';
 import { Dot, Skeleton } from '../ui';
 import { deviceState, diskColor, stateColor } from '../deviceStatus';
@@ -120,6 +120,8 @@ export function OverviewPage({ fleet, user, onOpenDevice, onNavigate, onOpenEnro
       .catch(() => setActivity([]));
     return () => ctrl.abort();
   }, []);
+
+  const names = useMemo(() => auditNamesFrom(devices), [devices]);
 
   const online = devices.filter((d) => d.online).length;
   const healthPct = devices.length ? Math.round((online / devices.length) * 100) : 0;
@@ -286,7 +288,7 @@ export function OverviewPage({ fleet, user, onOpenDevice, onNavigate, onOpenEnro
                 <span className="mono" style={{ flex: 'none', fontSize: 10, color: 'var(--tx3)', width: 52 }}>
                   {new Date(ev.ts * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
                 </span>
-                <span style={{ fontWeight: 500, fontSize: 12, color: 'var(--tx2)' }}>{describeAudit(ev)}</span>
+                <span style={{ fontWeight: 500, fontSize: 12, color: 'var(--tx2)' }}>{describeAudit(ev, names)}</span>
               </div>
             ))
           )}

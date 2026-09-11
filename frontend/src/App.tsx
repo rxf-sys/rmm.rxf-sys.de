@@ -290,7 +290,7 @@ export default function App() {
               }
             />
             <Route path={PAGE_PATH.docs} element={<DocsPage />} />
-            <Route path={PAGE_PATH.audit} element={isAdmin ? <AuditPage /> : <Forbidden />} />
+            <Route path={PAGE_PATH.audit} element={isAdmin ? <AuditPage devices={fleet.devices} /> : <Forbidden />} />
             <Route
               path={PAGE_PATH.admin}
               element={isAdmin ? <AdminPage currentUser={user} /> : <Forbidden />}

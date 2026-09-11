@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
-import { describeAudit } from '../auditText';
+import { auditNamesFrom, describeAudit } from '../auditText';
 import { deviceState, stateColor } from '../deviceStatus';
 import { formatDateTime, formatRelative, roleLabel } from '../format';
 import type { Account, Alert, AuditEvent, Device, PatchSummary, Person } from '../types';
@@ -90,6 +90,10 @@ export function PersonDetail({
         .slice(0, 8),
     [activity, account, deviceIds],
   );
+
+  // Ereignisse nennen auch fremde Geräte (z. B. wenn dieses Konto dort etwas
+  // getan hat), deshalb die ganze Flotte und nicht nur die eigenen Geräte.
+  const names = useMemo(() => auditNamesFrom(allDevices), [allDevices]);
 
   const unassigned = allDevices.filter((d) => d.person_id !== person.id);
 
@@ -293,7 +297,7 @@ export function PersonDetail({
                 {events.map((e) => (
                   <div key={e.id} className="activity-row">
                     <span className="activity-when">{formatRelative(e.ts)}</span>
-                    <span>{describeAudit(e)}</span>
+                    <span>{describeAudit(e, names)}</span>
                   </div>
                 ))}
               </div>

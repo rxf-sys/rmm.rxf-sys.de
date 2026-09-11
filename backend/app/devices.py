@@ -536,6 +536,17 @@ async def device_macs(device_id: int) -> list[str]:
         return []
 
 
+async def hostname_of(device_id: int) -> str:
+    """Just the display name. Used before a delete, where the caller needs the
+    name for the audit entry and the full device row would be wasted work."""
+    async with (
+        _connect() as db,
+        db.execute("SELECT hostname FROM devices WHERE id = ?", (device_id,)) as cur,
+    ):
+        row = await cur.fetchone()
+    return str(row[0]) if row else ""
+
+
 async def delete_device(device_id: int) -> bool:
     # Inventory rows cascade via their FK clause.
     async with _connect() as db:

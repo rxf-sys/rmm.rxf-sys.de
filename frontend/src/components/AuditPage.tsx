@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, apiErrorMessage } from '../api/client';
-import { AUDIT_CATEGORY, auditDayLabel, describeAudit } from '../auditText';
+import { AUDIT_CATEGORY, auditDayLabel, auditNamesFrom, describeAudit } from '../auditText';
 import { useServerPagination } from '../hooks/usePagination';
-import type { AuditEvent } from '../types';
+import type { AuditEvent, Device, Script } from '../types';
 import { FilterBar, type FilterOption } from './FilterBar';
 import { Pagination } from './Pagination';
 
@@ -82,8 +82,15 @@ function DetailTable({ e }: { e: AuditEvent }) {
  * last week". Filtering and paging both happen in SQL, so the page stays the
  * same size whether the log holds a thousand rows or a million.
  */
-export function AuditPage() {
+interface Props {
+  /** Live fleet, so rows written before the server stored hostnames still
+   *  name their device instead of showing a bare id. */
+  devices: Device[];
+}
+
+export function AuditPage({ devices }: Props) {
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
+  const [scripts, setScripts] = useState<Script[]>([]);
   const [total, setTotal] = useState(0);
   const [actors, setActors] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -147,6 +154,19 @@ export function AuditPage() {
       .catch(() => setActors([]));
     return () => ctrl.abort();
   }, []);
+
+  // Nur für die Namensauflösung alter Zeilen — schlägt der Abruf fehl, steht
+  // dort die ID, und das Log bleibt benutzbar.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    api
+      .scripts(ctrl.signal)
+      .then((r) => setScripts(r.scripts))
+      .catch(() => setScripts([]));
+    return () => ctrl.abort();
+  }, []);
+
+  const names = useMemo(() => auditNamesFrom(devices, scripts), [devices, scripts]);
 
   const filtered = securityOnly || category !== '' || actor !== '' || search !== '' || range !== '7d';
   const reset = () => {
@@ -270,7 +290,7 @@ export function AuditPage() {
                         {meta?.label ?? e.category}
                       </span>
                       <span className="audit-actor">{e.actor || 'system'}</span>
-                      <span className="audit-text">{describeAudit(e)}</span>
+                      <span className="audit-text">{describeAudit(e, names)}</span>
                       {e.security && (
                         <span className="audit-shield" title="Sicherheitsrelevant">
                           🛡
