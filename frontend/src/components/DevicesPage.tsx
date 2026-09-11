@@ -8,7 +8,7 @@ import { Dot, Skeleton } from '../ui';
 import { FilterBar, type FilterOption } from './FilterBar';
 import { Pagination } from './Pagination';
 import { usePagination } from '../hooks/usePagination';
-import { deviceState, loadColor, stateColor, type LoadKind } from '../deviceStatus';
+import { deviceState, hasProblem, loadColor, stateColor, type LoadKind } from '../deviceStatus';
 
 interface Props {
   devices: Device[];
@@ -108,7 +108,9 @@ function matchesFilter(d: Device, f: Filter): boolean {
     case 'familie':
       return d.tags.includes('familie');
     case 'probleme':
-      return deviceState(d) !== 'ok';
+      // Nur erreichbare Geräte mit einem echten Befund. Offline hat seinen
+      // eigenen Filter — siehe hasProblem().
+      return hasProblem(d);
     case 'offline':
       return !d.online;
     default:
