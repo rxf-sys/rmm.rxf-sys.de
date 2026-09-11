@@ -1,50 +1,28 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
-import { formatRate, formatRelative } from '../format';
-import type { Account, AuditEvent, Device } from '../types';
+import { AUDIT_CATEGORY, auditNamesFrom, describeAudit } from '../auditText';
+import { deviceState } from '../deviceStatus';
+import { formatRelative } from '../format';
 import type { Fleet } from '../hooks/useFleet';
-import { auditNamesFrom, describeAudit } from '../auditText';
+import { buildTasks, verdict, type OverviewTask, type TaskTarget } from '../overviewTasks';
+import type { Account, AuditEvent, FleetSample } from '../types';
+import { Skeleton } from '../ui';
 import type { PageId } from './Sidebar';
-import { Dot, Skeleton } from '../ui';
-import { deviceState, diskColor, stateColor } from '../deviceStatus';
-import { OsIcon } from '../icons';
 
 interface Props {
   fleet: Fleet;
   user: Account;
   onOpenDevice: (id: number) => void;
-  onNavigate: (p: PageId) => void;
+  /** `query` hängt die Filter-Parameter an (z. B. `filter=offline`). */
+  onNavigate: (p: PageId, query?: string) => void;
   onOpenEnroll: () => void;
   canEnroll: boolean;
 }
 
-/** Circular gauge (SVG ring) used by the hero cards. */
-function Ring({ pct, color, label }: { pct: number; color: string; label: string }) {
-  const r = 26;
-  const circ = 2 * Math.PI * r;
-  const dash = `${(pct / 100) * circ} ${circ}`;
-  return (
-    <svg width="64" height="64" viewBox="0 0 64 64" style={{ flex: 'none' }}>
-      <circle cx="32" cy="32" r={r} fill="none" style={{ stroke: 'var(--line)' }} strokeWidth="6" />
-      <circle
-        cx="32"
-        cy="32"
-        r={r}
-        fill="none"
-        style={{ stroke: color }}
-        strokeWidth="6"
-        strokeDasharray={dash}
-        strokeLinecap="round"
-        transform="rotate(-90 32 32)"
-      />
-      {/* Kein hartes 'Manrope': Familie heißt seit dem Self-Hosting
-          'Manrope Variable' — einfach vom Dokument erben. */}
-      <text x="32" y="37" textAnchor="middle" style={{ fill: 'var(--tx)', fontWeight: 700, fontSize: 14 }}>
-        {label}
-      </text>
-    </svg>
-  );
-}
+/** Wie viele Aufgaben höchstens angezeigt werden — der Rest steht als Zahl in
+ *  der Überschrift, damit die Seite nicht auf eine Scroll-Liste hinausläuft. */
+const MAX_TASKS = 6;
+const CHART_HOURS = 24;
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -53,66 +31,163 @@ function greeting(): string {
   return 'Guten Abend';
 }
 
-function DeviceCard({ d, onOpen }: { d: Device; onOpen: () => void }) {
-  const st = deviceState(d);
-  const disk = Math.max(0, ...(d.heartbeat.disks ?? []).map((x) => x.used_pct));
-  const cpu = d.online ? Math.round(d.heartbeat.cpu_pct ?? 0) : 0;
-  const ram = d.online ? Math.round(d.heartbeat.mem_pct ?? 0) : 0;
+function hhmm(ts: number): string {
+  return new Date(ts * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+}
+
+const SEVERITY_COLOR = {
+  crit: 'var(--dangerS)',
+  warn: 'var(--warn)',
+  info: 'var(--tx3)',
+  ok: 'var(--ok)',
+} as const;
+
+// ---------------------------------------------------------------------------
+// Aufgabenliste
+// ---------------------------------------------------------------------------
+
+function TaskRow({ task, onGo }: { task: OverviewTask; onGo: (t: TaskTarget) => void }) {
   return (
-    <button className="card card-pad lift" style={{ display: 'flex', flexDirection: 'column', gap: 10, cursor: 'pointer', textAlign: 'left', color: 'var(--tx)' }} onClick={onOpen}>
-      <div className="row" style={{ width: '100%' }}>
-        <Dot color={stateColor(st)} />
-        <span style={{ fontWeight: 700, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {d.hostname}
-        </span>
-        <span className="chip chip-os" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center' }} title={d.os}>
-          <OsIcon os={d.os} size={12} />
-        </span>
-      </div>
-      <div className="muted" style={{ fontSize: 11 }}>
-        {d.owner_label || '—'} · {d.online ? 'online' : 'offline'} · zuletzt {formatRelative(d.last_seen_at)}
-      </div>
-      <div className="row" style={{ gap: 8, width: '100%', alignItems: 'stretch' }}>
-        <div className="minibar">
-          <span className="minibar-label">CPU</span>
-          <div className="bar">
-            <span className="bar-fill" style={{ width: `${cpu}%`, background: 'var(--accent)' }} />
-          </div>
-        </div>
-        <div className="minibar">
-          <span className="minibar-label">RAM</span>
-          <div className="bar">
-            <span className="bar-fill" style={{ width: `${ram}%`, background: 'var(--violet)' }} />
-          </div>
-        </div>
-        <div className="minibar">
-          <span className="minibar-label">DISK</span>
-          <div className="bar">
-            <span className="bar-fill" style={{ width: `${Math.round(disk)}%`, background: diskColor(disk) }} />
-          </div>
-        </div>
-      </div>
-      <div className="row" style={{ gap: 10, width: '100%', fontSize: 10, fontWeight: 600, color: 'var(--tx3)' }}>
-        <span className="minibar-label">NETZ</span>
-        {d.online && d.heartbeat.net_rx_bps !== undefined ? (
-          <>
-            <span style={{ color: 'var(--tx2)' }}>↓ {formatRate(d.heartbeat.net_rx_bps)}</span>
-            <span style={{ color: 'var(--tx2)' }}>↑ {formatRate(d.heartbeat.net_tx_bps)}</span>
-          </>
-        ) : (
-          <span>—</span>
-        )}
-      </div>
+    <button className="ov-task" type="button" onClick={() => onGo(task.target)}>
+      <span className="ov-rail" style={{ background: SEVERITY_COLOR[task.severity] }} />
+      <span className={`ov-sev ov-sev-${task.severity}`}>{task.tag}</span>
+      <span className="ov-task-body">
+        <span className="ov-task-title">{task.title}</span>
+        <span className="ov-task-why">{task.why}</span>
+      </span>
+      <span className="ov-go">{task.actionLabel}</span>
     </button>
   );
 }
 
-export function OverviewPage({ fleet, user, onOpenDevice, onNavigate, onOpenEnroll, canEnroll }: Props) {
+// ---------------------------------------------------------------------------
+// Flottenlast, letzte 24 Stunden
+// ---------------------------------------------------------------------------
+
+/**
+ * Ein Flächendiagramm über die Stundenmittel der ganzen Flotte.
+ *
+ * Vorher stand hier eine Polylinie über die *aktuelle* CPU je Gerät — ein
+ * Balkendiagramm ohne Achse, dessen x-Achse die Gerätereihenfolge war. Das
+ * sah aus wie ein Verlauf und war keiner.
+ */
+function LoadChart({ samples }: { samples: FleetSample[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const W = 600;
+  const H = 150;
+  const PAD_B = 18;
+
+  if (samples.length < 2) {
+    return (
+      <p className="muted" style={{ margin: '18px 0', fontSize: 12 }}>
+        Noch zu wenige Messpunkte — die Kurve entsteht aus den Heartbeats der letzten{' '}
+        {CHART_HOURS} Stunden.
+      </p>
+    );
+  }
+
+  const x = (i: number) => (i / (samples.length - 1)) * W;
+  const y = (v: number) => (H - PAD_B) - (v / 100) * (H - PAD_B);
+  const line = samples.map((s, i) => `${x(i).toFixed(1)},${y(s.cpu_avg).toFixed(1)}`).join(' ');
+  const area = `${x(0)},${H - PAD_B} ${line} ${x(samples.length - 1)},${H - PAD_B}`;
+  const peak = samples.reduce((a, s) => (s.cpu_avg > a.cpu_avg ? s : a), samples[0] as FleetSample);
+  const active = hover === null ? null : samples[hover];
+
+  const pick = (clientX: number) => {
+    const box = boxRef.current?.getBoundingClientRect();
+    if (!box || box.width === 0) return;
+    const ratio = Math.min(1, Math.max(0, (clientX - box.left) / box.width));
+    setHover(Math.round(ratio * (samples.length - 1)));
+  };
+
+  return (
+    <div className="ov-chart" ref={boxRef}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        width="100%"
+        height="auto"
+        role="img"
+        aria-label={`Durchschnittliche CPU-Last der Flotte über ${CHART_HOURS} Stunden, Höchstwert ${Math.round(peak.cpu_avg)} Prozent`}
+        onMouseMove={(e) => pick(e.clientX)}
+        onMouseLeave={() => setHover(null)}
+      >
+        <defs>
+          <linearGradient id="ov-load" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {[25, 50, 75].map((g) => (
+          <line key={g} x1="0" x2={W} y1={y(g)} y2={y(g)} stroke="var(--line2)" strokeWidth="1" />
+        ))}
+        <polygon points={area} fill="url(#ov-load)" />
+        <polyline
+          points={line}
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        {active && (
+          <>
+            <line
+              x1={x(hover ?? 0)}
+              x2={x(hover ?? 0)}
+              y1="0"
+              y2={H - PAD_B}
+              stroke="var(--accLine)"
+              strokeWidth="1"
+            />
+            <circle cx={x(hover ?? 0)} cy={y(active.cpu_avg)} r="3.5" fill="var(--accent)" />
+          </>
+        )}
+        <text className="ov-tick" x="0" y={H - 4}>
+          {hhmm(samples[0]!.ts)}
+        </text>
+        <text className="ov-tick" x={W} y={H - 4} textAnchor="end">
+          {hhmm(samples[samples.length - 1]!.ts)}
+        </text>
+      </svg>
+      {active && (
+        <div
+          className="ov-tip"
+          style={{ left: `${((hover ?? 0) / (samples.length - 1)) * 100}%`, opacity: 1 }}
+        >
+          <b>{Math.round(active.cpu_avg)} %</b> um {hhmm(active.ts)} · {active.devices} Gerät
+          {active.devices === 1 ? '' : 'e'}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+export function OverviewPage({
+  fleet,
+  user,
+  onOpenDevice,
+  onNavigate,
+  onOpenEnroll,
+  canEnroll,
+}: Props) {
   const { devices, alerts, patchSummary, loading } = fleet;
   const [activity, setActivity] = useState<AuditEvent[] | null>(null);
+  const [samples, setSamples] = useState<FleetSample[]>([]);
+  // Die Aufgaben rechnen mit „jetzt" („seit 3 Tagen offline"), also muss die
+  // Uhr laufen — sonst altert die Seite still, solange der Tab offen bleibt.
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
 
   useEffect(() => {
-    // Activity feed is admin-only (audit endpoint); silently skip otherwise.
+    const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    // Aktivität ist Admin-Sache (Audit-Endpunkt); für alle anderen bleibt die
+    // Karte leer statt eine Fehlermeldung zu zeigen.
     const ctrl = new AbortController();
     api
       .audit({ limit: 6 }, ctrl.signal)
@@ -121,117 +196,74 @@ export function OverviewPage({ fleet, user, onOpenDevice, onNavigate, onOpenEnro
     return () => ctrl.abort();
   }, []);
 
+  useEffect(() => {
+    const ctrl = new AbortController();
+    api
+      .fleetMetrics(CHART_HOURS, ctrl.signal)
+      .then((r) => setSamples(r.samples))
+      .catch(() => setSamples([]));
+    return () => ctrl.abort();
+  }, []);
+
   const names = useMemo(() => auditNamesFrom(devices), [devices]);
+  const tasks = useMemo(
+    () => buildTasks({ devices, patchSummary, now }),
+    [devices, patchSummary, now],
+  );
+  const head = verdict(devices, tasks);
 
   const online = devices.filter((d) => d.online).length;
-  const healthPct = devices.length ? Math.round((online / devices.length) * 100) : 0;
-  const totalPending = Object.values(patchSummary).reduce((a, s) => a + s.pending, 0);
-  const totalSecurity = Object.values(patchSummary).reduce((a, s) => a + s.security, 0);
-  const devicesWithPatches = Object.values(patchSummary).filter((s) => s.pending > 0).length;
-  const compliancePct = devices.length
-    ? Math.round(((devices.length - devicesWithPatches) / devices.length) * 100)
-    : 100;
+  const pending = Object.values(patchSummary).reduce((a, s) => a + s.pending, 0);
+  const security = Object.values(patchSummary).reduce((a, s) => a + s.security, 0);
+  const patchedDevices = Object.values(patchSummary).filter((s) => s.pending > 0).length;
+  const securityDevices = Object.values(patchSummary).filter((s) => s.security > 0).length;
   const openAlerts = alerts.filter((a) => a.resolved_at === null);
-  const critical = openAlerts.filter((a) => a.rule === 'offline' || a.rule === 'disk').length;
+  const ackedAlerts = openAlerts.filter((a) => a.acked_at !== null).length;
 
-  // Fleet-load sparkline from current CPU per device (a cheap live proxy;
-  // real 24h aggregation would need a history endpoint).
-  const spark = useMemo(() => {
-    const vals = devices.filter((d) => d.online).map((d) => d.heartbeat.cpu_pct ?? 0);
-    if (vals.length < 2) return '';
-    const w = 240;
-    const h = 44;
-    return vals
-      .map((v, i) => `${((i / (vals.length - 1)) * w).toFixed(1)},${(h - (v / 100) * h).toFixed(1)}`)
-      .join(' ');
+  const buckets = useMemo(() => {
+    const counts = { ok: 0, warn: 0, crit: 0, off: 0 };
+    for (const d of devices) counts[deviceState(d)] += 1;
+    return counts;
   }, [devices]);
-  const avgCpu = devices.filter((d) => d.online).length
-    ? Math.round(
-        devices.filter((d) => d.online).reduce((a, d) => a + (d.heartbeat.cpu_pct ?? 0), 0) /
-          devices.filter((d) => d.online).length,
-      )
-    : 0;
 
-  const sorted = [...devices].sort((a, b) => {
-    const order = { crit: 0, warn: 1, off: 2, ok: 3 };
-    return order[deviceState(a)] - order[deviceState(b)];
-  });
+  const go = (t: TaskTarget) =>
+    t.kind === 'device' ? onOpenDevice(t.id) : onNavigate(t.page, t.query);
+
+  if (loading && devices.length === 0) {
+    return (
+      <div className="screen">
+        <Skeleton />
+        <Skeleton />
+      </div>
+    );
+  }
 
   return (
     <div className="screen">
-      <div className="page-head">
+      <div className="ov-head">
         <h1 className="page-title">
           {greeting()}, {user.username}
         </h1>
         <span className="muted">
-          {new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}
+          {new Date().toLocaleDateString('de-DE', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+          })}
           {devices.length > 0 && ` · ${online} von ${devices.length} Geräten melden sich planmäßig`}
         </span>
+        <div className="ov-verdict">
+          <span className="ov-pip" style={{ background: SEVERITY_COLOR[head.severity] }} />
+          <span>{head.text}</span>
+        </div>
       </div>
 
-      <div className="grid-4">
-        {loading && devices.length === 0 ? (
-          <>
-            <Skeleton /> <Skeleton /> <Skeleton /> <Skeleton />
-          </>
-        ) : (
-          <>
-            <div className="card card-pad row" style={{ gap: 14 }}>
-              <Ring pct={healthPct} color="var(--ok)" label={`${healthPct}%`} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--tx2)' }}>Systemzustand</span>
-                <span style={{ fontWeight: 800, fontSize: 17 }}>
-                  {online} / {devices.length} online
-                </span>
-                <span className="muted" style={{ fontSize: 11 }}>
-                  {devices.length - online} offline
-                </span>
-              </div>
-            </div>
-            <button className="card card-pad row clickable" style={{ gap: 14, cursor: 'pointer', color: 'var(--tx)' }} onClick={() => onNavigate('patches')}>
-              <Ring pct={compliancePct} color="var(--warn)" label={`${compliancePct}%`} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
-                <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--tx2)' }}>Patch-Compliance</span>
-                <span style={{ fontWeight: 800, fontSize: 17 }}>{totalPending} Updates offen</span>
-                <span className="muted" style={{ fontSize: 11 }}>davon {totalSecurity} sicherheitskritisch</span>
-              </div>
-            </button>
-            <button className="card card-pad clickable" style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center', cursor: 'pointer', color: 'var(--tx)', textAlign: 'left' }} onClick={() => onNavigate('alerts')}>
-              <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--tx2)' }}>Offene Alarme</span>
-              <div className="row" style={{ alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontWeight: 800, fontSize: 26, color: openAlerts.length ? 'var(--danger)' : 'var(--ok)' }}>
-                  {openAlerts.length}
-                </span>
-                {critical > 0 && <span className="badge badge-danger">{critical} kritisch</span>}
-              </div>
-              <span className="muted" style={{ fontSize: 11 }}>
-                {openAlerts[0]?.message ?? 'alles ruhig'}
-              </span>
-            </button>
-            <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
-              <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--tx2)' }}>Flottenlast · jetzt</span>
-              <svg width="100%" height="44" viewBox="0 0 240 44" preserveAspectRatio="none">
-                {spark && (
-                  <polyline points={spark} fill="none" style={{ stroke: 'var(--accent)' }} strokeWidth="2" strokeLinecap="round" />
-                )}
-              </svg>
-              <span className="muted" style={{ fontSize: 11 }}>Ø {avgCpu} % CPU über {online} Geräte</span>
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="page-head" style={{ marginTop: 2 }}>
-        <span style={{ fontWeight: 800, fontSize: 15 }}>Geräte</span>
-        <span className="muted">nach Status sortiert</span>
-        <button className="link-btn grow" onClick={() => onNavigate('devices')}>
-          Alle ansehen →
-        </button>
-      </div>
       {devices.length === 0 ? (
         <div className="empty">
           <h2>Noch keine Geräte</h2>
-          <p className="muted">Installiere den Agenten auf deinem ersten Gerät, um Monitoring zu starten.</p>
+          <p className="muted">
+            Installiere den Agenten auf deinem ersten Gerät, um Monitoring zu starten.
+          </p>
           {canEnroll && (
             <button className="btn btn-primary" style={{ marginTop: 4 }} onClick={onOpenEnroll}>
               + Gerät hinzufügen
@@ -239,61 +271,170 @@ export function OverviewPage({ fleet, user, onOpenDevice, onNavigate, onOpenEnro
           )}
         </div>
       ) : (
-        <div className="grid-4">
-          {sorted.slice(0, 8).map((d) => (
-            <DeviceCard key={d.id} d={d} onOpen={() => onOpenDevice(d.id)} />
-          ))}
-        </div>
-      )}
-
-      <div className="grid-2">
-        <div className="card" style={{ overflow: 'hidden' }}>
-          <div className="card-head">
-            <span className="card-title">Offene Alarme</span>
-            <button className="link-btn" style={{ marginLeft: 'auto' }} onClick={() => onNavigate('alerts')}>
-              Alarm-Center →
-            </button>
+        <section className="card ov-tasks" aria-labelledby="ov-tasks-h">
+          <div className="ov-tasks-head">
+            <h2 id="ov-tasks-h">Zu tun</h2>
+            <span className="ov-count">
+              {tasks.length === 0
+                ? 'nichts offen'
+                : `${tasks.length} Punkt${tasks.length === 1 ? '' : 'e'}`}
+            </span>
           </div>
-          {openAlerts.length === 0 ? (
-            <div style={{ padding: '14px 16px' }} className="muted">
-              Keine offenen Alarme.
+          {tasks.length === 0 ? (
+            <div className="ov-nothing">
+              <span style={{ color: 'var(--ok)', fontSize: 18 }}>✓</span>
+              <span>
+                Keine offenen Befunde. Platten unter 80 %, keine Sicherheitsupdates offen, alle
+                Geräte erreichbar.
+              </span>
             </div>
           ) : (
-            openAlerts.slice(0, 4).map((a) => {
-              const color = a.rule === 'disk' || a.rule === 'offline' ? 'var(--dangerS)' : 'var(--warn)';
-              return (
-                <div key={a.id} className="row" style={{ padding: '11px 16px', borderBottom: '1px solid var(--line2)' }}>
-                  <span className="dot" style={{ background: color }} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                    <span style={{ fontWeight: 700, fontSize: 12.5 }}>{a.message}</span>
-                    <span className="muted" style={{ fontSize: 11 }}>{formatRelative(a.fired_at)}</span>
-                  </div>
-                  <span className="badge grow" style={{ marginLeft: 'auto', color, background: 'transparent' }}>
-                    {a.rule === 'disk' ? 'Disk' : a.rule === 'offline' ? 'Offline' : a.rule}
-                  </span>
-                </div>
-              );
-            })
+            tasks.slice(0, MAX_TASKS).map((t) => <TaskRow key={t.id} task={t} onGo={go} />)
           )}
+        </section>
+      )}
+
+      <div className="ov-kpis">
+        <button className="ov-kpi" type="button" onClick={() => onNavigate('devices')}>
+          <span className="ov-k">Online</span>
+          <span className="ov-v">
+            {online}
+            <span style={{ color: 'var(--tx3)', fontSize: 15 }}>/{devices.length}</span>
+          </span>
+          <span className="ov-n">{devices.length - online} offline</span>
+        </button>
+        <button className="ov-kpi" type="button" onClick={() => onNavigate('patches')}>
+          <span className="ov-k">Updates offen</span>
+          <span className="ov-v" style={{ color: pending ? 'var(--warn)' : undefined }}>
+            {pending}
+          </span>
+          <span className="ov-n">auf {patchedDevices} Geräten</span>
+        </button>
+        <button className="ov-kpi" type="button" onClick={() => onNavigate('patches')}>
+          <span className="ov-k">Sicherheit</span>
+          <span className="ov-v" style={{ color: security ? 'var(--dangerS)' : 'var(--ok)' }}>
+            {security}
+          </span>
+          <span className="ov-n">
+            {security === 0 ? 'nichts offen' : `auf ${securityDevices} Geräten`}
+          </span>
+        </button>
+        <button className="ov-kpi" type="button" onClick={() => onNavigate('alerts')}>
+          <span className="ov-k">Offene Alarme</span>
+          <span className="ov-v" style={{ color: openAlerts.length ? 'var(--dangerS)' : 'var(--ok)' }}>
+            {openAlerts.length}
+          </span>
+          <span className="ov-n">
+            {openAlerts.length === 0 ? 'alles ruhig' : `${ackedAlerts} quittiert`}
+          </span>
+        </button>
+      </div>
+
+      <div className="ov-band">
+        <section className="card" aria-labelledby="ov-load-h">
+          <div className="ov-card-head">
+            <h2 id="ov-load-h">Flottenlast, letzte 24 Stunden</h2>
+            <span className="ov-note">Ø CPU über alle Geräte, die gemeldet haben</span>
+          </div>
+          <div className="ov-card-body">
+            <LoadChart samples={samples} />
+          </div>
+        </section>
+
+        <section className="card" aria-labelledby="ov-state-h">
+          <div className="ov-card-head">
+            <h2 id="ov-state-h">Flotte nach Zustand</h2>
+          </div>
+          <div className="ov-card-body">
+            <div className="ov-statebar" role="presentation">
+              {(['ok', 'warn', 'crit', 'off'] as const).map(
+                (k) =>
+                  buckets[k] > 0 && (
+                    <span
+                      key={k}
+                      style={{
+                        flex: buckets[k],
+                        background:
+                          k === 'ok'
+                            ? 'var(--ok)'
+                            : k === 'warn'
+                              ? 'var(--warn)'
+                              : k === 'crit'
+                                ? 'var(--dangerS)'
+                                : 'var(--tx3)',
+                      }}
+                    />
+                  ),
+              )}
+            </div>
+            <div className="ov-legend">
+              <button className="ov-legend-row" type="button" onClick={() => onNavigate('devices')}>
+                <span className="ov-sw" style={{ background: 'var(--ok)' }} />
+                <span>In Ordnung</span>
+                <span className="ov-num">{buckets.ok}</span>
+              </button>
+              <button
+                className="ov-legend-row"
+                type="button"
+                onClick={() => onNavigate('devices', 'filter=probleme')}
+              >
+                <span className="ov-sw" style={{ background: 'var(--warn)' }} />
+                <span>Warnung · Platte ab 80 %</span>
+                <span className="ov-num">{buckets.warn}</span>
+              </button>
+              <button
+                className="ov-legend-row"
+                type="button"
+                onClick={() => onNavigate('devices', 'filter=probleme')}
+              >
+                <span className="ov-sw" style={{ background: 'var(--dangerS)' }} />
+                <span>Kritisch · Platte ab 90 %</span>
+                <span className="ov-num">{buckets.crit}</span>
+              </button>
+              <button
+                className="ov-legend-row"
+                type="button"
+                onClick={() => onNavigate('devices', 'filter=offline')}
+              >
+                <span className="ov-sw" style={{ background: 'var(--tx3)' }} />
+                <span>Offline</span>
+                <span className="ov-num">{buckets.off}</span>
+              </button>
+            </div>
+            <p className="ov-footnote">Jede Zeile führt auf die Geräteseite mit diesem Filter.</p>
+          </div>
+        </section>
+      </div>
+
+      <section className="card" aria-labelledby="ov-act-h">
+        <div className="ov-card-head">
+          <h2 id="ov-act-h">Letzte Aktivität</h2>
+          <button className="link-btn ov-note" onClick={() => onNavigate('audit')}>
+            Audit-Log →
+          </button>
         </div>
-        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <span className="card-title">Letzte Aktivität</span>
+        <div className="ov-card-body">
           {activity === null ? (
             <span className="muted">Lade…</span>
           ) : activity.length === 0 ? (
             <span className="muted">Keine Ereignisse.</span>
           ) : (
-            activity.slice(0, 5).map((ev) => (
-              <div key={ev.id} className="row" style={{ alignItems: 'baseline', gap: 10 }}>
-                <span className="mono" style={{ flex: 'none', fontSize: 10, color: 'var(--tx3)', width: 52 }}>
-                  {new Date(ev.ts * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-                <span style={{ fontWeight: 500, fontSize: 12, color: 'var(--tx2)' }}>{describeAudit(ev, names)}</span>
-              </div>
-            ))
+            <div className="ov-act">
+              {activity.slice(0, 5).map((ev) => (
+                <div key={ev.id} className="ov-act-row">
+                  <span className="ov-act-time" title={formatRelative(ev.ts)}>
+                    {hhmm(ev.ts)}
+                  </span>
+                  <span className={`badge ${AUDIT_CATEGORY[ev.category]?.tone ?? ''} ov-act-cat`}>
+                    {AUDIT_CATEGORY[ev.category]?.label ?? ev.category}
+                  </span>
+                  <span className="ov-act-text">{describeAudit(ev, names)}</span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
-      </div>
+      </section>
     </div>
   );
 }

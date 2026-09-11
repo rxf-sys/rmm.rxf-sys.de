@@ -134,9 +134,11 @@ export default function App() {
     setPaletteOpen(false);
     setNavOpen(false);
   };
-  const goPage = (p: PageId) => {
+  // `query` trägt Filter mit (z. B. die Übersicht, die auf die Geräteseite mit
+  // genau einem Filter verweist) — der Pfad bleibt die Wahrheit über die Seite.
+  const goPage = (p: PageId, query?: string) => {
     closeOverlays();
-    navigate(PAGE_PATH[p]);
+    navigate(query ? `${PAGE_PATH[p]}?${query}` : PAGE_PATH[p]);
   };
   const openDevice = (id: number) => {
     closeOverlays();

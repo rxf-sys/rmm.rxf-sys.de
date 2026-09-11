@@ -84,3 +84,42 @@ async def test_delete_for_device(client: AsyncClient, settings: Settings):
     await _insert_sample(settings, 7, now - 30)
     await metrics.delete_for_device(7)
     assert await metrics.history(7, hours=48) == []
+
+
+async def test_fleet_history_buckets_by_hour(client: AsyncClient, settings: Settings):
+    """One row per hour for the whole fleet, not one line per device."""
+    hour = int(time.time()) // 3600 * 3600
+    await _insert_sample(settings, 1, hour + 10, cpu=20.0)
+    await _insert_sample(settings, 2, hour + 20, cpu=40.0)
+    await _insert_sample(settings, 1, hour - 3600 + 10, cpu=80.0)
+
+    rows = await metrics.fleet_history(hours=3)
+    assert len(rows) == 2
+    latest = rows[-1]
+    assert latest["ts"] == hour
+    assert latest["cpu_avg"] == 30.0  # (20 + 40) / 2
+    assert latest["devices"] == 2
+    assert latest["samples"] == 2
+
+
+async def test_fleet_history_respects_the_visible_set(client: AsyncClient, settings: Settings):
+    now = int(time.time())
+    await _insert_sample(settings, 1, now - 60, cpu=10.0)
+    await _insert_sample(settings, 2, now - 60, cpu=90.0)
+
+    assert (await metrics.fleet_history(hours=2, device_ids=[1]))[-1]["cpu_avg"] == 10.0
+    # A viewer with no devices sees nothing at all — not the fleet average.
+    assert await metrics.fleet_history(hours=2, device_ids=[]) == []
+
+
+async def test_fleet_metrics_endpoint_requires_a_session(client: AsyncClient):
+    assert (await client.get("/api/fleet/metrics")).status_code == 401
+
+
+async def test_fleet_metrics_endpoint_returns_samples(admin_client: AsyncClient):
+    await metrics.record(1, cpu_pct=50.0, mem_pct=10.0, disk_max_pct=5.0)
+    r = await admin_client.get("/api/fleet/metrics?hours=6")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["hours"] == 6
+    assert body["samples"][-1]["cpu_avg"] == 50.0

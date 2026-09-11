@@ -9,6 +9,7 @@ import type {
   Device,
   DeviceDetail,
   EnrollToken,
+  FleetSample,
   Job,
   MetricSample,
   AlertStats,
@@ -247,6 +248,9 @@ export const api = {
   },
   auditMeta: (signal?: AbortSignal) =>
     get<{ categories: string[]; actors: string[] }>('/api/audit/meta', signal),
+
+  fleetMetrics: (hours: number, signal?: AbortSignal) =>
+    get<{ hours: number; samples: FleetSample[] }>(`/api/fleet/metrics?hours=${hours}`, signal),
 
   // Patches
   patchSummary: (signal?: AbortSignal) =>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, apiErrorMessage } from '../api/client';
 import { formatRelative, osLabel } from '../format';
 import { osShort } from '../deviceStatus';
@@ -91,6 +92,8 @@ function SoftwareSearch({ onOpenDevice }: { onOpenDevice: (id: number) => void }
 
 type Filter = 'alle' | 'probleme' | 'server' | 'familie' | 'offline';
 
+const FILTERS: Filter[] = ['alle', 'probleme', 'server', 'familie', 'offline'];
+
 const FILTER_LABEL: Record<Filter, string> = {
   alle: 'Alle',
   probleme: 'Probleme',
@@ -142,7 +145,13 @@ function Meter({ label, pct, kind, online }: { label: string; pct: number; kind:
 
 export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDevice }: Props) {
   const [q, setQ] = useState('');
-  const [filter, setFilter] = useState<Filter>('alle');
+  // Der Filter steht in der URL, nicht im State: so führt die Übersicht direkt
+  // auf „Geräte mit Problem" und die Ansicht bleibt teil- und lesezeichenbar.
+  const [params, setParams] = useSearchParams();
+  const raw = params.get('filter');
+  const filter: Filter = FILTERS.includes(raw as Filter) ? (raw as Filter) : 'alle';
+  const setFilter = (f: Filter) =>
+    setParams(f === 'alle' ? {} : { filter: f }, { replace: true });
   const [personFilter, setPersonFilter] = useState<number | 'alle'>('alle');
 
   const personName = (id: number | null) =>

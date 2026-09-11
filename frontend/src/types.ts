@@ -57,6 +57,8 @@ export interface Device {
   connected: boolean;
   /** Version of a newer signed agent release on the server, else null. */
   agent_update_available: string | null;
+  /** Letzter eingetroffener Update-Scan; 0 = noch nie. */
+  last_patch_scan_at: number;
 }
 
 export interface Person {
@@ -287,3 +289,14 @@ export interface Patch {
 
 /** Per-device patch counts, keyed by device id (as string from JSON). */
 export type PatchSummary = Record<string, { pending: number; security: number }>;
+
+/** Ein Stundenbucket der Flottenlast (`GET /api/fleet/metrics`). */
+export interface FleetSample {
+  ts: number;
+  cpu_avg: number;
+  mem_avg: number;
+  disk_max: number;
+  samples: number;
+  /** Wie viele Geräte in dieser Stunde überhaupt gemeldet haben. */
+  devices: number;
+}

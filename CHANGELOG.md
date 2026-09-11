@@ -8,6 +8,18 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Übersichtsseite neu gebaut.** Statt Kennzahlen, die anderswo schon stehen,
+  beginnt die Seite mit einer Liste „Zu tun": volle Platten, offene
+  Sicherheitsupdates, länger abwesende Geräte, überfällige Update-Scans,
+  veraltete Agents — jeder Punkt mit einem Satz, warum er zählt, und einem
+  Ziel, das ihn bearbeitet. Darunter vier Kennzahlen, die Flottenlast der
+  letzten 24 Stunden als echte Kurve (neuer Endpunkt `GET /api/fleet/metrics`;
+  vorher stand dort die aktuelle CPU je Gerät als Linie, was aussah wie ein
+  Verlauf und keiner war), ein Zustandsbalken, dessen Zeilen auf die
+  Geräteseite mit genau diesem Filter führen, und die letzte Aktivität. „Offene
+  Alarme" steht nur noch einmal statt zweimal auf der Seite.
+- Der Filter der Geräteseite steht jetzt in der URL (`/devices?filter=offline`)
+  und ist damit verlinkbar und als Lesezeichen brauchbar.
 - **Namen statt Nummern im Audit-Log und in den Aktivitäten.** Der Server
   schreibt Host- und Skriptname beim Ereignis mit, damit „nas-fritz entfernt"
   auch dann noch lesbar ist, wenn es das Gerät nicht mehr gibt; ältere

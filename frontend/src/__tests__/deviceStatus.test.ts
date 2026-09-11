@@ -21,6 +21,7 @@ function device(over: Partial<Device> = {}): Device {
     online: true,
     connected: true,
     agent_update_available: null,
+    last_patch_scan_at: 0,
     ...over,
   };
 }
