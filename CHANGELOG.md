@@ -8,6 +8,54 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Übersichtsseite neu gebaut.** Statt Kennzahlen, die anderswo schon stehen,
+  beginnt die Seite mit einer Liste „Zu tun": volle Platten, offene
+  Sicherheitsupdates, länger abwesende Geräte, überfällige Update-Scans,
+  veraltete Agents — jeder Punkt mit einem Satz, warum er zählt, und einem
+  Ziel, das ihn bearbeitet. Darunter vier Kennzahlen, die Flottenlast der
+  letzten 24 Stunden als echte Kurve (neuer Endpunkt `GET /api/fleet/metrics`;
+  vorher stand dort die aktuelle CPU je Gerät als Linie, was aussah wie ein
+  Verlauf und keiner war), ein Zustandsbalken, dessen Zeilen auf die
+  Geräteseite mit genau diesem Filter führen, und die letzte Aktivität. „Offene
+  Alarme" steht nur noch einmal statt zweimal auf der Seite.
+- Der Filter der Geräteseite steht jetzt in der URL (`/devices?filter=offline`)
+  und ist damit verlinkbar und als Lesezeichen brauchbar.
+- **Namen statt Nummern im Audit-Log und in den Aktivitäten.** Der Server
+  schreibt Host- und Skriptname beim Ereignis mit, damit „nas-fritz entfernt"
+  auch dann noch lesbar ist, wenn es das Gerät nicht mehr gibt; ältere
+  Einträge löst das Dashboard aus der laufenden Liste auf. Außerdem hat jetzt
+  jedes Ereignis einen eigenen Satz — vorher fiel ein Dutzend Typen
+  (Wake-on-LAN, Passwörter, Personen, Automatisierung) auf den rohen
+  Ereignisnamen zurück.
+- **Geräteliste neu:** Statuspunkt, Hostname, OS-Chip und eine Unterzeile
+  `OS · Tag · Tag` bilden einen Block; die eigene Tags-Spalte entfällt. CPU,
+  RAM und Disk sind beschriftete Balken, deren Farbe auf die Last reagiert —
+  grün, ab 70/75/80 % gelb, ab 90 % rot. Die Disk-Schwellen sind identisch mit
+  denen des Statuspunkts, damit beide nie widersprüchlich aussehen.
+- **Segmentierte Filterleiste** mit Trefferzahlen (`components/FilterBar.tsx`)
+  statt einer Reihe loser Buttons: eine Tab-Station, Pfeiltasten wechseln, und
+  jede Zahl sagt vorab, was der Filter übrig lässt.
+- **Blätterleiste für alle langen Listen** — Geräte, Alarme, Patches, Skripte,
+  Konten, Job-Verlauf, Audit. 25 pro Seite als Default, 50/100/alle wählbar,
+  Auswahl je Liste im Browser gemerkt. Die Liste „kürzlich behobene Alarme"
+  verliert ihren harten Schnitt nach acht Einträgen.
+- **Personen als Master-Detail:** links die Liste, rechts alles zu einer
+  Person — Kennzahlen (Geräte, online, offene Alarme, offene Updates,
+  Sicherheitsupdates), Notiz, zugewiesene Geräte samt Patch-Stand,
+  Gerätezuweisung, das verknüpfte Konto (Rolle, letzter Login, Zwei-Faktor,
+  Passwort zurücksetzen) und ein auf die Person gefilterter Aktivitätsverlauf.
+- **Skript-Bibliothek:** Vorlagen haben eine eigene Galerie statt eines
+  versteckten Auswahlfelds und sind von 4 auf 12 gewachsen (Temp-Cleanup,
+  Paketcache, Drucker-Spooler, Netzwerk-Diagnose für Linux und Windows,
+  Speicherplatz-Report, Windows-Update-Reset, Neustart). Skripte tragen eine
+  Kategorie, lassen sich mit einem Stern markieren, als **destruktiv**
+  kennzeichnen (Ausführen verlangt dann die Eingabe des Namens) und
+  duplizieren.
+- **Audit-Log ist ein Werkzeug geworden:** Filter nach Zeitraum, Kategorie,
+  Akteur, Gerät und Freitext (auch im `detail`-Blob), ein Schnellfilter
+  „Sicherheit", serverseitige Blätterung mit Gesamtzahl, farbige Kategorien,
+  ausklappbare Zeilen mit allen Feldern des Ereignisses und Tagestrenner
+  („Heute", „Gestern", Datum). Neuer Endpunkt `/api/audit/meta`.
 - Optionale `.pre-commit-config.yaml` (ruff, gofmt, go vet, eslint, tsc, plus
   ein Riegel gegen versehentlich eingecheckte Secret-Dateien).
 - Agent-Tests von 4 auf 17: apt-Ausgabe-Parser (dafür aus der
@@ -44,6 +92,35 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - `.env.example` enthält jetzt auch `CLEANUP_INTERVAL_S`, `ALERT_INTERVAL_S`,
   `METRICS_RAW_RETENTION_H` und `METRICS_HOURLY_RETENTION_D`.
 
+### Hinzugefügt (Fortsetzung)
+- Neue Skript-Vorlage **„Proxmox: alle LXC-Container aktualisieren"**: läuft
+  auf dem Proxmox-Host, geht per `pct` durch jeden laufenden Container und
+  aktualisiert dessen Pakete — Debian/Ubuntu, Alpine, Fedora/Rocky, openSUSE
+  und Arch werden am Paketmanager erkannt. Ausgeschlossen sind ab Werk
+  cloudflared (CT 104) und das RMM selbst (CT 111), weil ein Neustart dieser
+  beiden die Verbindung kappt, über die der Job gerade läuft. Startet nichts
+  neu, meldet nur, wo ein Neustart nötig wäre, und hört zwischen zwei
+  Containern auf, wenn das Zeitbudget knapp wird — abgebrochenes `dpkg`
+  hinterlässt eine halb konfigurierte Paketdatenbank.
+- Längere Vorlagen liegen jetzt als echte Datei unter
+  `frontend/src/templates/` und werden per `?raw` eingebunden, statt als
+  Template-Literal im TypeScript zu stehen: dort müsste jedes `${…}` von Hand
+  escapt werden, und ein übersehenes Escape verfälscht still ein Skript, das
+  später als root läuft.
+
+- **Täglicher Update-Scan über den Heartbeat.** Jedes Gerät wird einmal am Tag
+  zum Scan aufgefordert; der Slot liegt bei `PATCH_SCAN_HOUR` (Default 3 Uhr
+  lokal) und verteilt sich über die Stunde (`ID % 60`), damit nicht die halbe
+  Flotte gleichzeitig scannt. Ausgelöst wird das nicht von einer Uhr im Agent,
+  sondern vom Heartbeat: Ein Gerät, das zur Slot-Zeit aus war, holt den Scan
+  beim nächsten Online-Heartbeat nach, statt den Tag zu überspringen. Als
+  erledigt zählt erst der eingetroffene Bericht — eine Anfrage, die nie
+  beantwortet wird, wird nach einer Stunde wiederholt. Während einer laufenden
+  Installation wird nicht gescannt. Abschaltbar über `PATCH_SCAN_ENABLED`.
+- Der Gerätereiter „Updates" zeigt jetzt, wann zuletzt wirklich gescannt
+  wurde. Eine leere Liste sah vorher aus wie „alles aktuell", auch wenn nie
+  jemand nachgesehen hatte.
+
 ### Geändert
 - Alle Module öffnen die Datenbank über einen gemeinsamen Helfer
   (`app/db.py`), der Fremdschlüssel einschaltet. Vorher taten das zwei von
@@ -73,7 +150,62 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Das Dashboard bietet keinen kopierbaren Download-Link mit Token in der URL
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
 
+### Geändert
+- Build und CI laufen auf **Node 24 (LTS)** statt 22 — und beide zusammen:
+  der Major steht in `frontend/Dockerfile` und in `node-version` in `ci.yml`,
+  ein Auseinanderlaufen zeigte sich sonst erst beim Deploy. Dependabot
+  ignoriert den Node-Major deshalb; es sieht nur den Dockerfile.
+- Das Backend-Image bringt `tzdata` mit und der Container bekommt
+  `TZ` (Default `Europe/Berlin`). Ohne beides rechnet der tägliche Update-Scan
+  in UTC, und der eingestellte Slot läge im Sommer zwei Stunden daneben.
+- Der Ping/Pong-Barrier in den Agent-WS-Tests sammelt unaufgeforderte Frames
+  ein, statt anzunehmen, dass die nächste Nachricht das Pong ist. Der Kanal
+  ist kein Request/Response — der Server schickt von sich aus (Update-Angebot,
+  Scan-Aufforderung).
+- Dependabot ignoriert außerdem die Majors von `eslint`, `@eslint/js` und
+  `typescript`: alle drei lassen sich derzeit nicht installieren
+  (`eslint-plugin-jsx-a11y` hat als Peer nur eslint ≤ 9, `typescript-eslint@8`
+  nur typescript < 6.1), und ohne die Regel legt Dependabot die PRs jede Woche
+  neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
+
 ### Behoben
+- Offline-Geräte zählten gleichzeitig als „Problem"-Geräte: dieselbe Maschine
+  stand unter beiden Filtern und die Trefferzahlen ergaben zusammen mehr als
+  die Flotte. Offline ist jetzt eine eigene Lage — was auf einem nicht
+  erreichbaren Gerät kaputt ist, lässt sich ohnehin erst beheben, wenn es
+  wieder antwortet.
+- Der `web`-Container startete nach der Härtung überhaupt nicht mehr:
+  `exec /usr/bin/caddy: operation not permitted`, Exit 255, Neustartschleife,
+  Port 80 tot. Ursache ist nicht ein Schreibrecht, sondern `execve` selbst:
+  `/usr/bin/caddy` trägt die Datei-Capability `cap_net_bind_service=ep`, und
+  ein gesetztes *effective*-Bit bei fehlender Capability im Bounding-Set lässt
+  den Kernel den Exec verweigern. `cap_drop: ALL` allein macht den Container
+  damit unstartbar. `cap_add: NET_BIND_SERVICE` bringt genau diese eine
+  Capability ins Bounding-Set zurück; alles andere bleibt entzogen.
+- `deploy.sh` meldete einen erfolgreichen Deploy, während der `web`-Container
+  in `Restarting (255)` hing und Port 80 nichts beantwortete. Die Gates
+  prüften nur das Backend — `web` ist aber der einzige Dienst mit Host-Port.
+  Neues drittes Gate: `curl http://127.0.0.1/api/ready` über den
+  veröffentlichten Port, also die Strecke, die Browser und Cloudflare Tunnel
+  tatsächlich nehmen.
+- Caddys `XDG_DATA_HOME`/`XDG_CONFIG_HOME` liegen jetzt unter `/caddyhome`.
+  Das Basis-Image `caddy:2-alpine` deklariert `VOLUME /data` und
+  `VOLUME /config` und legt die beiden Verzeichnisse dorthin; Docker verwirft
+  aber, was ein späterer Build-Schritt unterhalb eines vom Basis-Image
+  deklarierten Volumes schreibt, sodass der `chown` im `frontend/Dockerfile`
+  wirkungslos blieb und Caddy als uid 10001 seinen Zustand nicht hätte
+  schreiben können. (Der Ausfall des Web-Containers kam **nicht** daher — das
+  war die fehlende Capability, siehe oben. Diese Änderung ist trotzdem
+  richtig: der wirkungslose `chown` war ein echter Defekt.)
+- Der dokumentierte Besitzerwechsel für das Datenvolumen war an zwei Stellen
+  falsch und hat den ersten Deploy nach der Umstellung auf uid 10001
+  scheitern lassen. Erstens nannte er den Compose-Schlüssel statt des
+  Volumenamens — Compose stellt den Projektnamen voran
+  (`infrastructure_rxf-rmm-data`), sodass ein neues leeres Volume angelegt und
+  das echte nicht angefasst wurde. Zweitens lief der Ersatzbefehl über
+  `docker compose run` und erbte damit `cap_drop: ALL`, worauf `chown` auch
+  als root an fehlendem `CAP_CHOWN` scheiterte. Beides korrigiert, mit
+  Prüfschritt und Begründung in `docs/OPERATIONS.md`.
 - Der Live-Job-Stream blieb nach einem Verbindungsabbruch stumm stehen. Er
   verbindet jetzt mit Backoff neu und zeigt den Abbruch an.
 - Dialoge waren für Tastatur und Screenreader nicht bedienbar: Klick-Handler

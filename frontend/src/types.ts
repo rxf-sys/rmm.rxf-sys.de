@@ -57,6 +57,8 @@ export interface Device {
   connected: boolean;
   /** Version of a newer signed agent release on the server, else null. */
   agent_update_available: string | null;
+  /** Letzter eingetroffener Update-Scan; 0 = noch nie. */
+  last_patch_scan_at: number;
 }
 
 export interface Person {
@@ -227,15 +229,35 @@ export type Shell = 'bash' | 'zsh' | 'powershell';
 
 export type ScriptOs = 'windows' | 'linux' | 'darwin' | 'any';
 
+export type ScriptCategory = 'wartung' | 'sicherheit' | 'diagnose' | 'sonstiges';
+
 export interface Script {
   id: number;
   name: string;
   shell: Shell;
   os: ScriptOs;
   content: string;
+  category: ScriptCategory;
+  /** Destroys data or can take a device down — the UI asks for the script
+   *  name to be typed before it runs. */
+  danger: boolean;
   updated_by: string;
   updated_at: number;
 }
+
+export type AuditCategory =
+  | 'auth'
+  | 'account'
+  | 'device'
+  | 'job'
+  | 'patch'
+  | 'remote'
+  | 'alert'
+  | 'script'
+  | 'person'
+  | 'credential'
+  | 'config'
+  | 'other';
 
 export interface AuditEvent {
   id: number;
@@ -244,6 +266,15 @@ export interface AuditEvent {
   actor: string;
   device_id: number | null;
   detail: Record<string, unknown>;
+  /** Classified server-side, so the colour here and the filter there agree. */
+  category: AuditCategory;
+  /** Part of the "Sicherheit" quick filter. */
+  security: boolean;
+}
+
+export interface AuditPage {
+  events: AuditEvent[];
+  total: number;
 }
 
 export type Severity = 'critical' | 'important' | 'moderate' | 'low' | 'other';
@@ -258,3 +289,14 @@ export interface Patch {
 
 /** Per-device patch counts, keyed by device id (as string from JSON). */
 export type PatchSummary = Record<string, { pending: number; security: number }>;
+
+/** Ein Stundenbucket der Flottenlast (`GET /api/fleet/metrics`). */
+export interface FleetSample {
+  ts: number;
+  cpu_avg: number;
+  mem_avg: number;
+  disk_max: number;
+  samples: number;
+  /** Wie viele Geräte in dieser Stunde überhaupt gemeldet haben. */
+  devices: number;
+}

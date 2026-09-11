@@ -162,6 +162,22 @@ zugehörige Job).
 | Windows | Scan hängt | Die COM-API kann mehrere Minuten brauchen; Timeout ist 5 min (`agent/patches.go`) |
 | macOS | leeres Ergebnis | `softwareupdate -l` liefert nur Systemupdates, keine App-Store-Apps |
 
+### Der tägliche Scan läuft nicht
+
+Der Scan hängt am Heartbeat: Der Server fordert ihn an, sobald ein Gerät
+seinen heutigen Slot hinter sich hat (`PATCH_SCAN_HOUR`, verteilt über die
+Stunde per `ID % 60`). In dieser Reihenfolge prüfen:
+
+| Prüfen | Wie |
+|---|---|
+| Ist der Scan aktiv? | `PATCH_SCAN_ENABLED` — `false` schaltet ihn komplett ab |
+| Stimmt die Zeitzone? | `docker compose exec backend date` — ohne `TZ` rechnet der Container in UTC |
+| Wurde angefordert? | Backend-Log, Ereignis `patch.scan_scheduled`; im Audit-Log `patch.scan_requested` mit Akteur `automation` |
+| Kam ein Bericht? | Gerät → Updates zeigt „zuletzt geprüft". Bleibt es bei „noch nie geprüft", antwortet der Agent nicht — dann oben weiterlesen |
+
+Läuft gerade eine Installation auf dem Gerät, wird der Scan bewusst
+ausgelassen; er kommt beim nächsten Heartbeat danach.
+
 Der Agent läuft als root bzw. SYSTEM; fehlende Rechte scheiden als Ursache
 aus. Zum Gegenprüfen dasselbe Kommando manuell auf dem Gerät ausführen:
 
@@ -212,8 +228,10 @@ heißt abgelaufene Session — neu anmelden.
 
 ## Deploy schlägt fehl
 
-`deploy.sh` endet mit Exit 1, wenn das Backend nicht binnen ~60 s gesund
-wird, und gibt dann `docker compose ps` und die letzten 50 Logzeilen aus.
+`deploy.sh` endet mit Exit 1, wenn eines der drei Gates nicht durchläuft —
+Backend gesund (~60 s), Backend ready (~20 s), Antwort auf dem
+veröffentlichten Port 80 (~30 s) — und gibt dann `docker compose ps` und die
+letzten 50 Logzeilen des betroffenen Dienstes aus.
 
 Häufigste Ursachen in dieser Reihenfolge:
 
@@ -225,6 +243,33 @@ Häufigste Ursachen in dieser Reihenfolge:
 3. **Port 80 belegt** — nur `web` published einen Host-Port.
 4. **Datenbank defekt** — der Container startet in einer Neustartschleife.
    `integrity_check` fahren (siehe oben), im Zweifel Restore.
+5. **`attempt to write a readonly database`** — das Datenvolumen gehört noch
+   root, der Container läuft aber als uid 10001. Der einmalige
+   Besitzerwechsel steht in
+   [`OPERATIONS.md`](OPERATIONS.md#container-härtung). Zwei Details, an denen
+   er scheitert: der echte Volumename trägt den Projektpräfix
+   (`infrastructure_rxf-rmm-data`), und der `chown` muss über ein einfaches
+   `docker run` laufen — über `docker compose run` erbt er `cap_drop: ALL`
+   und scheitert mit „Operation not permitted".
+6. **`web` startet, aber Port 80 verweigert die Verbindung** — der
+   Container ist wieder ausgestiegen, damit ist auch die Portfreigabe weg.
+   `docker compose ps -a` zeigt ihn als `Exited`/`Restarting`,
+   `docker compose logs --tail 40 web` nennt den Grund. Real aufgetreten:
+
+   ```
+   rxf-rmm-web  | exec /usr/bin/caddy: operation not permitted
+   ```
+
+   Kein Schreibrecht-, sondern ein `execve`-Problem. `/usr/bin/caddy` trägt
+   die Datei-Capability `cap_net_bind_service=ep`; ist deren *effective*-Bit
+   gesetzt und die Capability fehlt im Bounding-Set, verweigert der Kernel
+   den Exec. Ein blankes `cap_drop: ALL` macht den Container damit
+   unstartbar — es gibt nicht einmal eine Caddy-Logzeile, nur Exit 255.
+   Behoben durch `cap_add: [NET_BIND_SERVICE]` in `docker-compose.yml`.
+
+   Merkmal zum Wiedererkennen: die Logzeile beginnt mit `exec ` und nennt
+   den Programmpfad. Dann liegt es am Container-Start, nicht am Programm —
+   und Konfiguration, Ports und Dateirechte sind die falsche Spur.
 
 ## Nichts hilft: Zustand sammeln
 

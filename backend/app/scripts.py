@@ -25,6 +25,10 @@ SHELLS = ("bash", "zsh", "powershell")
 # Target operating systems for library scripts. "any" = plattformübergreifend
 # (z. B. reine Bash-Skripte, die überall laufen).
 OSES = ("windows", "linux", "darwin", "any")
+# Grobe Einordnung für die Bibliotheksfilter. Bewusst ein festes, kleines
+# Vokabular statt Freitext: Freitext-Kategorien driften auseinander
+# ("Wartung", "wartung", "Maintenance") und taugen dann nicht zum Filtern.
+CATEGORIES = ("wartung", "sicherheit", "diagnose", "sonstiges")
 MAX_SCRIPT_BYTES = 64_000
 
 _SCHEMA = """
@@ -34,6 +38,8 @@ CREATE TABLE IF NOT EXISTS scripts (
     shell      TEXT    NOT NULL DEFAULT 'bash',
     os         TEXT    NOT NULL DEFAULT 'any',
     content    TEXT    NOT NULL DEFAULT '',
+    category   TEXT    NOT NULL DEFAULT 'sonstiges',
+    danger     INTEGER NOT NULL DEFAULT 0,
     updated_by TEXT    NOT NULL DEFAULT '',
     updated_at INTEGER NOT NULL
 );
@@ -60,6 +66,15 @@ async def ensure_schema(settings: Settings) -> None:
             await db.execute("ALTER TABLE scripts ADD COLUMN os TEXT NOT NULL DEFAULT 'any'")
             # Heuristik für Bestandsskripte: powershell → windows, sonst 'any'.
             await db.execute("UPDATE scripts SET os = 'windows' WHERE shell = 'powershell'")
+        if "category" not in cols:
+            await db.execute(
+                "ALTER TABLE scripts ADD COLUMN category TEXT NOT NULL DEFAULT 'sonstiges'"
+            )
+        if "danger" not in cols:
+            # Bestandsskripte gelten als harmlos: ein nachträglich gesetztes
+            # "gefährlich" wäre geraten, und eine falsche Warnung ist schlimmer
+            # als keine — sie stumpft die echten ab.
+            await db.execute("ALTER TABLE scripts ADD COLUMN danger INTEGER NOT NULL DEFAULT 0")
         await db.commit()
     log.info("scripts.ready", db=_db_path)
 
@@ -69,13 +84,15 @@ def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
     return db_connect(_db_path)
 
 
-def _validate(name: str, shell: str, os: str, content: str) -> None:
+def _validate(name: str, shell: str, os: str, content: str, category: str) -> None:
     if not name.strip():
         raise ScriptError("Name darf nicht leer sein")
     if shell not in SHELLS:
         raise ScriptError(f"Ungültige Shell: {shell}")
     if os not in OSES:
         raise ScriptError(f"Ungültiges Betriebssystem: {os}")
+    if category not in CATEGORIES:
+        raise ScriptError(f"Ungültige Kategorie: {category}")
     if len(content.encode("utf-8")) > MAX_SCRIPT_BYTES:
         raise ScriptError("Skript zu groß")
 
@@ -88,20 +105,37 @@ def _row(r: aiosqlite.Row) -> dict[str, Any]:
         "shell": r["shell"],
         "os": r["os"] if "os" in keys else "any",
         "content": r["content"],
+        "category": r["category"] if "category" in keys else "sonstiges",
+        "danger": bool(r["danger"]) if "danger" in keys else False,
         "updated_by": r["updated_by"],
         "updated_at": int(r["updated_at"]),
     }
 
 
 async def create(
-    name: str, shell: str, content: str, updated_by: str, os: str = "any"
+    name: str,
+    shell: str,
+    content: str,
+    updated_by: str,
+    os: str = "any",
+    category: str = "sonstiges",
+    danger: bool = False,
 ) -> dict[str, Any]:
-    _validate(name, shell, os, content)
+    _validate(name, shell, os, content, category)
     async with _connect() as db:
         cur = await db.execute(
-            "INSERT INTO scripts (name, shell, os, content, updated_by, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
-            (name.strip()[:120], shell, os, content, updated_by, int(time.time())),
+            "INSERT INTO scripts (name, shell, os, content, category, danger, updated_by,"
+            " updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                name.strip()[:120],
+                shell,
+                os,
+                content,
+                category,
+                int(danger),
+                updated_by,
+                int(time.time()),
+            ),
         )
         await db.commit()
         script_id = int(cur.lastrowid or 0)
@@ -109,14 +143,31 @@ async def create(
 
 
 async def update(
-    script_id: int, name: str, shell: str, content: str, updated_by: str, os: str = "any"
+    script_id: int,
+    name: str,
+    shell: str,
+    content: str,
+    updated_by: str,
+    os: str = "any",
+    category: str = "sonstiges",
+    danger: bool = False,
 ) -> dict[str, Any] | None:
-    _validate(name, shell, os, content)
+    _validate(name, shell, os, content, category)
     async with _connect() as db:
         await db.execute(
-            "UPDATE scripts SET name = ?, shell = ?, os = ?, content = ?, updated_by = ?,"
-            " updated_at = ? WHERE id = ?",
-            (name.strip()[:120], shell, os, content, updated_by, int(time.time()), script_id),
+            "UPDATE scripts SET name = ?, shell = ?, os = ?, content = ?, category = ?,"
+            " danger = ?, updated_by = ?, updated_at = ? WHERE id = ?",
+            (
+                name.strip()[:120],
+                shell,
+                os,
+                content,
+                category,
+                int(danger),
+                updated_by,
+                int(time.time()),
+                script_id,
+            ),
         )
         await db.commit()
     return await get(script_id)

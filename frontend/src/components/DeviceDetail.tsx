@@ -3,6 +3,7 @@ import { api, apiErrorMessage } from '../api/client';
 import { formatBytes, formatRate, formatRelative, osLabel } from '../format';
 import { useConfirm } from '../hooks/useConfirm';
 import { useJobStream } from '../hooks/useJobStream';
+import { usePagination } from '../hooks/usePagination';
 import type {
   Alert,
   AlertStats,
@@ -22,6 +23,7 @@ import type {
 import { Dot } from '../ui';
 import { deviceState, diskColor, stateColor } from '../deviceStatus';
 import { IconKey, IconPower, IconTerminal, IconWrench, OsIcon } from '../icons';
+import { Pagination } from './Pagination';
 // (osShort available via ../format if needed by future tab work)
 
 interface Props {
@@ -1408,6 +1410,8 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
   const { ask, dialog: confirmDialog } = useConfirm();
   const [patches, setPatches] = useState<Patch[] | null>(null);
   const [installingJob, setInstallingJob] = useState<number | null>(null);
+  // 0 = noch nie gescannt.
+  const [lastScan, setLastScan] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const stream = useJobStream(installingJob);
@@ -1416,6 +1420,7 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
   const load = useCallback((signal?: AbortSignal) =>
     api.devicePatches(deviceId, signal).then((r) => {
       setPatches(r.patches);
+      setLastScan(r.last_scan_at);
       if (r.installing_job !== null) setInstallingJob(r.installing_job);
     }).catch((e) => { if (!signal?.aborted) setError(apiErrorMessage(e)); }), [deviceId]);
 
@@ -1471,6 +1476,13 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
       {confirmDialog}
       <div className="row" style={{ gap: 8 }}>
         <span className="card-title">Updates {patches ? `(${patches.length})` : ''}</span>
+        {patches !== null && (
+          // Ohne das Datum sieht eine leere Liste aus wie "alles aktuell",
+          // auch wenn nie jemand nachgesehen hat.
+          <span className="muted" style={{ fontSize: 11 }}>
+            {lastScan ? `zuletzt geprüft ${formatRelative(lastScan)}` : 'noch nie geprüft'}
+          </span>
+        )}
         {isOperator && (
           <div className="row grow" style={{ marginLeft: 'auto', gap: 8 }}>
             <button className="btn btn-sm" onClick={() => void scan()} disabled={busy || !connected}>⟳ Scannen</button>
@@ -1486,7 +1498,11 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
         <div className="empty">
           <span style={{ fontSize: 22, color: 'var(--ok)' }}>✓</span>
           <h2>Alles aktuell</h2>
-          <p className="muted">Keine ausstehenden Updates — oder noch nicht gescannt.</p>
+          <p className="muted">
+            {lastScan
+              ? `Keine ausstehenden Updates — zuletzt geprüft ${formatRelative(lastScan)}.`
+              : 'Noch nicht geprüft — der tägliche Scan holt das beim nächsten Heartbeat nach.'}
+          </p>
         </div>
       )}
       {patches && patches.length > 0 && (
@@ -1524,6 +1540,7 @@ function JobsTab({ deviceId }: { deviceId: number }) {
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [openJob, setOpenJob] = useState<number | null>(null);
   const stream = useJobStream(openJob);
+  const pager = usePagination(jobs ?? [], 'device-jobs');
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -1549,7 +1566,7 @@ function JobsTab({ deviceId }: { deviceId: number }) {
         ) : jobs.length === 0 ? (
           <div style={{ padding: '14px 16px' }} className="muted">Noch keine Jobs.</div>
         ) : (
-          jobs.map((j) => (
+          pager.items.map((j) => (
             <button key={j.id} className="row" style={{ gap: 12, padding: '10px 16px', width: '100%', background: openJob === j.id ? 'var(--hover)' : 'none', border: 'none', borderBottom: '1px solid var(--line2)', cursor: 'pointer', color: 'var(--tx)', textAlign: 'left' }} onClick={() => setOpenJob(j.id)}>
               <span className={`badge ${jobBadge(j.status)}`} style={{ width: 90, textAlign: 'center', flex: 'none' }}>{JOB_STATUS_LABEL[j.status]}</span>
               <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -1559,6 +1576,7 @@ function JobsTab({ deviceId }: { deviceId: number }) {
             </button>
           ))
         )}
+        <Pagination {...pager} label="Jobs" />
       </div>
       {openJob !== null && (
         <div className="console">

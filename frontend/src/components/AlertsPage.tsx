@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { api } from '../api/client';
 import { formatRelative } from '../format';
+import { usePagination } from '../hooks/usePagination';
 import type { Alert, Device } from '../types';
+import { Pagination } from './Pagination';
 
 interface Props {
   alerts: Alert[];
@@ -38,14 +40,17 @@ export function AlertsPage({ alerts, devices, onOpenDevice, onRefresh }: Props) 
   const deviceName = (id: number) => devices.find((d) => d.id === id)?.hostname ?? `Gerät ${id}`;
 
   const open = alerts.filter((a) => a.resolved_at === null);
-  const resolved = alerts.filter((a) => a.resolved_at !== null).slice(0, 8);
+  // Resolved alerts used to be cut off at eight with no way to see the rest.
+  const resolved = alerts.filter((a) => a.resolved_at !== null);
+  const openPager = usePagination(open, 'alerts-open');
+  const resolvedPager = usePagination(resolved, 'alerts-resolved');
 
   return (
     <div className="screen">
       <div className="page-head">
         <h1 className="page-title">Alarm-Center</h1>
         <span className="muted">
-          {open.length} offen{resolved.length > 0 ? ` · ${resolved.length} kürzlich behoben` : ''}
+          {open.length} offen{resolved.length > 0 ? ` · ${resolved.length} behoben` : ''}
         </span>
       </div>
 
@@ -57,7 +62,7 @@ export function AlertsPage({ alerts, devices, onOpenDevice, onRefresh }: Props) 
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {open.map((a) => {
+          {openPager.items.map((a) => {
             const sev = severity(a.rule);
             const isAcked = a.acked_at !== null || justAcked.includes(a.id);
             return (
@@ -102,15 +107,16 @@ export function AlertsPage({ alerts, devices, onOpenDevice, onRefresh }: Props) 
               </div>
             );
           })}
+          <Pagination {...openPager} label="offene Alarme" />
         </div>
       )}
 
       {resolved.length > 0 && (
         <>
           <div className="sidebar-label" style={{ padding: 0, marginTop: 6 }}>
-            Kürzlich behoben
+            Behoben
           </div>
-          {resolved.map((a) => (
+          {resolvedPager.items.map((a) => (
             <div key={a.id} className="card" style={{ padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 12, opacity: 0.6 }}>
               <span className="dot" style={{ background: 'var(--ok)' }} />
               <span style={{ fontWeight: 600, fontSize: 12.5, textDecoration: 'line-through' }}>{a.message}</span>
@@ -120,6 +126,7 @@ export function AlertsPage({ alerts, devices, onOpenDevice, onRefresh }: Props) 
               </span>
             </div>
           ))}
+          <Pagination {...resolvedPager} label="behobene Alarme" />
         </>
       )}
     </div>

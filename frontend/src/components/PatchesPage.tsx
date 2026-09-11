@@ -3,6 +3,8 @@ import { osLabel } from '../format';
 import type { Device, PatchSummary, Person } from '../types';
 import { Dot } from '../ui';
 import { deviceState, stateColor } from '../deviceStatus';
+import { usePagination } from '../hooks/usePagination';
+import { Pagination } from './Pagination';
 import type { ReactNode } from 'react';
 import { AppleLogo, LinuxLogo, ServerRack, WindowsLogo } from '../icons';
 
@@ -117,6 +119,12 @@ export function PatchesPage({ devices, patchSummary, persons, onOpenDevice }: Pr
       .sort((a, b) => pending(b) - pending(a));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [devices, patchSummary, personFilter, osFilter, availability, patchState]);
+
+  const pager = usePagination(
+    shown,
+    'patches',
+    `${personFilter}|${osFilter}|${availability}|${patchState}`,
+  );
 
   const personName = (id: number | null) =>
     id === null ? '' : (persons.find((p) => p.id === id)?.name ?? '');
@@ -247,7 +255,7 @@ export function PatchesPage({ devices, patchSummary, persons, onOpenDevice }: Pr
                 Keine Geräte für diese Filter.
               </div>
             ) : (
-              shown.map((d) => {
+              pager.items.map((d) => {
                 const s = patchSummary[String(d.id)] ?? { pending: 0, security: 0 };
                 const st = deviceState(d);
                 return (
@@ -289,6 +297,7 @@ export function PatchesPage({ devices, patchSummary, persons, onOpenDevice }: Pr
               })
             )}
           </div>
+          <Pagination {...pager} label="Geräte" />
         </div>
       )}
     </div>

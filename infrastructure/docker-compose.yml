@@ -7,6 +7,10 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env
+    environment:
+      # Der tägliche Update-Scan rechnet in lokaler Zeit; ohne TZ wäre das UTC
+      # und PATCH_SCAN_HOUR=3 läge im Sommer um 05:00 Ortszeit.
+      TZ: ${TZ:-Europe/Berlin}
     expose:
       - "8080"
     volumes:
@@ -59,6 +63,17 @@ services:
       TRUSTED_PROXY_CIDR: ${TRUSTED_PROXY_CIDR:-127.0.0.1/32}
     cap_drop:
       - ALL
+    cap_add:
+      # NOT because Caddy binds a privileged port — it listens on 8080. This
+      # is about `execve` itself: /usr/bin/caddy carries the file capability
+      # cap_net_bind_service=ep. When a file's *effective* bit is set and the
+      # capability is missing from the bounding set, the kernel refuses the
+      # exec outright. With a bare `cap_drop: ALL` the container therefore
+      # never started at all — `exec /usr/bin/caddy: operation not permitted`,
+      # exit 255, restart loop, no Caddy log line to show for it. Putting this
+      # one capability back into the bounding set makes the exec legal again;
+      # everything else stays dropped.
+      - NET_BIND_SERVICE
     security_opt:
       - no-new-privileges:true
     healthcheck:

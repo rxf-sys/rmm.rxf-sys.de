@@ -6,6 +6,8 @@ interface AskOptions {
   body: ReactNode;
   confirmLabel: string;
   danger?: boolean;
+  /** Require the user to type this text before the confirm button unlocks. */
+  requireText?: string;
 }
 
 /**
@@ -39,6 +41,7 @@ export function useConfirm() {
       body={req.body}
       confirmLabel={req.confirmLabel}
       danger={req.danger}
+      requireText={req.requireText}
       onConfirm={() => settle(true)}
       onCancel={() => settle(false)}
     />

@@ -15,7 +15,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from .. import devices, jobs, patches
+from .. import devices, jobs, patch_scan, patches
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..auth import device_visible, person_scope, require_operator, verify_session
@@ -48,6 +48,9 @@ async def device_patches(
     return {
         "patches": await patches.list_for_device(device_id),
         "installing_job": await jobs.active_job_of_kind(device_id, "patch_install"),
+        # Wann zuletzt wirklich gescannt wurde — sonst sieht eine leere Liste
+        # aus wie "keine Updates", obwohl nie jemand nachgesehen hat.
+        "last_scan_at": device["last_patch_scan_at"],
     }
 
 
@@ -62,6 +65,9 @@ async def scan_patches(
     if not manager.is_connected(device_id):
         raise HTTPException(status_code=409, detail="Gerät ist nicht verbunden")
     await manager.send(device_id, {"type": "patch_scan"})
+    # Zählt auch für den Tagesplan: direkt danach noch einmal automatisch zu
+    # fragen wäre reine Doppelarbeit.
+    patch_scan.mark_requested(device_id)
     await audit_record("patch.scan_requested", user=user["username"], device_id=device_id)
     # The report arrives asynchronously; the client re-fetches the list.
     return {"ok": True}
