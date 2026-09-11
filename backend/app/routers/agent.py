@@ -8,10 +8,12 @@ credentials: a one-time enrollment token for POST /enroll, and
 from __future__ import annotations
 
 import shlex
+import time
 
 import structlog
 from fastapi import (
     APIRouter,
+    Depends,
     Header,
     HTTPException,
     Query,
@@ -23,10 +25,10 @@ from fastapi import (
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
-from .. import devices, job_secrets, jobs, metrics, patches, releases
+from .. import devices, job_secrets, jobs, metrics, patch_scan, patches, releases
 from ..agents_ws import manager
 from ..audit import record as audit_record
-from ..config import get_settings
+from ..config import Settings, get_settings
 from ..fleet_ws import hub as fleet_hub
 from ..ratelimit import SlidingWindowLimiter, client_ip
 
@@ -318,8 +320,30 @@ def _parse_bearer(header: str) -> tuple[int, str] | None:
     return int(device_id_s), secret
 
 
+async def _maybe_request_patch_scan(
+    ws: WebSocket, device_id: int, last_scan_at: int, settings: Settings
+) -> None:
+    """Ask for an update scan if the device is past its daily slot.
+
+    Riding on the heartbeat rather than a server-side cron is what makes the
+    catch-up work: a device that was offline at its slot is still past it when
+    it returns, and scans on the first heartbeat after that."""
+    if not settings.patch_scan_enabled:
+        return
+    if not patch_scan.is_due(device_id, last_scan_at, settings.patch_scan_hour):
+        return
+    # Never while an install is running: the scan would report the half-patched
+    # state and the install's own report overwrites it moments later anyway.
+    if await jobs.active_job_of_kind(device_id, "patch_install") is not None:
+        return
+    patch_scan.mark_requested(device_id)
+    await ws.send_json({"type": "patch_scan"})
+    await audit_record("patch.scan_requested", actor="automation", device_id=device_id, daily=True)
+    log.info("patch.scan_scheduled", device_id=device_id)
+
+
 @router.websocket("/ws")
-async def agent_ws(ws: WebSocket) -> None:
+async def agent_ws(ws: WebSocket, settings: Settings = Depends(get_settings)) -> None:
     creds = _parse_bearer(ws.headers.get("authorization", ""))
     device = await devices.authenticate_device(*creds) if creds else None
 
@@ -344,6 +368,9 @@ async def agent_ws(ws: WebSocket) -> None:
         fleet_hub.broadcast("device_online")
 
     update_offered = False
+    # Tracked per connection so the daily scan check costs no query per
+    # heartbeat; the report handler below keeps it current.
+    last_scan_at = int(device.get("last_patch_scan_at") or 0)
     try:
         while True:
             try:
@@ -359,6 +386,7 @@ async def agent_ws(ws: WebSocket) -> None:
 
             if msg_type == "heartbeat" and isinstance(payload, dict):
                 await devices.record_heartbeat(device_id, payload)
+                await _maybe_request_patch_scan(ws, device_id, last_scan_at, settings)
                 # Offer a signed update once per connection if this agent is
                 # behind the current release. The agent verifies the signature
                 # before installing, so this is a hint, not a trusted push.
@@ -427,6 +455,8 @@ async def agent_ws(ws: WebSocket) -> None:
                 items = payload.get("patches")
                 if isinstance(items, list):
                     await patches.apply_scan(device_id, items)
+                    last_scan_at = int(time.time())
+                    await devices.mark_patch_scan(device_id, last_scan_at)
                     fleet_hub.broadcast("patches")
             elif msg_type == "agent_logs" and isinstance(payload, dict):
                 lines = payload.get("lines")

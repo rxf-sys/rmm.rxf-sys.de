@@ -1,3 +1,9 @@
+// Längere Skripte liegen als echte Datei daneben, nicht als Template-Literal:
+// in einem `...`-String müsste jedes ${…} von Hand escapt werden, und ein
+// übersehenes Escape verfälscht still ein Skript, das später als root läuft.
+// Als .sh-Datei ist es außerdem prüfbar (`bash -n`, shellcheck) und im Editor
+// lesbar. Vite liefert den Inhalt über `?raw` wörtlich aus.
+import proxmoxLxcUpdate from './templates/proxmox-lxc-update.sh?raw';
 import type { ScriptCategory, ScriptOs, Shell } from './types';
 
 export interface ScriptTemplate {
@@ -319,6 +325,16 @@ foreach ($dir in "$env:SystemRoot\\SoftwareDistribution", "$env:SystemRoot\\Syst
 
 foreach ($s in $services) { Start-Service -Name $s -ErrorAction SilentlyContinue }
 Write-Output 'Update-Komponenten zurueckgesetzt. Naechster Suchlauf laedt neu.'`,
+  },
+  {
+    name: 'Proxmox: alle LXC-Container aktualisieren',
+    os: 'linux',
+    shell: 'bash',
+    category: 'wartung',
+    danger: true,
+    summary:
+      'Läuft auf dem Proxmox-Host und aktualisiert jeden laufenden LXC. Überspringt cloudflared und das RMM selbst, startet nichts neu.',
+    content: proxmoxLxcUpdate,
   },
   {
     name: 'Gerät sofort neu starten',

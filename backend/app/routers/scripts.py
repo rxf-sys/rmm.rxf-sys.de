@@ -74,7 +74,15 @@ async def update_script(
 
 @router.delete("/{script_id}")
 async def delete_script(script_id: int, user: dict = Depends(require_operator)) -> dict:
+    # Namen vor dem Löschen sichern: danach ist er nicht mehr auflösbar, und
+    # das Audit-Log stünde dauerhaft mit "Skript #7" da.
+    doomed = await scripts.get(script_id)
     if not await scripts.delete(script_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skript nicht gefunden")
-    await audit_record("script.deleted", user=user["username"], script_id=script_id)
+    await audit_record(
+        "script.deleted",
+        user=user["username"],
+        script_id=script_id,
+        script=doomed["name"] if doomed else "",
+    )
     return {"ok": True}

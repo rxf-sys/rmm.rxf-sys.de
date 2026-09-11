@@ -17,6 +17,23 @@ export function deviceState(d: Device): DeviceState {
   return 'ok';
 }
 
+/**
+ * Is something wrong on a device we can actually reach?
+ *
+ * Deliberately not "state !== 'ok'": that counted every offline device as a
+ * problem, so the same machine appeared under both "Probleme" and "Offline"
+ * and the filter counts added up to more than the fleet. Offline is its own
+ * condition with its own filter.
+ *
+ * A device that went offline with a full disk therefore counts as offline
+ * only — which is the honest answer, because nothing about that disk can be
+ * done until the machine is reachable again.
+ */
+export function hasProblem(d: Device): boolean {
+  const s = deviceState(d);
+  return s === 'warn' || s === 'crit';
+}
+
 /** CSS color var for a device state dot. */
 export function stateColor(s: DeviceState): string {
   return s === 'off'

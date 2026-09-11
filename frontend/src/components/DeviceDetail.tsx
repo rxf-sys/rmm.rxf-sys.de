@@ -1410,6 +1410,8 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
   const { ask, dialog: confirmDialog } = useConfirm();
   const [patches, setPatches] = useState<Patch[] | null>(null);
   const [installingJob, setInstallingJob] = useState<number | null>(null);
+  // 0 = noch nie gescannt.
+  const [lastScan, setLastScan] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const stream = useJobStream(installingJob);
@@ -1418,6 +1420,7 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
   const load = useCallback((signal?: AbortSignal) =>
     api.devicePatches(deviceId, signal).then((r) => {
       setPatches(r.patches);
+      setLastScan(r.last_scan_at);
       if (r.installing_job !== null) setInstallingJob(r.installing_job);
     }).catch((e) => { if (!signal?.aborted) setError(apiErrorMessage(e)); }), [deviceId]);
 
@@ -1473,6 +1476,13 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
       {confirmDialog}
       <div className="row" style={{ gap: 8 }}>
         <span className="card-title">Updates {patches ? `(${patches.length})` : ''}</span>
+        {patches !== null && (
+          // Ohne das Datum sieht eine leere Liste aus wie "alles aktuell",
+          // auch wenn nie jemand nachgesehen hat.
+          <span className="muted" style={{ fontSize: 11 }}>
+            {lastScan ? `zuletzt geprüft ${formatRelative(lastScan)}` : 'noch nie geprüft'}
+          </span>
+        )}
         {isOperator && (
           <div className="row grow" style={{ marginLeft: 'auto', gap: 8 }}>
             <button className="btn btn-sm" onClick={() => void scan()} disabled={busy || !connected}>⟳ Scannen</button>
@@ -1488,7 +1498,11 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
         <div className="empty">
           <span style={{ fontSize: 22, color: 'var(--ok)' }}>✓</span>
           <h2>Alles aktuell</h2>
-          <p className="muted">Keine ausstehenden Updates — oder noch nicht gescannt.</p>
+          <p className="muted">
+            {lastScan
+              ? `Keine ausstehenden Updates — zuletzt geprüft ${formatRelative(lastScan)}.`
+              : 'Noch nicht geprüft — der tägliche Scan holt das beim nächsten Heartbeat nach.'}
+          </p>
         </div>
       )}
       {patches && patches.length > 0 && (

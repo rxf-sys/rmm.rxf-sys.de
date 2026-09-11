@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deviceState, diskColor, loadColor, loadLevel } from '../deviceStatus';
+import { deviceState, diskColor, hasProblem, loadColor, loadLevel } from '../deviceStatus';
 import type { Device } from '../types';
 
 function device(over: Partial<Device> = {}): Device {
@@ -21,6 +21,7 @@ function device(over: Partial<Device> = {}): Device {
     online: true,
     connected: true,
     agent_update_available: null,
+    last_patch_scan_at: 0,
     ...over,
   };
 }
@@ -64,5 +65,37 @@ describe('diskColor and deviceState', () => {
     const expected =
       state === 'crit' ? 'var(--dangerS)' : state === 'warn' ? 'var(--warn)' : 'var(--ok)';
     expect(diskColor(pct)).toBe(expected);
+  });
+});
+
+describe('hasProblem', () => {
+  const withDisk = (pct: number, online = true) =>
+    device({ online, heartbeat: { disks: [{ mount: '/', used_pct: pct, total_b: 1 }] } });
+
+  it('flags a reachable device with a full disk', () => {
+    expect(hasProblem(withDisk(85))).toBe(true);
+    expect(hasProblem(withDisk(95))).toBe(true);
+  });
+
+  it('leaves a healthy reachable device alone', () => {
+    expect(hasProblem(withDisk(40))).toBe(false);
+  });
+
+  it('does not count an offline device as a problem', () => {
+    // The whole point of the change: a machine used to appear under both
+    // "Probleme" and "Offline", so the filter counts exceeded the fleet size.
+    expect(hasProblem(withDisk(95, false))).toBe(false);
+    expect(hasProblem(withDisk(10, false))).toBe(false);
+  });
+
+  it('splits the fleet into disjoint filter buckets', () => {
+    const fleet = [withDisk(30), withDisk(85), withDisk(95), withDisk(95, false), withDisk(20, false)];
+    const problems = fleet.filter(hasProblem).length;
+    const offline = fleet.filter((d) => !d.online).length;
+    const healthy = fleet.filter((d) => d.online && !hasProblem(d)).length;
+    expect(problems).toBe(2);
+    expect(offline).toBe(2);
+    expect(healthy).toBe(1);
+    expect(problems + offline + healthy).toBe(fleet.length);
   });
 });

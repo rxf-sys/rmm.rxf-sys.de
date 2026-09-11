@@ -8,6 +8,25 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Übersichtsseite neu gebaut.** Statt Kennzahlen, die anderswo schon stehen,
+  beginnt die Seite mit einer Liste „Zu tun": volle Platten, offene
+  Sicherheitsupdates, länger abwesende Geräte, überfällige Update-Scans,
+  veraltete Agents — jeder Punkt mit einem Satz, warum er zählt, und einem
+  Ziel, das ihn bearbeitet. Darunter vier Kennzahlen, die Flottenlast der
+  letzten 24 Stunden als echte Kurve (neuer Endpunkt `GET /api/fleet/metrics`;
+  vorher stand dort die aktuelle CPU je Gerät als Linie, was aussah wie ein
+  Verlauf und keiner war), ein Zustandsbalken, dessen Zeilen auf die
+  Geräteseite mit genau diesem Filter führen, und die letzte Aktivität. „Offene
+  Alarme" steht nur noch einmal statt zweimal auf der Seite.
+- Der Filter der Geräteseite steht jetzt in der URL (`/devices?filter=offline`)
+  und ist damit verlinkbar und als Lesezeichen brauchbar.
+- **Namen statt Nummern im Audit-Log und in den Aktivitäten.** Der Server
+  schreibt Host- und Skriptname beim Ereignis mit, damit „nas-fritz entfernt"
+  auch dann noch lesbar ist, wenn es das Gerät nicht mehr gibt; ältere
+  Einträge löst das Dashboard aus der laufenden Liste auf. Außerdem hat jetzt
+  jedes Ereignis einen eigenen Satz — vorher fiel ein Dutzend Typen
+  (Wake-on-LAN, Passwörter, Personen, Automatisierung) auf den rohen
+  Ereignisnamen zurück.
 - **Geräteliste neu:** Statuspunkt, Hostname, OS-Chip und eine Unterzeile
   `OS · Tag · Tag` bilden einen Block; die eigene Tags-Spalte entfällt. CPU,
   RAM und Disk sind beschriftete Balken, deren Farbe auf die Last reagiert —
@@ -73,6 +92,35 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - `.env.example` enthält jetzt auch `CLEANUP_INTERVAL_S`, `ALERT_INTERVAL_S`,
   `METRICS_RAW_RETENTION_H` und `METRICS_HOURLY_RETENTION_D`.
 
+### Hinzugefügt (Fortsetzung)
+- Neue Skript-Vorlage **„Proxmox: alle LXC-Container aktualisieren"**: läuft
+  auf dem Proxmox-Host, geht per `pct` durch jeden laufenden Container und
+  aktualisiert dessen Pakete — Debian/Ubuntu, Alpine, Fedora/Rocky, openSUSE
+  und Arch werden am Paketmanager erkannt. Ausgeschlossen sind ab Werk
+  cloudflared (CT 104) und das RMM selbst (CT 111), weil ein Neustart dieser
+  beiden die Verbindung kappt, über die der Job gerade läuft. Startet nichts
+  neu, meldet nur, wo ein Neustart nötig wäre, und hört zwischen zwei
+  Containern auf, wenn das Zeitbudget knapp wird — abgebrochenes `dpkg`
+  hinterlässt eine halb konfigurierte Paketdatenbank.
+- Längere Vorlagen liegen jetzt als echte Datei unter
+  `frontend/src/templates/` und werden per `?raw` eingebunden, statt als
+  Template-Literal im TypeScript zu stehen: dort müsste jedes `${…}` von Hand
+  escapt werden, und ein übersehenes Escape verfälscht still ein Skript, das
+  später als root läuft.
+
+- **Täglicher Update-Scan über den Heartbeat.** Jedes Gerät wird einmal am Tag
+  zum Scan aufgefordert; der Slot liegt bei `PATCH_SCAN_HOUR` (Default 3 Uhr
+  lokal) und verteilt sich über die Stunde (`ID % 60`), damit nicht die halbe
+  Flotte gleichzeitig scannt. Ausgelöst wird das nicht von einer Uhr im Agent,
+  sondern vom Heartbeat: Ein Gerät, das zur Slot-Zeit aus war, holt den Scan
+  beim nächsten Online-Heartbeat nach, statt den Tag zu überspringen. Als
+  erledigt zählt erst der eingetroffene Bericht — eine Anfrage, die nie
+  beantwortet wird, wird nach einer Stunde wiederholt. Während einer laufenden
+  Installation wird nicht gescannt. Abschaltbar über `PATCH_SCAN_ENABLED`.
+- Der Gerätereiter „Updates" zeigt jetzt, wann zuletzt wirklich gescannt
+  wurde. Eine leere Liste sah vorher aus wie „alles aktuell", auch wenn nie
+  jemand nachgesehen hatte.
+
 ### Geändert
 - Alle Module öffnen die Datenbank über einen gemeinsamen Helfer
   (`app/db.py`), der Fremdschlüssel einschaltet. Vorher taten das zwei von
@@ -107,6 +155,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   der Major steht in `frontend/Dockerfile` und in `node-version` in `ci.yml`,
   ein Auseinanderlaufen zeigte sich sonst erst beim Deploy. Dependabot
   ignoriert den Node-Major deshalb; es sieht nur den Dockerfile.
+- Das Backend-Image bringt `tzdata` mit und der Container bekommt
+  `TZ` (Default `Europe/Berlin`). Ohne beides rechnet der tägliche Update-Scan
+  in UTC, und der eingestellte Slot läge im Sommer zwei Stunden daneben.
+- Der Ping/Pong-Barrier in den Agent-WS-Tests sammelt unaufgeforderte Frames
+  ein, statt anzunehmen, dass die nächste Nachricht das Pong ist. Der Kanal
+  ist kein Request/Response — der Server schickt von sich aus (Update-Angebot,
+  Scan-Aufforderung).
 - Dependabot ignoriert außerdem die Majors von `eslint`, `@eslint/js` und
   `typescript`: alle drei lassen sich derzeit nicht installieren
   (`eslint-plugin-jsx-a11y` hat als Peer nur eslint ≤ 9, `typescript-eslint@8`
@@ -114,6 +169,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
 
 ### Behoben
+- Offline-Geräte zählten gleichzeitig als „Problem"-Geräte: dieselbe Maschine
+  stand unter beiden Filtern und die Trefferzahlen ergaben zusammen mehr als
+  die Flotte. Offline ist jetzt eine eigene Lage — was auf einem nicht
+  erreichbaren Gerät kaputt ist, lässt sich ohnehin erst beheben, wenn es
+  wieder antwortet.
 - Der `web`-Container startete nach der Härtung überhaupt nicht mehr:
   `exec /usr/bin/caddy: operation not permitted`, Exit 255, Neustartschleife,
   Port 80 tot. Ursache ist nicht ein Schreibrecht, sondern `execve` selbst:

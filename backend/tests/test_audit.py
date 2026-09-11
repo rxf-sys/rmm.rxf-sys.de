@@ -158,3 +158,62 @@ async def test_audit_endpoint_passes_filters_through(admin_client: AsyncClient):
     assert [e["event"] for e in r.json()["events"]] == ["auth.login"]
     r = await admin_client.get("/api/audit", params={"limit": 1, "offset": 1})
     assert r.json()["total"] == 2 and len(r.json()["events"]) == 1
+
+
+async def test_record_resolves_device_and_script_names(client: AsyncClient):
+    """Ein Ereignis mit device_id/script_id bekommt den Namen mitgeschrieben —
+    "Gerät 4" sagt eine Woche später nichts mehr aus."""
+    from app import devices, scripts
+
+    await audit.clear()
+    raw, _ = await devices.create_enrollment_token("test", 1)
+    device = await devices.enroll_device(token=raw, hostname="nas-fritz", os="linux")
+    script = await scripts.create("Spooler-Reset", "bash", "echo hi", "admin")
+
+    await audit.record("patch.scan_requested", user="robin", device_id=device["device_id"])
+    await audit.record("script.updated", user="robin", script_id=script["id"])
+
+    events = {e["event"]: e for e in await audit.recent()}
+    assert events["patch.scan_requested"]["detail"]["hostname"] == "nas-fritz"
+    assert events["script.updated"]["detail"]["script"] == "Spooler-Reset"
+
+
+async def test_record_keeps_an_explicitly_passed_name(client: AsyncClient):
+    """Der Löschpfad reicht den Namen selbst herein, weil die Zeile dann schon
+    weg ist — eine Auflösung darf ihn nicht überschreiben."""
+    await audit.clear()
+    await audit.record("devices.deleted", user="robin", device_id=999, hostname="war-mal-da")
+    assert (await audit.recent())[0]["detail"]["hostname"] == "war-mal-da"
+
+
+async def test_record_survives_an_unknown_id(client: AsyncClient):
+    await audit.clear()
+    await audit.record("patch.scan_requested", user="robin", device_id=4242)
+    event = (await audit.recent())[0]
+    assert "hostname" not in event["detail"]
+    assert event["device_id"] == 4242
+
+
+async def test_deleting_a_device_records_its_name(admin_client: AsyncClient):
+    from app import devices
+
+    await audit.clear()
+    raw, _ = await devices.create_enrollment_token("test", 1)
+    device = await devices.enroll_device(token=raw, hostname="laptop-mama", os="windows")
+    r = await admin_client.delete(f"/api/devices/{device['device_id']}")
+    assert r.status_code == 200
+
+    deleted = next(e for e in await audit.recent() if e["event"] == "devices.deleted")
+    assert deleted["detail"]["hostname"] == "laptop-mama"
+
+
+async def test_deleting_a_script_records_its_name(admin_client: AsyncClient):
+    r = await admin_client.post(
+        "/api/scripts", json={"name": "Temp aufraeumen", "shell": "bash", "content": "echo x"}
+    )
+    sid = r.json()["script"]["id"]
+    await audit.clear()
+    assert (await admin_client.delete(f"/api/scripts/{sid}")).status_code == 200
+
+    deleted = next(e for e in await audit.recent() if e["event"] == "script.deleted")
+    assert deleted["detail"]["script"] == "Temp aufraeumen"
