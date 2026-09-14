@@ -8,6 +8,22 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Die Reiter einer Geräteseite** sind jetzt eine benannte Gruppe statt acht
+  loser Schaltflächen: Tab springt einmal hinein, Pfeiltasten wechseln,
+  Pos1/Ende gehen an die Ränder. Der Reiter „Updates" trägt die Zahl der
+  offenen Updates (rot, sobald Sicherheitsupdates dabei sind), und der aktive
+  Reiter steht in der URL — ein Neuladen landet wieder dort, und ein Link kann
+  auf `/devices/7?tab=patches` zeigen.
+- **Metrik-Verlauf überarbeitet:** beschriftete y-Achse, Werte aller drei
+  Reihen beim Überfahren, fünf Zeitmarken statt zweier Ränder, und die x-Achse
+  spannt sich über das gewählte Fenster statt über die vorhandenen Messpunkte
+  (bei einem Gerät, das seit zehn Minuten meldet, sah das vorher aus wie ein
+  Tagesverlauf). Pausen von mehr als zehn Minuten werden nicht mehr
+  überzeichnet, und das SVG wird nicht mehr verzerrt, was die Linienstärken
+  ungleich machte. Spitzenwerte stehen in der Kopfzeile; die Alarme des Geräts
+  haben eine eigene Karte statt einer Fußzeile unter dem Diagramm.
+- **Gleicher Kartenkopf in allen Reitern** (Updates, Diagnose, Passwörter,
+  Aktivität): Titel, erklärende Unterzeile, Bedienelemente rechts.
 - **Alarm-Center neu:** eine Zeile je Alarm mit farbigem Streifen statt einer
   Karte je Alarm, die Dauer („seit 9 Std.") neben der Meldung, die auslösende
   Regel samt Geltungsbereich darunter, eine Filterleiste für offen / quittiert
