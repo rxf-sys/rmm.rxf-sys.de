@@ -6,6 +6,7 @@ import { usePagination } from '../hooks/usePagination';
 import { AppleLogo, LinuxLogo, WindowsLogo } from '../icons';
 import { TEMPLATES, type ScriptTemplate } from '../scriptTemplates';
 import type { Device, Script, ScriptCategory, ScriptOs, Shell } from '../types';
+import { osMatchesDevice } from '../scriptOs';
 import { FilterBar, type FilterOption } from './FilterBar';
 import { Pagination } from './Pagination';
 
@@ -64,12 +65,6 @@ function loadFavorites(): number[] {
   } catch {
     return [];
   }
-}
-
-/** Which library OSes a device can run: an exact match or a cross-platform
- * ("any") script. */
-function osMatchesDevice(scriptOs: ScriptOs, deviceOs: string): boolean {
-  return scriptOs === 'any' || scriptOs === deviceOs;
 }
 
 function OsChip({ os }: { os: ScriptOs }) {
