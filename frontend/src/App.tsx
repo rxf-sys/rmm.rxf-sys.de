@@ -9,6 +9,7 @@ import { Header } from './components/Header';
 import { LoginPage } from './components/LoginPage';
 import { OverviewPage } from './components/OverviewPage';
 import { Sidebar, type PageId } from './components/Sidebar';
+import type { PatchSummary } from './types';
 import { Skeleton } from './ui';
 import { useAuth } from './hooks/useAuth';
 import { useFleet } from './hooks/useFleet';
@@ -70,6 +71,7 @@ function DeviceRoute({
   isAdmin,
   isOperator,
   favorites,
+  patchSummary,
   onToggleFavorite,
   onLeave,
   onDeleted,
@@ -78,6 +80,7 @@ function DeviceRoute({
   isAdmin: boolean;
   isOperator: boolean;
   favorites: number[];
+  patchSummary: PatchSummary;
   onToggleFavorite: (id: number) => void;
   onLeave: () => void;
   onDeleted: () => void;
@@ -89,6 +92,7 @@ function DeviceRoute({
   return (
     <DeviceDetail
       deviceId={id}
+      patchCounts={patchSummary[String(id)]}
       isAdmin={isAdmin}
       isOperator={isOperator}
       favorite={favorites.includes(id)}
@@ -254,6 +258,7 @@ export default function App() {
                   isAdmin={isAdmin}
                   isOperator={isOperator}
                   favorites={favorites}
+                  patchSummary={fleet.patchSummary}
                   onToggleFavorite={toggleFavorite}
                   onLeave={() => navigate(PAGE_PATH.devices)}
                   onDeleted={() => {

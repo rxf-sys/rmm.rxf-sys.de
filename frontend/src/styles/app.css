@@ -1286,13 +1286,20 @@ textarea.input {
   gap: 2px;
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
+  /* Beim Wechsel per Pfeiltaste soll der Fokusring nicht am Rand abgeschnitten
+     werden, wenn die Leiste scrollt. */
+  scrollbar-width: thin;
 }
 .tab {
-  padding: 8px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--tx3);
+  font-family: inherit;
   font-weight: 700;
   font-size: 12.5px;
   cursor: pointer;
@@ -1301,10 +1308,147 @@ textarea.input {
 }
 .tab:hover {
   color: var(--tx);
+  background: var(--hover);
 }
 .tab.active {
   color: var(--accT);
   border-bottom-color: var(--accent);
+}
+/* Zahl am Reiter — nur dort, wo sie eine Entscheidung trägt. */
+.tab-count {
+  font: 700 10px var(--mono);
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--chip);
+  color: var(--tx3);
+}
+.tab-count.tone-warn {
+  background: var(--warnBg);
+  color: var(--warn);
+}
+.tab-count.tone-danger {
+  background: var(--dangerBg);
+  color: var(--dangerS);
+}
+
+/* Kopfzeile einer Reiter-Karte: Titel und Unterzeile links, Bedienelemente
+   rechts — damit alle Reiter gleich anfangen. */
+.tab-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line2);
+}
+.tab-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  margin-right: auto;
+}
+.tab-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 16px;
+  color: var(--tx2);
+  font-size: 12.5px;
+}
+
+/* Metrik-Verlauf (components/MetricChart.tsx) */
+.metric-chart {
+  position: relative;
+}
+.metric-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.metric-tip {
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+  transform: translate(-50%, -105%);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: var(--shadow);
+}
+.metric-tip-when {
+  font: 600 10px var(--mono);
+  color: var(--tx3);
+}
+.metric-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--tx2);
+}
+.metric-tip-row b {
+  margin-left: auto;
+  font: 600 11px var(--mono);
+  color: var(--tx);
+  font-variant-numeric: tabular-nums;
+}
+.metric-sw {
+  width: 9px;
+  height: 3px;
+  border-radius: 2px;
+  flex: none;
+}
+.metric-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--tx2);
+}
+.metric-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Alarmzeile im Geräteverlauf. */
+.alarm-mini {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line2);
+  font-size: 12px;
+}
+.alarm-mini:last-child {
+  border-bottom: none;
+}
+.alarm-mini-msg {
+  font-weight: 600;
+}
+.alarm-mini-when {
+  color: var(--tx3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+@media (max-width: 620px) {
+  .alarm-mini {
+    grid-template-columns: 8px 1fr;
+  }
+  .alarm-mini-when {
+    grid-column: 2;
+  }
 }
 
 /* ============================================================

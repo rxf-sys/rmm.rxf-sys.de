@@ -8,6 +8,27 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Die Reiter einer Geräteseite** sind jetzt eine benannte Gruppe statt acht
+  loser Schaltflächen: Tab springt einmal hinein, Pfeiltasten wechseln,
+  Pos1/Ende gehen an die Ränder. Der Reiter „Updates" trägt die Zahl der
+  offenen Updates (rot, sobald Sicherheitsupdates dabei sind), und der aktive
+  Reiter steht in der URL — ein Neuladen landet wieder dort, und ein Link kann
+  auf `/devices/7?tab=patches` zeigen.
+- **Metrik-Verlauf überarbeitet:** beschriftete y-Achse, Werte aller drei
+  Reihen beim Überfahren, fünf Zeitmarken statt zweier Ränder, und die x-Achse
+  spannt sich über das gewählte Fenster statt über die vorhandenen Messpunkte
+  (bei einem Gerät, das seit zehn Minuten meldet, sah das vorher aus wie ein
+  Tagesverlauf). Pausen von mehr als zehn Minuten werden nicht mehr
+  überzeichnet, und das SVG wird nicht mehr verzerrt, was die Linienstärken
+  ungleich machte. Spitzenwerte stehen in der Kopfzeile; die Alarme des Geräts
+  haben eine eigene Karte statt einer Fußzeile unter dem Diagramm.
+- **Remote-Reiter neu geordnet:** drei benannte Bereiche (Fernsteuerung,
+  Terminal, Skript ausführen) statt dreier lose gestapelter Blöcke. Das
+  Terminal sperrt seine Eingabe bei getrenntem Gerät und begründet das, zeigt
+  den Befehl über seiner Ausgabe und lässt sich leeren; zur Wahl stehen nur
+  Shells, die es auf dem System gibt.
+- **Gleicher Kartenkopf in allen Reitern** (Updates, Diagnose, Passwörter,
+  Aktivität): Titel, erklärende Unterzeile, Bedienelemente rechts.
 - **Alarm-Center neu:** eine Zeile je Alarm mit farbigem Streifen statt einer
   Karte je Alarm, die Dauer („seit 9 Std.") neben der Meldung, die auslösende
   Regel samt Geltungsbereich darunter, eine Filterleiste für offen / quittiert
@@ -211,6 +232,19 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
 
 ### Behoben
+- **Ein destruktives Skript lief im Remote-Reiter mit einem einzigen Klick.**
+  In der Bibliothek verlangt es seinen Namen, hier stand es als Knopf in einer
+  Reihe gleich aussehender Knöpfe. Jetzt gilt dieselbe Hürde. Außerdem bot der
+  Reiter jedes Skript auf jedem Gerät an — auch PowerShell auf einem
+  Linux-Server; die Auswahl ist auf passende Skripte eingeschränkt.
+- Ein aufgedecktes Passwort blieb sichtbar, bis jemand die Seite verließ. Es
+  verbirgt sich jetzt nach 30 Sekunden von selbst; dazu steht dabei, wer den
+  Eintrag zuletzt geändert hat.
+- Die Update-Liste eines Geräts stand in der Reihenfolge, die der Agent
+  lieferte. Sie ist nach Dringlichkeit sortiert, mit der Verteilung darüber.
+- Der Inventar-Reiter schnitt die Softwareliste stillschweigend bei 500
+  Einträgen ab, unterschied „nichts gemeldet" nicht von „kein Treffer" und
+  sagte nicht, wann das Inventar erhoben wurde.
 - Der Knopf „Scannen" im Patch-Management öffnete nur das Gerät, statt einen
   Scan anzufordern. Er tut jetzt, was er sagt; dazu eine Spalte „zuletzt
   geprüft", und ein nie gescanntes Gerät steht nicht mehr als „aktuell" da.

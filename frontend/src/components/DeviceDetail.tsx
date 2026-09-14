@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, apiErrorMessage } from '../api/client';
 import { formatBytes, formatRate, formatRelative, osLabel } from '../format';
 import { useConfirm } from '../hooks/useConfirm';
@@ -20,14 +21,20 @@ import type {
   Severity,
   Shell,
 } from '../types';
-import { Dot } from '../ui';
+import { Dot, Skeleton } from '../ui';
 import { deviceState, loadColor, stateColor } from '../deviceStatus';
+import { osMatchesDevice, shellsFor } from '../scriptOs';
 import { IconKey, IconPower, IconTerminal, IconWrench, OsIcon } from '../icons';
+import { DeviceTabs } from './DeviceTabs';
+import { FilterBar, type FilterOption } from './FilterBar';
+import { MetricChart } from './MetricChart';
 import { Pagination } from './Pagination';
 // (osShort available via ../format if needed by future tab work)
 
 interface Props {
   deviceId: number;
+  /** Ausstehende Updates dieses Geräts — nur für die Zahl am Reiter. */
+  patchCounts?: { pending: number; security: number };
   isAdmin: boolean;
   isOperator: boolean;
   favorite: boolean;
@@ -58,6 +65,8 @@ const TABS: { id: TabId; label: string; adminOnly?: boolean; operatorOnly?: bool
   { id: 'jobs', label: 'Aktivität', operatorOnly: true },
 ];
 
+const TAB_IDS = TABS.map((t) => t.id);
+
 const JOB_STATUS_LABEL: Record<JobStatus, string> = {
   queued: 'wartet',
   running: 'läuft',
@@ -70,6 +79,9 @@ function jobBadge(s: JobStatus): string {
   if (s === 'failed' || s === 'timeout') return 'badge-danger';
   return 'badge-accent';
 }
+
+/** Reihenfolge der Dringlichkeit — auch die Reihenfolge der Zusammenfassung. */
+const SEV_RANK: Severity[] = ['critical', 'important', 'moderate', 'low', 'other'];
 
 const SEV_LABEL: Record<Severity, string> = {
   critical: 'kritisch',
@@ -89,6 +101,7 @@ function sevBadge(s: Severity): string {
 
 export function DeviceDetail({
   deviceId,
+  patchCounts,
   isAdmin,
   isOperator,
   favorite,
@@ -102,7 +115,13 @@ export function DeviceDetail({
   // Separate from `error`: a confirmation rendered in red as if it were a
   // failure is worse than no confirmation at all.
   const [notice, setNotice] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabId>('overview');
+  // Der Reiter steht in der URL: ein Neuladen landet wieder dort, und ein
+  // Link kann direkt auf „Updates" eines Geräts zeigen.
+  const [params, setParams] = useSearchParams();
+  const rawTab = params.get('tab');
+  const tab: TabId = TAB_IDS.includes(rawTab as TabId) ? (rawTab as TabId) : 'overview';
+  const setTab = (t: TabId) =>
+    setParams(t === 'overview' ? {} : { tab: t }, { replace: true });
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [agentUpdating, setAgentUpdating] = useState(false);
@@ -341,13 +360,20 @@ export function DeviceDetail({
         </div>
       )}
 
-      <div className="tabs">
-        {TABS.filter((t) => (!t.adminOnly || isAdmin) && (!t.operatorOnly || isOperator)).map((t) => (
-          <button key={t.id} className={tab === t.id ? 'tab active' : 'tab'} onClick={() => setTab(t.id)}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <DeviceTabs
+        tabs={TABS.filter((t) => (!t.adminOnly || isAdmin) && (!t.operatorOnly || isOperator)).map(
+          (t) => ({
+            ...t,
+            // Nur der Updates-Reiter trägt eine Zahl: sie entscheidet, ob man
+            // dort nachsehen muss. Sicherheitsupdates färben sie rot.
+            count: t.id === 'patches' ? (patchCounts?.pending ?? 0) : undefined,
+            tone: t.id === 'patches' && (patchCounts?.security ?? 0) > 0 ? 'danger' : 'warn',
+          }),
+        )}
+        value={tab}
+        onChange={setTab}
+        label="Ansicht dieses Geräts"
+      />
 
       {editing && isOperator && (
         <EditCard device={d} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void load(); }} onError={setError} />
@@ -437,6 +463,9 @@ interface CredDraft {
 }
 const EMPTY_CRED: CredDraft = { id: null, label: '', username: '', secret: '', notes: '' };
 
+/** Wie lange ein aufgedecktes Passwort sichtbar bleibt. */
+const HIDE_AFTER_MS = 30_000;
+
 function PasswordsTab({ deviceId }: { deviceId: number }) {
   const { ask, dialog: confirmDialog } = useConfirm();
   const [creds, setCreds] = useState<Credential[] | null>(null);
@@ -509,6 +538,15 @@ function PasswordsTab({ deviceId }: { deviceId: number }) {
     try {
       const r = await api.revealCredential(deviceId, id);
       setRevealed((prev) => ({ ...prev, [id]: r.secret }));
+      // Nach einer halben Minute wieder zu: ein aufgedecktes Passwort blieb
+      // sonst stehen, bis jemand die Seite verließ — auf einem geteilten
+      // Bildschirm ist das die halbe Miete für ein Leck.
+      window.setTimeout(() => {
+        setRevealed((prev) => {
+          const { [id]: _drop, ...rest } = prev;
+          return rest;
+        });
+      }, HIDE_AFTER_MS);
     } catch (e) {
       setError(apiErrorMessage(e));
     }
@@ -544,13 +582,15 @@ function PasswordsTab({ deviceId }: { deviceId: number }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {confirmDialog}
-      <div className="row" style={{ gap: 8 }}>
-        <span className="card-title">Passwörter {creds ? `(${creds.length})` : ''}</span>
-        <span className="muted" style={{ fontSize: 11 }}>
-          verschlüsselt gespeichert · jedes Aufdecken landet im Audit-Log
-        </span>
+      <div className="tab-head" style={{ border: 0, padding: 0 }}>
+        <div className="tab-head-text">
+          <span className="card-title">Passwörter {creds ? `(${creds.length})` : ''}</span>
+          <span className="muted" style={{ fontSize: 11 }}>
+            verschlüsselt gespeichert · jedes Aufdecken landet im Audit-Log
+          </span>
+        </div>
         {!draft && (
-          <button className="btn btn-primary btn-sm grow" style={{ marginLeft: 'auto' }} onClick={() => setDraft({ ...EMPTY_CRED })}>
+          <button className="btn btn-primary btn-sm" onClick={() => setDraft({ ...EMPTY_CRED })}>
             + Neuer Eintrag
           </button>
         )}
@@ -615,9 +655,11 @@ function PasswordsTab({ deviceId }: { deviceId: number }) {
                   Löschen
                 </button>
               </span>
-              {c.notes && (
-                <span className="muted" style={{ fontSize: 11, width: '100%' }}>{c.notes}</span>
-              )}
+              <span className="muted" style={{ fontSize: 11, width: '100%' }}>
+                {c.notes ? `${c.notes} · ` : ''}
+                zuletzt geändert von {c.updated_by || 'unbekannt'} {formatRelative(c.updated_at)}
+                {revealed[c.id] !== undefined ? ' · wird nach 30 Sekunden wieder verborgen' : ''}
+              </span>
             </div>
           ))}
         </div>
@@ -1021,6 +1063,14 @@ function HistoryTab({ deviceId }: { deviceId: number }) {
   const [hours, setHours] = useState(24);
   const [samples, setSamples] = useState<MetricSample[] | null>(null);
   const [alertData, setAlertData] = useState<{ alerts: Alert[]; stats: AlertStats } | null>(null);
+  // Die x-Achse spannt sich über das gewählte Fenster bis „jetzt"; ohne
+  // laufende Uhr stünde das Diagramm still, solange der Tab offen bleibt.
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -1040,94 +1090,95 @@ function HistoryTab({ deviceId }: { deviceId: number }) {
     return () => ctrl.abort();
   }, [deviceId]);
 
-  const W = 600;
-  const H = 220;
-  // `samples.length < 2` already rules out an empty array; the explicit
-  // first/last bindings make that visible to the compiler as well.
-  const bounds = () => {
-    if (!samples || samples.length < 2) return null;
-    const first = samples[0];
-    const last = samples[samples.length - 1];
-    if (!first || !last) return null;
-    return { t0: first.ts, t1: Math.max(last.ts, first.ts + 1) };
-  };
-  const line = (key: 'cpu_pct' | 'mem_pct' | 'disk_max_pct') => {
-    const b = bounds();
-    if (!b || !samples) return '';
-    return samples
-      .map(
-        (s) =>
-          `${(((s.ts - b.t0) / (b.t1 - b.t0)) * W).toFixed(1)},${(H - (s[key] / 100) * H).toFixed(1)}`,
-      )
-      .join(' ');
-  };
-  const tsLabel = (frac: number) => {
-    const b = bounds();
-    if (!b) return '';
-    const t = b.t0 + frac * (b.t1 - b.t0);
-    return new Date(t * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-  };
+  // FilterBar-Kennungen sind Zeichenketten; die Stundenzahl bleibt die Wahrheit.
+  const rangeOptions: FilterOption<string>[] = RANGES.map((r) => ({
+    id: String(r.hours),
+    label: r.label,
+  }));
+  const peak = (key: 'cpu_pct' | 'mem_pct' | 'disk_max_pct') =>
+    samples && samples.length > 0 ? Math.round(Math.max(...samples.map((x) => x[key]))) : null;
 
   return (
-    <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div className="row" style={{ gap: 12 }}>
-        <span className="card-title">Metrik-Verlauf</span>
-        <span className="row" style={{ gap: 12, fontWeight: 600, fontSize: 11, color: 'var(--tx2)' }}>
-          <span><span style={{ color: 'var(--accent)' }}>■</span> CPU</span>
-          <span><span style={{ color: 'var(--violet)' }}>■</span> RAM</span>
-          <span><span style={{ color: 'var(--warn)' }}>■</span> Disk max</span>
-        </span>
-        <div className="row grow" style={{ marginLeft: 'auto', gap: 5 }}>
-          {RANGES.map((r) => (
-            <button key={r.hours} className={hours === r.hours ? 'btn btn-accent btn-sm' : 'btn btn-sm'} onClick={() => setHours(r.hours)}>
-              {r.label}
-            </button>
-          ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="tab-head">
+          <div className="tab-head-text">
+            <span className="card-title">Metrik-Verlauf</span>
+            <span className="muted" style={{ fontSize: 11 }}>
+              {samples && samples.length > 1
+                ? `Spitzen im Fenster: CPU ${peak('cpu_pct')} % · RAM ${peak('mem_pct')} % · Disk ${peak('disk_max_pct')} %`
+                : 'aus den Heartbeats des Geräts'}
+            </span>
+          </div>
+          <FilterBar
+            options={rangeOptions}
+            value={String(hours)}
+            onChange={(v) => setHours(Number(v))}
+            label="Zeitfenster des Verlaufs"
+          />
+        </div>
+        <div style={{ padding: '10px 16px 14px' }}>
+          {samples === null ? (
+            <Skeleton h={180} />
+          ) : (
+            <>
+              <MetricChart samples={samples} hours={hours} now={now} />
+              <div className="metric-legend">
+                {[
+                  { label: 'CPU', color: 'var(--accent)' },
+                  { label: 'RAM', color: 'var(--violet)' },
+                  { label: 'Disk max', color: 'var(--warn)' },
+                ].map((l) => (
+                  <span key={l.label}>
+                    <span className="metric-sw" style={{ background: l.color }} />
+                    {l.label}
+                  </span>
+                ))}
+                <span className="muted" style={{ marginLeft: 'auto', fontSize: 11 }}>
+                  Lücken bedeuten: das Gerät hat nichts gemeldet.
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
-      {samples && samples.length >= 2 ? (
-        <>
-          <svg width="100%" height="220" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-            {[55, 110, 165].map((y) => (
-              <line key={y} x1="0" y1={y} x2={W} y2={y} style={{ stroke: 'var(--line)' }} strokeWidth="1" />
-            ))}
-            <polyline points={line('disk_max_pct')} fill="none" style={{ stroke: 'var(--warn)' }} strokeWidth="1.5" strokeDasharray="4 3" />
-            <polyline points={line('mem_pct')} fill="none" style={{ stroke: 'var(--violet)' }} strokeWidth="2" />
-            <polyline points={line('cpu_pct')} fill="none" style={{ stroke: 'var(--accent)' }} strokeWidth="2" />
-          </svg>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--tx3)' }}>{tsLabel(0)}</span>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--tx3)' }}>{tsLabel(0.5)}</span>
-            <span className="mono" style={{ fontSize: 10, color: 'var(--tx3)' }}>jetzt</span>
-          </div>
-        </>
-      ) : (
-        <span className="muted">Noch nicht genug Verlaufsdaten — der Chart füllt sich mit jedem Heartbeat.</span>
-      )}
 
+      {/* Alarme sind eine eigene Frage und bekommen eine eigene Karte, statt
+          als Fußzeile unter dem Diagramm zu kleben. */}
       {alertData && (
-        <div style={{ borderTop: '1px solid var(--line2)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-            <span className="card-title-sm">Alarm-Trend (30 Tage)</span>
-            <span className="muted" style={{ fontSize: 11 }}>
-              {alertData.stats.total} Alarm(e) · aktuell {alertData.stats.open} offen
-            </span>
-            <div className="row grow" style={{ marginLeft: 'auto', gap: 6, flex: 'none', flexWrap: 'wrap' }}>
+        <div className="card" style={{ overflow: 'hidden' }}>
+          <div className="tab-head">
+            <div className="tab-head-text">
+              <span className="card-title">Alarme, letzte 30 Tage</span>
+              <span className="muted" style={{ fontSize: 11 }}>
+                {alertData.stats.total === 0
+                  ? 'kein einziger Alarm — stabil'
+                  : `${alertData.stats.total} insgesamt · ${alertData.stats.open} offen`}
+              </span>
+            </div>
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
               {Object.entries(alertData.stats.by_rule).map(([rule, n]) => (
                 <span key={rule} className="chip">
-                  {(RULE_LABEL_SHORT[rule] ?? rule)}: {n}×
+                  {RULE_LABEL_SHORT[rule] ?? rule}: {n}×
                 </span>
               ))}
-              {alertData.stats.total === 0 && <span className="muted" style={{ fontSize: 11 }}>keine Alarme — stabil ✓</span>}
             </div>
           </div>
-          {alertData.alerts.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 180, overflowY: 'auto' }}>
+          {alertData.alerts.length === 0 ? (
+            <div className="tab-empty">
+              <span style={{ color: 'var(--ok)', fontSize: 18 }}>✓</span>
+              <span>In den letzten 30 Tagen hat dieses Gerät keinen Alarm ausgelöst.</span>
+            </div>
+          ) : (
+            <div style={{ maxHeight: 260, overflowY: 'auto' }}>
               {alertData.alerts.map((a) => (
-                <div key={a.id} className="row" style={{ gap: 8, fontSize: 11.5, padding: '4px 0' }}>
-                  <span className="dot" style={{ background: a.resolved_at ? 'var(--ok)' : 'var(--dangerS)' }} />
-                  <span style={{ fontWeight: 600 }}>{a.message}</span>
-                  <span className="muted grow" style={{ marginLeft: 'auto', fontSize: 10.5, flex: 'none' }}>
+                <div key={a.id} className="alarm-mini">
+                  <span
+                    className="dot"
+                    style={{ background: a.resolved_at ? 'var(--ok)' : 'var(--dangerS)' }}
+                  />
+                  <span className="alarm-mini-msg">{a.message}</span>
+                  <span className="alarm-mini-when">
                     {formatRelative(a.fired_at)}
                     {a.resolved_at ? ` · behoben ${formatRelative(a.resolved_at)}` : ' · offen'}
                   </span>
@@ -1146,6 +1197,7 @@ function HistoryTab({ deviceId }: { deviceId: number }) {
 // ---------------------------------------------------------------------------
 function DiagnosticsTab({ deviceId, connected }: { deviceId: number; connected: boolean }) {
   const [lines, setLines] = useState<string[] | null>(null);
+  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1155,6 +1207,7 @@ function DiagnosticsTab({ deviceId, connected }: { deviceId: number; connected: 
     try {
       const r = await api.agentLogs(deviceId);
       setLines(r.lines);
+      setCopied(false);
     } catch (e) {
       setError(apiErrorMessage(e));
     } finally {
@@ -1164,12 +1217,15 @@ function DiagnosticsTab({ deviceId, connected }: { deviceId: number; connected: 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div className="row" style={{ gap: 8 }}>
-        <span className="card-title">Agent-Diagnose</span>
-        <span className="muted" style={{ fontSize: 11 }}>letzte Log-Zeilen des Agenten</span>
+      <div className="tab-head" style={{ border: 0, padding: 0 }}>
+        <div className="tab-head-text">
+          <span className="card-title">Agent-Diagnose</span>
+          <span className="muted" style={{ fontSize: 11 }}>
+            die letzten Log-Zeilen direkt vom Agenten — sie werden nicht gespeichert
+          </span>
+        </div>
         <button
-          className="btn btn-accent btn-sm grow"
-          style={{ marginLeft: 'auto' }}
+          className="btn btn-accent btn-sm"
           onClick={() => void fetchLogs()}
           disabled={busy || !connected}
         >
@@ -1178,10 +1234,34 @@ function DiagnosticsTab({ deviceId, connected }: { deviceId: number; connected: 
       </div>
       {!connected && <span className="muted">Gerät ist nicht verbunden — Logs sind nur bei aktivem Agent abrufbar.</span>}
       {error && <p className="err">{error}</p>}
+      {lines === null && connected && !busy && (
+        <div className="tab-empty card">
+          <span style={{ color: 'var(--tx3)', fontSize: 16 }}>⌕</span>
+          <span>
+            Der Agent hält die letzten Zeilen im Speicher. „Logs abrufen" holt sie — sie werden
+            nirgends gespeichert, ein zweiter Abruf kann also andere Zeilen zeigen.
+          </span>
+        </div>
+      )}
       {lines !== null && (
         <div className="console">
           <div className="console-head">
             <span className="console-title">rmm-agent · {lines.length} Zeilen</span>
+            {lines.length > 0 && (
+              <button
+                className="btn btn-sm"
+                style={{ marginLeft: 'auto' }}
+                onClick={() => {
+                  // Bei einem Fehlerbericht will man die Zeilen woanders haben.
+                  void navigator.clipboard?.writeText(lines.join('\n')).then(
+                    () => setCopied(true),
+                    () => setCopied(false),
+                  );
+                }}
+              >
+                {copied ? '✓ kopiert' : 'Kopieren'}
+              </button>
+            )}
           </div>
           <div className="console-body" style={{ maxHeight: 420 }}>
             {lines.length === 0 ? (
@@ -1213,31 +1293,87 @@ function InventoryTab({ detail }: { detail: DeviceDetailData }) {
     ['RAM', typeof hw.mem_total_b === 'number' ? formatBytes(hw.mem_total_b as number) : '—'],
   ];
   const shown = sw.filter((s) => s.name.toLowerCase().includes(q.toLowerCase()));
+  const LIMIT = 500;
+  const reported = detail.inventory.hardware ?? detail.inventory.software;
+
+  if (!reported) {
+    return (
+      <div className="tab-empty card">
+        <span style={{ color: 'var(--tx3)', fontSize: 16 }}>⌕</span>
+        <span>
+          Der Agent hat noch kein Inventar gemeldet. Es wird beim nächsten Verbinden erhoben —
+          bei einem frisch enrollten Gerät dauert das einen Heartbeat.
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 14, alignItems: 'start' }} className="inv-grid">
-      <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-        <span className="card-title-sm">Hardware</span>
-        {rows.map(([k, v]) => (
-          <div key={k} className="kv">
-            <span className="k">{k}</span>
-            <span className="v">{v}</span>
+      <div className="card">
+        <div className="tab-head">
+          <div className="tab-head-text">
+            <span className="card-title">Hardware</span>
+            <span className="muted" style={{ fontSize: 11 }}>
+              {detail.inventory.hardware
+                ? `gemeldet ${formatRelative(detail.inventory.hardware.updated_at)}`
+                : 'noch nichts gemeldet'}
+            </span>
           </div>
-        ))}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9, padding: '12px 16px 14px' }}>
+          {rows.map(([k, v]) => (
+            <div key={k} className="kv">
+              <span className="k">{k}</span>
+              <span className="v">{v}</span>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="card" style={{ overflow: 'hidden' }}>
-        <div className="card-head">
-          <span className="card-title-sm">Software <span className="muted" style={{ fontSize: 11 }}>{sw.length}</span></span>
-          <input className="input btn-sm grow" style={{ marginLeft: 'auto', width: 180, flex: 'none' }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtern…" />
+        <div className="tab-head">
+          <div className="tab-head-text">
+            <span className="card-title">
+              Software{' '}
+              <span className="muted" style={{ fontSize: 11, fontWeight: 600 }}>
+                {q ? `${shown.length} von ${sw.length}` : sw.length}
+              </span>
+            </span>
+            <span className="muted" style={{ fontSize: 11 }}>
+              {detail.inventory.software
+                ? `gemeldet ${formatRelative(detail.inventory.software.updated_at)}`
+                : 'noch nichts gemeldet'}
+            </span>
+          </div>
+          <input
+            className="input btn-sm"
+            style={{ width: 180, flex: 'none' }}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Filtern…"
+            aria-label="Software filtern"
+          />
         </div>
-        <div style={{ maxHeight: 420, overflowY: 'auto' }}>
-          {shown.slice(0, 500).map((s, i) => (
+        <div style={{ maxHeight: 460, overflowY: 'auto' }}>
+          {shown.slice(0, LIMIT).map((s, i) => (
             <div key={`${s.name}-${i}`} className="row" style={{ padding: '7px 16px', borderBottom: '1px solid var(--line2)', fontSize: 12 }}>
               <span style={{ fontWeight: 600 }}>{s.name}</span>
               <span className="mono grow" style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--tx3)' }}>{s.version ?? ''}</span>
             </div>
           ))}
-          {shown.length === 0 && <div style={{ padding: '14px 16px' }} className="muted">Keine Treffer.</div>}
+          {shown.length === 0 && (
+            <div className="tab-empty">
+              {sw.length === 0
+                ? 'Der Agent hat keine Softwareliste geliefert.'
+                : `Kein Paket enthält „${q}".`}
+            </div>
+          )}
+          {shown.length > LIMIT && (
+            // Ehrlich sein statt stillschweigend abschneiden.
+            <div className="tab-empty">
+              {shown.length - LIMIT} weitere Einträge nicht angezeigt — Filter eingrenzen.
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1249,23 +1385,32 @@ function InventoryTab({ detail }: { detail: DeviceDetailData }) {
 // ---------------------------------------------------------------------------
 function RemoteTab({ device, isOperator, onSession, onChanged }: { device: Device; isOperator: boolean; onSession: () => void; onChanged: () => void }) {
   const [scripts, setScripts] = useState<Script[]>([]);
+  const [scriptId, setScriptId] = useState<number | ''>('');
   const [command, setCommand] = useState('');
-  const [shell, setShell] = useState<Shell>(device.os === 'windows' ? 'powershell' : 'bash');
+  const shells = shellsFor(device.os);
+  const [shell, setShell] = useState<Shell>(shells[0] ?? 'bash');
   const [activeJob, setActiveJob] = useState<number | null>(null);
+  const [lastCommand, setLastCommand] = useState('');
   const [error, setError] = useState<string | null>(null);
   const { ask, dialog: confirmDialog } = useConfirm();
   const stream = useJobStream(activeJob);
   const outRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const ctrl = new AbortController();
     api
-      .scripts()
+      .scripts(ctrl.signal)
       .then((r) => setScripts(r.scripts))
-      .catch((e) => setError(apiErrorMessage(e)));
+      .catch(() => setScripts([]));
+    return () => ctrl.abort();
   }, []);
   useEffect(() => {
     if (outRef.current) outRef.current.scrollTop = outRef.current.scrollHeight;
   }, [stream.output]);
+
+  // Nur Skripte, die auf diesem Betriebssystem überhaupt laufen können.
+  const runnable = scripts.filter((s) => osMatchesDevice(s.os, device.os));
+  const selected = runnable.find((s) => s.id === scriptId);
 
   const runShell = async () => {
     if (!command.trim()) return;
@@ -1286,81 +1431,241 @@ function RemoteTab({ device, isOperator, onSession, onChanged }: { device: Devic
     try {
       const r = await api.createShellJob(device.id, command.trim(), shell);
       setActiveJob(r.job.id);
+      setLastCommand(command.trim());
       setCommand('');
     } catch (e) {
       setError(apiErrorMessage(e));
     }
   };
-  const runScript = async (id: number) => {
+
+  const runScript = async (s: Script) => {
+    // Dieselbe Hürde wie in der Bibliothek: ein destruktives Skript verlangt
+    // seinen Namen. Hier lief es vorher mit einem einzigen Klick.
+    const ok = await ask({
+      title: s.danger
+        ? `Destruktives Skript auf ${device.hostname}`
+        : `Skript auf ${device.hostname} ausführen`,
+      body: s.danger ? (
+        <>
+          <strong>{s.name}</strong> ist als destruktiv markiert und läuft auf{' '}
+          <strong>{device.hostname}</strong> mit vollen Rechten. Es kann Daten zerstören oder das
+          Gerät lahmlegen.
+        </>
+      ) : (
+        <>
+          <strong>{s.name}</strong> läuft auf <strong>{device.hostname}</strong> mit vollen Rechten.
+        </>
+      ),
+      confirmLabel: 'Jetzt ausführen',
+      danger: s.danger,
+      requireText: s.danger ? s.name : undefined,
+    });
+    if (!ok) return;
     try {
-      const r = await api.createScriptJob(device.id, id);
+      const r = await api.createScriptJob(device.id, s.id);
       setActiveJob(r.job.id);
+      setLastCommand(`Skript: ${s.name}`);
     } catch (e) {
       setError(apiErrorMessage(e));
     }
   };
 
-  if (!isOperator) return <div className="card card-pad muted">Remote-Aktionen sind Administratoren und Technikern vorbehalten.</div>;
+  if (!isOperator)
+    return (
+      <div className="tab-empty card">
+        Remote-Aktionen sind Administratoren und Technikern vorbehalten.
+      </div>
+    );
 
-  const connBadge = device.connected ? { label: 'verbunden', cls: 'badge-ok' } : { label: 'getrennt', cls: 'badge-danger' };
+  const running = stream.status === 'running' || stream.status === 'queued';
+  const finished =
+    stream.status === 'done' || stream.status === 'failed' || stream.status === 'timeout';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {confirmDialog}
-      {device.rustdesk_id && (
-        <div className="card card-pad row" style={{ gap: 10 }}>
-          <span className="card-title-sm">Remote-Desktop</span>
-          <span className="muted" style={{ fontSize: 11.5 }}>RustDesk-ID <span className="mono">{device.rustdesk_id}</span></span>
-          <button className="btn btn-accent btn-sm grow" style={{ marginLeft: 'auto' }} onClick={onSession}>Sitzung öffnen ↗</button>
-        </div>
-      )}
-      {!device.rustdesk_id && <RemoteSetup device={device} onChanged={onChanged} />}
 
-      <div className="console">
-        <div className="console-head">
-          <span className="console-dots"><span /><span /><span /></span>
-          <span className="console-title">{shell} @ {device.hostname}</span>
-          <span className={`badge grow ${connBadge.cls}`} style={{ marginLeft: 'auto' }}>{connBadge.label}</span>
+      {/* 1 — Fernsteuerung */}
+      {device.rustdesk_id ? (
+        <div className="card">
+          <div className="tab-head" style={{ border: 0 }}>
+            <div className="tab-head-text">
+              <span className="card-title">Fernsteuerung</span>
+              <span className="muted" style={{ fontSize: 11 }}>
+                RustDesk-ID <span className="mono">{device.rustdesk_id}</span> · öffnet den
+                installierten Client
+              </span>
+            </div>
+            <button className="btn btn-accent btn-sm" onClick={onSession}>
+              Sitzung öffnen ↗
+            </button>
+          </div>
         </div>
-        <div className="console-body" ref={outRef}>
-          {activeJob === null ? (
-            <span className="console-line" style={{ color: '#4a5361' }}>Bereit · Live-Ausgabe über Agent-WebSocket</span>
-          ) : (
-            <span className="console-line">{stream.output || (stream.status === 'running' ? '…' : '')}</span>
-          )}
-          {stream.status && activeJob !== null && (stream.status === 'done' || stream.status === 'failed' || stream.status === 'timeout') && (
-            <span className="console-line" style={{ color: stream.exitCode === 0 ? '#4ade80' : '#f0766e' }}>
-              [{JOB_STATUS_LABEL[stream.status]}{stream.exitCode !== null ? ` · exit ${stream.exitCode}` : ''}]
+      ) : (
+        <RemoteSetup device={device} onChanged={onChanged} />
+      )}
+
+      {/* 2 — Terminal */}
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="tab-head">
+          <div className="tab-head-text">
+            <span className="card-title">Terminal</span>
+            <span className="muted" style={{ fontSize: 11 }}>
+              läuft mit vollen Systemrechten · jeder Befehl steht im Audit-Log
             </span>
+          </div>
+          <span className={`badge ${device.connected ? 'badge-ok' : 'badge-danger'}`}>
+            {device.connected ? 'verbunden' : 'getrennt'}
+          </span>
+          {(finished || stream.output) && (
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                setActiveJob(null);
+                setLastCommand('');
+              }}
+            >
+              Leeren
+            </button>
           )}
         </div>
-        <div className="console-input-row">
-          <span className="console-prompt">$</span>
-          <input
-            className="console-input"
-            value={command}
-            onChange={(e) => setCommand(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void runShell(); }}
-            placeholder="Befehl eingeben und Enter — z. B. df -h"
-            spellCheck={false}
-          />
-          <select className="input btn-sm" style={{ padding: '4px 8px' }} value={shell} onChange={(e) => setShell(e.target.value as Shell)}>
-            <option value="bash">bash</option>
-            <option value="zsh">zsh</option>
-            <option value="powershell">powershell</option>
-          </select>
-          <button className="btn btn-accent btn-sm" onClick={() => void runShell()}>Ausführen</button>
+
+        <div style={{ padding: '12px 16px 14px' }}>
+          <div className="console">
+            <div className="console-head">
+              <span className="console-dots">
+                <span />
+                <span />
+                <span />
+              </span>
+              <span className="console-title">
+                {shell} @ {device.hostname}
+              </span>
+              {running && (
+                <span className="badge badge-accent" style={{ marginLeft: 'auto' }}>
+                  läuft
+                </span>
+              )}
+            </div>
+            <div className="console-body" ref={outRef}>
+              {activeJob === null ? (
+                <span className="console-line" style={{ color: '#4a5361' }}>
+                  Bereit · die Ausgabe erscheint live, während der Befehl läuft
+                </span>
+              ) : (
+                <>
+                  {lastCommand && (
+                    <span className="console-line" style={{ color: '#7e87a3' }}>
+                      $ {lastCommand}
+                    </span>
+                  )}
+                  <span className="console-line">
+                    {stream.output || (running ? '…' : '')}
+                  </span>
+                </>
+              )}
+              {finished && activeJob !== null && (
+                <span
+                  className="console-line"
+                  style={{ color: stream.exitCode === 0 ? '#4ade80' : '#f0766e' }}
+                >
+                  [{JOB_STATUS_LABEL[stream.status as JobStatus]}
+                  {stream.exitCode !== null ? ` · exit ${stream.exitCode}` : ''}]
+                </span>
+              )}
+            </div>
+            <div className="console-input-row">
+              <span className="console-prompt">$</span>
+              <input
+                className="console-input"
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void runShell();
+                }}
+                placeholder={
+                  device.connected
+                    ? `Befehl eingeben und Enter — z. B. ${device.os === 'windows' ? 'Get-Service' : 'df -h'}`
+                    : 'Gerät ist nicht verbunden'
+                }
+                disabled={!device.connected || running}
+                spellCheck={false}
+                aria-label="Befehl"
+              />
+              {shells.length > 1 && (
+                <select
+                  className="input btn-sm"
+                  style={{ padding: '4px 8px' }}
+                  value={shell}
+                  aria-label="Shell"
+                  onChange={(e) => setShell(e.target.value as Shell)}
+                >
+                  {shells.map((sh) => (
+                    <option key={sh} value={sh}>
+                      {sh}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                className="btn btn-accent btn-sm"
+                onClick={() => void runShell()}
+                disabled={!device.connected || running || !command.trim()}
+              >
+                Ausführen
+              </button>
+            </div>
+          </div>
+          {!device.connected && (
+            <p className="muted" style={{ fontSize: 11.5, margin: '10px 0 0' }}>
+              Befehle brauchen eine offene Agent-Verbindung. Sobald sich das Gerät wieder meldet,
+              geht es hier weiter.
+            </p>
+          )}
         </div>
       </div>
-      {error && <p className="err">{error}</p>}
-      {scripts.length > 0 && (
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <span className="muted" style={{ fontSize: 11.5 }}>Skript ausführen:</span>
-          {scripts.map((s) => (
-            <button key={s.id} className="btn btn-sm" onClick={() => void runScript(s.id)}>▶ {s.name}</button>
-          ))}
+
+      {/* 3 — Skript aus der Bibliothek */}
+      <div className="card">
+        <div className="tab-head" style={{ border: 0 }}>
+          <div className="tab-head-text">
+            <span className="card-title">Skript ausführen</span>
+            <span className="muted" style={{ fontSize: 11 }}>
+              {runnable.length === 0
+                ? 'kein Skript der Bibliothek passt zu diesem Betriebssystem'
+                : `${runnable.length} von ${scripts.length} Skripten passen zu ${osLabel(device.os)}`}
+            </span>
+          </div>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <select
+              className="input btn-sm"
+              style={{ padding: '5px 9px', maxWidth: 260 }}
+              value={scriptId}
+              aria-label="Skript auswählen"
+              disabled={runnable.length === 0}
+              onChange={(e) => setScriptId(e.target.value ? Number(e.target.value) : '')}
+            >
+              <option value="">Skript wählen…</option>
+              {runnable.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.danger ? '⚠ ' : ''}
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            {selected?.danger && <span className="badge badge-danger">destruktiv</span>}
+            <button
+              className={selected?.danger ? 'btn btn-danger btn-sm' : 'btn btn-accent btn-sm'}
+              disabled={!selected || !device.connected || running}
+              onClick={() => selected && void runScript(selected)}
+            >
+              ▶ Ausführen
+            </button>
+          </div>
         </div>
-      )}
+      </div>
+
+      {error && <p className="err">{error}</p>}
     </div>
   );
 }
@@ -1481,22 +1786,29 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
   };
 
   const security = (patches ?? []).filter((p) => p.severity === 'critical' || p.severity === 'important').length;
+  // Nach Dringlichkeit sortiert: was zuerst installiert werden muss, steht
+  // oben. Die API liefert die Reihenfolge des Agents, und die ist beliebig.
+  const sortedPatches = [...(patches ?? [])].sort(
+    (a, b) => SEV_RANK.indexOf(a.severity) - SEV_RANK.indexOf(b.severity),
+  );
   const running = stream.status === 'running' || stream.status === 'queued';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {confirmDialog}
-      <div className="row" style={{ gap: 8 }}>
-        <span className="card-title">Updates {patches ? `(${patches.length})` : ''}</span>
-        {patches !== null && (
-          // Ohne das Datum sieht eine leere Liste aus wie "alles aktuell",
-          // auch wenn nie jemand nachgesehen hat.
-          <span className="muted" style={{ fontSize: 11 }}>
-            {lastScan ? `zuletzt geprüft ${formatRelative(lastScan)}` : 'noch nie geprüft'}
-          </span>
-        )}
+      <div className="tab-head" style={{ border: 0, padding: 0 }}>
+        <div className="tab-head-text">
+          <span className="card-title">Updates {patches ? `(${patches.length})` : ''}</span>
+          {patches !== null && (
+            // Ohne das Datum sieht eine leere Liste aus wie "alles aktuell",
+            // auch wenn nie jemand nachgesehen hat.
+            <span className="muted" style={{ fontSize: 11 }}>
+              {lastScan ? `zuletzt geprüft ${formatRelative(lastScan)}` : 'noch nie geprüft'}
+            </span>
+          )}
+        </div>
         {isOperator && (
-          <div className="row grow" style={{ marginLeft: 'auto', gap: 8 }}>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-sm" onClick={() => void scan()} disabled={busy || !connected}>⟳ Scannen</button>
             {security > 0 && <button className="btn btn-warn btn-sm" onClick={() => void install(true)} disabled={busy || running || !connected}>Nur Sicherheit ({security})</button>}
             {patches && patches.length > 0 && <button className="btn btn-primary btn-sm" onClick={() => void install(false)} disabled={busy || running || !connected}>Alle installieren</button>}
@@ -1519,7 +1831,24 @@ function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; con
       )}
       {patches && patches.length > 0 && (
         <div className="card" style={{ overflow: 'hidden' }}>
-          {patches.map((p) => (
+          <div className="tab-head">
+            <div className="tab-head-text">
+              <span className="card-title">Ausstehend</span>
+              <span className="muted" style={{ fontSize: 11 }}>
+                Sicherheitskritisches zuerst
+              </span>
+            </div>
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              {(Object.keys(SEV_LABEL) as Severity[])
+                .filter((sev) => patches.some((p) => p.severity === sev))
+                .map((sev) => (
+                  <span key={sev} className={`badge ${sevBadge(sev)}`}>
+                    {patches.filter((p) => p.severity === sev).length} {SEV_LABEL[sev]}
+                  </span>
+                ))}
+            </div>
+          </div>
+          {sortedPatches.map((p) => (
             <div key={p.patch_id} className="row" style={{ gap: 12, padding: '11px 16px', borderBottom: '1px solid var(--line2)' }}>
               <span className={`badge ${sevBadge(p.severity)}`} style={{ width: 66, textAlign: 'center', flex: 'none' }}>{SEV_LABEL[p.severity]}</span>
               <span style={{ fontWeight: 600, fontSize: 12.5 }}>{p.title}</span>
@@ -1572,7 +1901,14 @@ function JobsTab({ deviceId }: { deviceId: number }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {jobsError && <p className="err">{jobsError}</p>}
       <div className="card" style={{ overflow: 'hidden' }}>
-        <div className="card-head"><span className="card-title-sm">Job-Verlauf</span></div>
+        <div className="tab-head">
+          <div className="tab-head-text">
+            <span className="card-title">Job-Verlauf</span>
+            <span className="muted" style={{ fontSize: 11 }}>
+              Befehle, Skripte und Patch-Installationen auf diesem Gerät — neueste zuerst
+            </span>
+          </div>
+        </div>
         {jobs === null ? (
           <div style={{ padding: '14px 16px' }} className="muted">Lade…</div>
         ) : jobs.length === 0 ? (
