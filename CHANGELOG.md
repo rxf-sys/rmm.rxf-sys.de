@@ -8,6 +8,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- Die Reiterleiste einer Geräteseite bricht bei wenig Platz um, statt seitlich
+  zu scrollen: ein Scrollrand versteckt Reiter hinter einer Kante, die man erst
+  finden muss. Auf schmalen Fenstern werden die Reiter zusätzlich etwas
+  kompakter, damit seltener eine zweite Reihe entsteht.
 - **Die Reiter einer Geräteseite** sind jetzt eine benannte Gruppe statt acht
   loser Schaltflächen: Tab springt einmal hinein, Pfeiltasten wechseln,
   Pos1/Ende gehen an die Ränder. Der Reiter „Updates" trägt die Zahl der
