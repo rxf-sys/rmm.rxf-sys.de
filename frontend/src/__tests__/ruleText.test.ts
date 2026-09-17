@@ -32,6 +32,13 @@ const device = (over: Partial<Device> = {}): Device => ({
   connected: true,
   agent_update_available: null,
   last_patch_scan_at: 0,
+  device_class: 'agent',
+  ownership: '',
+  model: '',
+  serial: '',
+  imei: '',
+  notes: '',
+  checked_at: null,
   ...over,
 });
 

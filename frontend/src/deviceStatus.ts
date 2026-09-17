@@ -76,7 +76,15 @@ export function loadColor(pct: number, kind: LoadKind): string {
   return level === 'crit' ? 'var(--dangerS)' : level === 'warn' ? 'var(--warn)' : 'var(--ok)';
 }
 
-const OS_SHORT: Record<string, string> = { windows: 'WIN', linux: 'LNX', darwin: 'MAC' };
+const OS_SHORT: Record<string, string> = {
+  windows: 'WIN',
+  linux: 'LNX',
+  darwin: 'MAC',
+  ios: 'iOS',
+  ipados: 'iPad',
+  android: 'AND',
+  other: 'GER',
+};
 export function osShort(os: string): string {
   return OS_SHORT[os] ?? os.slice(0, 3).toUpperCase();
 }

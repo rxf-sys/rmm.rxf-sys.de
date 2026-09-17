@@ -23,8 +23,9 @@ import type {
 } from '../types';
 import { Dot, Skeleton } from '../ui';
 import { deviceState, loadColor, stateColor } from '../deviceStatus';
+import { isAgent, ownershipLabel } from '../deviceClass';
 import { osMatchesDevice, shellsFor } from '../scriptOs';
-import { IconKey, IconPower, IconTerminal, IconWrench, OsIcon } from '../icons';
+import { IconKey, IconPhone, IconPower, IconTerminal, IconWrench, OsIcon } from '../icons';
 import { DeviceTabs } from './DeviceTabs';
 import { FilterBar, type FilterOption } from './FilterBar';
 import { MetricChart } from './MetricChart';
@@ -53,16 +54,24 @@ type TabId =
   | 'passwords'
   | 'diagnostics'
   | 'jobs';
-const TABS: { id: TabId; label: string; adminOnly?: boolean; operatorOnly?: boolean }[] = [
+/** ``agentOnly``: der Reiter lebt von Daten, die nur ein Agent liefert. Bei
+ *  einem Telefon bliebe er dauerhaft leer — dann lieber gar nicht zeigen. */
+const TABS: {
+  id: TabId;
+  label: string;
+  adminOnly?: boolean;
+  operatorOnly?: boolean;
+  agentOnly?: boolean;
+}[] = [
   { id: 'overview', label: 'Übersicht' },
-  { id: 'history', label: 'Verlauf' },
-  { id: 'inventory', label: 'Inventar' },
-  { id: 'remote', label: 'Remote' },
-  { id: 'patches', label: 'Updates' },
+  { id: 'history', label: 'Verlauf', agentOnly: true },
+  { id: 'inventory', label: 'Inventar', agentOnly: true },
+  { id: 'remote', label: 'Remote', agentOnly: true },
+  { id: 'patches', label: 'Updates', agentOnly: true },
   { id: 'passwords', label: 'Passwörter', adminOnly: true },
-  { id: 'diagnostics', label: 'Diagnose', operatorOnly: true },
+  { id: 'diagnostics', label: 'Diagnose', operatorOnly: true, agentOnly: true },
   // Job-Kommandos/-Output können Secrets enthalten — API ist operator-only.
-  { id: 'jobs', label: 'Aktivität', operatorOnly: true },
+  { id: 'jobs', label: 'Aktivität', operatorOnly: true, agentOnly: true },
 ];
 
 const TAB_IDS = TABS.map((t) => t.id);
@@ -119,7 +128,7 @@ export function DeviceDetail({
   // Link kann direkt auf „Updates" eines Geräts zeigen.
   const [params, setParams] = useSearchParams();
   const rawTab = params.get('tab');
-  const tab: TabId = TAB_IDS.includes(rawTab as TabId) ? (rawTab as TabId) : 'overview';
+  const tabFromUrl: TabId = TAB_IDS.includes(rawTab as TabId) ? (rawTab as TabId) : 'overview';
   const setTab = (t: TabId) =>
     setParams(t === 'overview' ? {} : { tab: t }, { replace: true });
   const [menuOpen, setMenuOpen] = useState(false);
@@ -247,6 +256,14 @@ export function DeviceDetail({
 
   const d = detail.device;
   const st = deviceState(d);
+  const agent = isAgent(d);
+  const visibleTabs = TABS.filter(
+    (t) =>
+      (!t.adminOnly || isAdmin) && (!t.operatorOnly || isOperator) && (!t.agentOnly || agent),
+  );
+  // Ein Link auf „?tab=remote" darf bei einem Telefon nicht ins Leere zeigen:
+  // dort gibt es den Reiter nicht, also greift die Übersicht.
+  const tab: TabId = visibleTabs.some((t) => t.id === tabFromUrl) ? tabFromUrl : 'overview';
 
   return (
     <div className="screen" style={{ paddingTop: 18 }}>
@@ -255,11 +272,18 @@ export function DeviceDetail({
         <button className="btn-icon sq30" onClick={onBack} aria-label="Zurück zur Geräteliste">
           ←
         </button>
-        <Dot color={stateColor(st)} lg />
+        {agent ? (
+          <Dot color={stateColor(st)} lg />
+        ) : (
+          // Kein Zustandspunkt: ein Telefon ist weder online noch offline,
+          // ein grauer Punkt würde es fälschlich als unerreichbar zeigen.
+          <IconPhone size={16} style={{ color: 'var(--tx3)' }} />
+        )}
         <h1 className="page-title">{d.hostname}</h1>
         <span className="chip chip-os" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
           <OsIcon os={d.os} size={12} /> {d.os_version || osLabel(d.os)}
         </span>
+        {!agent && <span className="chip">{ownershipLabel(d) || 'Ohne Agent'}</span>}
         <span className="row" style={{ gap: 5 }}>
           {d.tags.map((t) => (
             <span key={t} className="chip">
@@ -273,15 +297,22 @@ export function DeviceDetail({
           </span>
         )}
         <div className="row grow" style={{ marginLeft: 'auto', gap: 8, position: 'relative' }}>
-          {isOperator && !d.online && (
+          {agent && isOperator && !d.online && (
             <button className="btn" onClick={() => void wake()} title="Wake-on-LAN" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <IconPower size={13} /> Aufwecken
             </button>
           )}
-          <button className="btn" onClick={() => setTab('remote')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <IconTerminal size={13} /> Terminal
-          </button>
-          {d.rustdesk_id && (
+          {agent && (
+            <button className="btn" onClick={() => setTab('remote')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <IconTerminal size={13} /> Terminal
+            </button>
+          )}
+          {!agent && isOperator && (
+            <button className="btn" onClick={() => setEditing(true)}>
+              Angaben bearbeiten
+            </button>
+          )}
+          {agent && d.rustdesk_id && (
             <button className="btn btn-primary" onClick={() => void openRemoteSession()}>
               ▶ Remote-Sitzung
             </button>
@@ -304,7 +335,7 @@ export function DeviceDetail({
               <button className="palette-item" onClick={() => { onToggleFavorite(); setMenuOpen(false); }}>
                 {favorite ? '★ Favorit entfernen' : '☆ Zu Favoriten'}
               </button>
-              {isOperator && (
+              {agent && isOperator && (
                 <>
                   <div className="palette-sep">Wartung (Alarme aus)</div>
                   <button className="palette-item" onClick={() => void setMaintenance(60)}><IconWrench size={12} /> 1 Stunde</button>
@@ -361,7 +392,7 @@ export function DeviceDetail({
       )}
 
       <DeviceTabs
-        tabs={TABS.filter((t) => (!t.adminOnly || isAdmin) && (!t.operatorOnly || isOperator)).map(
+        tabs={visibleTabs.map(
           (t) => ({
             ...t,
             // Nur der Updates-Reiter trägt eine Zahl: sie entscheidet, ob man
@@ -379,7 +410,16 @@ export function DeviceDetail({
         <EditCard device={d} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); void load(); }} onError={setError} />
       )}
 
-      {tab === 'overview' && <OverviewTab detail={detail} onGoTab={setTab} />}
+      {tab === 'overview' &&
+        (agent ? (
+          <OverviewTab detail={detail} onGoTab={setTab} />
+        ) : (
+          <MobileOverviewTab
+            device={d}
+            isOperator={isOperator}
+            onEdit={() => setEditing(true)}
+          />
+        ))}
       {tab === 'history' && <HistoryTab deviceId={deviceId} />}
       {tab === 'diagnostics' && isOperator && <DiagnosticsTab deviceId={deviceId} connected={d.connected} />}
       {tab === 'inventory' && <InventoryTab detail={detail} />}
@@ -400,6 +440,18 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
   const [personId, setPersonId] = useState<number>(device.person_id ?? 0);
   const [persons, setPersons] = useState<Person[]>([]);
   const [personsError, setPersonsError] = useState<string | null>(null);
+  // Bei einem Gerät mit Agent käme jede Eingabe hier beim nächsten Heartbeat
+  // wieder weg — der Server lehnt sie deshalb auch ab (device_policy.py).
+  const manual = !isAgent(device);
+  const [hostname, setHostname] = useState(device.hostname);
+  const [osVersion, setOsVersion] = useState(device.os_version);
+  const [model, setModel] = useState(device.model);
+  const [serial, setSerial] = useState(device.serial);
+  const [imei, setImei] = useState(device.imei);
+  const [notes, setNotes] = useState(device.notes);
+  const [ownership, setOwnership] = useState<'private' | 'company'>(
+    device.ownership === 'company' ? 'company' : 'private',
+  );
 
   useEffect(() => {
     // A failed person list must not silently look like "no persons exist" —
@@ -416,6 +468,17 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
         owner_label: owner.trim(),
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
         person_id: personId,
+        ...(manual
+          ? {
+              hostname: hostname.trim() || device.hostname,
+              os_version: osVersion.trim(),
+              model: model.trim(),
+              serial: serial.trim(),
+              imei: imei.trim(),
+              notes: notes.trim(),
+              ownership,
+            }
+          : {}),
       });
       onSaved();
     } catch (e) {
@@ -426,6 +489,52 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
     <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <span className="card-title">Gerät bearbeiten</span>
       {personsError && <p className="err">Personenliste nicht geladen: {personsError}</p>}
+      {manual && (
+        <>
+          <label className="field">
+            <span className="field-label">Bezeichnung</span>
+            <input className="input" value={hostname} onChange={(e) => setHostname(e.target.value)} />
+          </label>
+          <div className="grid-2">
+            <label className="field">
+              <span className="field-label">Modell</span>
+              <input className="input" value={model} onChange={(e) => setModel(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">{osLabel(device.os)}-Version</span>
+              <input className="input" value={osVersion} onChange={(e) => setOsVersion(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">Seriennummer</span>
+              <input className="input mono" value={serial} onChange={(e) => setSerial(e.target.value)} />
+            </label>
+            <label className="field">
+              <span className="field-label">IMEI</span>
+              <input className="input mono" value={imei} onChange={(e) => setImei(e.target.value)} />
+            </label>
+          </div>
+          <div className="field">
+            <span className="field-label">Besitzverhältnis</span>
+            <div className="row" style={{ gap: 6 }}>
+              {(['private', 'company'] as const).map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  className={ownership === o ? 'btn btn-accent btn-sm' : 'btn btn-sm'}
+                  onClick={() => setOwnership(o)}
+                  aria-pressed={ownership === o}
+                >
+                  {o === 'private' ? 'Privatgerät' : 'Firmengerät'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="field">
+            <span className="field-label">Notiz</span>
+            <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </label>
+        </>
+      )}
       <label className="field">
         <span className="field-label">Besitzer / Bezeichnung</span>
         <input className="input" value={owner} onChange={(e) => setOwner(e.target.value)} />
@@ -446,6 +555,94 @@ function EditCard({ device, onClose, onSaved, onError }: { device: Device; onClo
       <div className="row" style={{ gap: 8 }}>
         <button className="btn btn-primary" onClick={() => void save()}>Speichern</button>
         <button className="btn" onClick={onClose}>Abbrechen</button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Overview tab for devices without an agent
+// ---------------------------------------------------------------------------
+
+/**
+ * Die Übersicht eines Geräts, das sich nie meldet.
+ *
+ * Keine Auslastung, kein Netzwerk, keine Software — alles, was hier steht,
+ * hat jemand eingetragen. Deshalb steht das Datum der letzten Pflege
+ * gleichberechtigt neben den Stammdaten: eine zwei Jahre alte Karteikarte
+ * soll nicht so aussehen wie eine von gestern.
+ */
+function MobileOverviewTab({
+  device,
+  isOperator,
+  onEdit,
+}: {
+  device: Device;
+  isOperator: boolean;
+  onEdit: () => void;
+}) {
+  const rows: [string, ReactNode][] = [
+    ['Typ', osLabel(device.os)],
+    ['Version', device.os_version || <span className="muted">unbekannt</span>],
+    ['Modell', device.model || <span className="muted">unbekannt</span>],
+    ['Besitzverhältnis', ownershipLabel(device) || <span className="muted">nicht gesetzt</span>],
+    ['Besitzer', device.owner_label || <span className="muted">—</span>],
+  ];
+  if (device.serial) rows.push(['Seriennummer', <span className="mono">{device.serial}</span>]);
+  if (device.imei) rows.push(['IMEI', <span className="mono">{device.imei}</span>]);
+  rows.push(['Angelegt', formatRelative(device.created_at)]);
+
+  return (
+    <div className="grid-2">
+      <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+        <div className="row">
+          <span className="card-title-sm">Stammdaten</span>
+          {isOperator && (
+            <button className="link-btn" style={{ marginLeft: 'auto' }} onClick={onEdit}>
+              Bearbeiten →
+            </button>
+          )}
+        </div>
+        {rows.map(([k, v]) => (
+          <div key={k} className="kv">
+            <span className="k">{k}</span>
+            <span className="v">{v}</span>
+          </div>
+        ))}
+        {device.tags.length > 0 && (
+          <div className="row" style={{ gap: 5, flexWrap: 'wrap' }}>
+            {device.tags.map((t) => (
+              <span key={t} className="chip">
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="col">
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <span className="card-title-sm">Pflegestand</span>
+          <div className="kv">
+            <span className="k">Zuletzt geprüft</span>
+            <span className="v">
+              {device.checked_at ? formatRelative(device.checked_at) : <span className="muted">nie</span>}
+            </span>
+          </div>
+          <span className="muted" style={{ fontSize: 11.5, lineHeight: 1.6 }}>
+            Dieses Gerät wird ohne Agent geführt: keine Auslastung, kein Update-Scan, keine
+            Fernbefehle. Alles hier Stehende ist von Hand gepflegt — auch der Server lehnt
+            Befehle an dieses Gerät ab.
+          </span>
+        </div>
+        {device.notes && (
+          <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span className="card-title-sm">Notiz</span>
+            <span style={{ fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+              {device.notes}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
