@@ -15,7 +15,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
 
-from .. import accounts, devices, jobs, scripts
+from .. import accounts, device_policy, devices, jobs, scripts
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..auth import require_operator
@@ -53,8 +53,10 @@ async def create_job(
     user: dict = Depends(require_operator),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    if await devices.get_device(device_id, settings.offline_after_s) is None:
+    device = await devices.get_device(device_id, settings.offline_after_s)
+    if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    device_policy.ensure_supported(device, body.kind)
 
     if body.kind == "shell":
         command = body.command.strip()

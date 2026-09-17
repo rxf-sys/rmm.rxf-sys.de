@@ -9,7 +9,7 @@ written to the audit log.
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from .. import (
     alerts,
     credentials,
+    device_policy,
     devices,
     jobs,
     metrics,
@@ -39,8 +40,13 @@ def _with_connected(device: dict[str, Any]) -> dict[str, Any]:
     UI status; ``connected`` is the raw 'socket open right now' signal."""
     device["connected"] = manager.is_connected(device["id"])
     # Newer signed release available for this device's os/arch? The dashboard
-    # shows a hint + "Jetzt aktualisieren" button when this is set.
-    upd = releases.update_for(device["agent_version"], device["os"], device["arch"])
+    # shows a hint + "Jetzt aktualisieren" button when this is set. Auf einem
+    # Gerät ohne Agent gibt es nichts zu aktualisieren.
+    upd = (
+        releases.update_for(device["agent_version"], device["os"], device["arch"])
+        if device_policy.class_of(device) == device_policy.CLASS_AGENT
+        else None
+    )
     device["agent_update_available"] = upd["version"] if upd else None
     return device
 
@@ -61,6 +67,60 @@ async def list_devices(
 # --- Enrollment tokens -------------------------------------------------------
 # Static paths registered before the dynamic /{device_id} routes so
 # "enroll-tokens" is never parsed as a device id.
+
+
+class CreateDeviceRequest(BaseModel):
+    """Ein Gerät ohne Agent — Telefon, Tablet, alles von Hand Gepflegte."""
+
+    hostname: str = Field(min_length=1, max_length=255)
+    os: Literal["ios", "ipados", "android", "other"] = "ios"
+    os_version: str = Field(default="", max_length=200)
+    ownership: Literal["private", "company"] = "private"
+    model: str = Field(default="", max_length=120)
+    serial: str = Field(default="", max_length=80)
+    imei: str = Field(default="", max_length=40)
+    notes: str = Field(default="", max_length=2000)
+    owner_label: str = Field(default="", max_length=120)
+    tags: list[str] = Field(default_factory=list)
+    # 0 oder None: keine Person zugeordnet.
+    person_id: int | None = Field(default=None, ge=0)
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def create_device(
+    body: CreateDeviceRequest,
+    user: dict = Depends(require_operator),
+) -> dict:
+    """Legt ein Gerät an, das sich nie selbst meldet.
+
+    Der Weg über das Enrollment-Token bleibt der einzige für Geräte mit
+    Agent; hier entsteht bewusst keine Anmeldemöglichkeit, sondern nur eine
+    Karteikarte."""
+    person_id = body.person_id or None
+    if person_id and await persons.get_person(person_id) is None:
+        raise HTTPException(status_code=422, detail="Person nicht gefunden")
+    device = await devices.create_manual_device(
+        hostname=body.hostname,
+        device_class=device_policy.CLASS_MOBILE,
+        os=body.os,
+        os_version=body.os_version,
+        ownership=body.ownership,
+        model=body.model,
+        serial=body.serial,
+        imei=body.imei,
+        notes=body.notes,
+        owner_label=body.owner_label,
+        tags=body.tags,
+        person_id=person_id,
+    )
+    await audit_record(
+        "device.created",
+        user=user["username"],
+        device_id=device["id"],
+        os=body.os,
+        ownership=body.ownership,
+    )
+    return {"device": _with_connected(device)}
 
 
 class CreateTokenRequest(BaseModel):
@@ -151,8 +211,10 @@ async def device_agent_logs(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     """Pull the agent's recent in-memory log lines for remote diagnostics."""
-    if await devices.get_device(device_id, settings.offline_after_s) is None:
+    device = await devices.get_device(device_id, settings.offline_after_s)
+    if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    device_policy.ensure_supported(device, "agent_logs")
     if not manager.is_connected(device_id):
         raise HTTPException(status_code=409, detail="Gerät ist nicht verbunden")
     lines = await manager.request_logs(device_id)
@@ -168,6 +230,14 @@ class UpdateDeviceRequest(BaseModel):
     rustdesk_id: str | None = Field(default=None, max_length=40)
     # 0 unassigns ("keine Person"); None leaves the assignment untouched.
     person_id: int | None = Field(default=None, ge=0)
+    # Nur für Geräte ohne Agent: was kein Agent melden kann, wird gepflegt.
+    hostname: str | None = Field(default=None, min_length=1, max_length=255)
+    os_version: str | None = Field(default=None, max_length=200)
+    ownership: Literal["private", "company"] | None = None
+    model: str | None = Field(default=None, max_length=120)
+    serial: str | None = Field(default=None, max_length=80)
+    imei: str | None = Field(default=None, max_length=40)
+    notes: str | None = Field(default=None, max_length=2000)
 
 
 @router.patch("/{device_id}")
@@ -179,6 +249,18 @@ async def update_device(
 ) -> dict:
     if body.person_id and await persons.get_person(body.person_id) is None:
         raise HTTPException(status_code=422, detail="Person nicht gefunden")
+    current = await devices.get_device(device_id, settings.offline_after_s)
+    if current is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    manual = device_policy.class_of(current) != device_policy.CLASS_AGENT
+    inventory_fields = (body.hostname, body.os_version, body.model, body.serial, body.imei)
+    if not manual and any(f is not None for f in inventory_fields):
+        # Bei einem Gerät mit Agent käme jede Eingabe hier beim nächsten
+        # Heartbeat wieder weg — dann lieber gleich sagen, dass es nichts wird.
+        raise HTTPException(
+            status_code=409,
+            detail="Diese Angaben meldet der Agent selbst und lassen sich nicht von Hand setzen.",
+        )
     device = await devices.update_device(
         device_id,
         owner_label=body.owner_label,
@@ -186,6 +268,14 @@ async def update_device(
         rustdesk_id=body.rustdesk_id,
         person_id=body.person_id or None,
         clear_person=body.person_id == 0,
+        hostname=body.hostname,
+        os_version=body.os_version,
+        ownership=body.ownership,
+        model=body.model,
+        serial=body.serial,
+        imei=body.imei,
+        notes=body.notes,
+        touch_checked=manual,
     )
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
@@ -202,8 +292,10 @@ async def wake_device(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     """Send a Wake-on-LAN magic packet to the device's known MACs."""
-    if await devices.get_device(device_id, settings.offline_after_s) is None:
+    device = await devices.get_device(device_id, settings.offline_after_s)
+    if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    device_policy.ensure_supported(device, "wake")
     macs = await devices.device_macs(device_id)
     if not macs:
         raise HTTPException(
@@ -233,6 +325,7 @@ async def update_agent(
     device = await devices.get_device(device_id, settings.offline_after_s)
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    device_policy.ensure_supported(device, "agent_update")
     upd = releases.update_for(device["agent_version"], device["os"], device["arch"])
     if upd is None:
         raise HTTPException(

@@ -24,7 +24,7 @@ from typing import Any
 import aiosqlite
 import structlog
 
-from . import automation, devices, patches
+from . import automation, device_policy, devices, patches
 from .audit import record as audit_record
 from .config import Settings
 from .db import connect as db_connect
@@ -183,6 +183,11 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
 
     for d in fleet:
         if d["id"] in maintenance:
+            continue
+        # Alle drei Regeln lesen Telemetrie, die nur ein Agent liefert:
+        # Heartbeat, Plattenbelegung, Patch-Stand. Ein Gerät ohne Agent hat
+        # davon nichts und darf davon auch nicht beurteilt werden.
+        if device_policy.class_of(d) != device_policy.CLASS_AGENT:
             continue
         name = _device_name(d)
 

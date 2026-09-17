@@ -24,6 +24,7 @@ import structlog
 
 from .config import Settings
 from .db import connect as db_connect
+from .device_policy import CLASS_AGENT, CLASS_MOBILE
 
 log = structlog.get_logger("devices")
 
@@ -40,6 +41,13 @@ CREATE TABLE IF NOT EXISTS devices (
     tags               TEXT    NOT NULL DEFAULT '',
     heartbeat_json     TEXT    NOT NULL DEFAULT '{}',
     rustdesk_id        TEXT    NOT NULL DEFAULT '',
+    device_class       TEXT    NOT NULL DEFAULT 'agent',
+    ownership          TEXT    NOT NULL DEFAULT '',
+    model              TEXT    NOT NULL DEFAULT '',
+    serial             TEXT    NOT NULL DEFAULT '',
+    imei               TEXT    NOT NULL DEFAULT '',
+    notes              TEXT    NOT NULL DEFAULT '',
+    checked_at         INTEGER,
     created_at         INTEGER NOT NULL,
     last_seen_at       INTEGER
 );
@@ -104,6 +112,20 @@ async def _migrate_devices(db: aiosqlite.Connection) -> None:
     if "maintenance_until" not in cols:
         await db.execute("ALTER TABLE devices ADD COLUMN maintenance_until INTEGER")
         log.info("devices.migrated", column="maintenance_until")
+    if "device_class" not in cols:
+        # 'agent' fuer alles Bestehende: jede vorhandene Zeile stammt aus einem
+        # Enrollment, also aus einem Geraet mit Agent.
+        await db.execute(
+            "ALTER TABLE devices ADD COLUMN device_class TEXT NOT NULL DEFAULT 'agent'"
+        )
+        log.info("devices.migrated", column="device_class")
+    for column in ("ownership", "model", "serial", "imei", "notes"):
+        if column not in cols:
+            await db.execute(f"ALTER TABLE devices ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+            log.info("devices.migrated", column=column)
+    if "checked_at" not in cols:
+        await db.execute("ALTER TABLE devices ADD COLUMN checked_at INTEGER")
+        log.info("devices.migrated", column="checked_at")
     if "last_patch_scan_at" not in cols:
         # 0 = never scanned, which makes every existing device due at once —
         # intended: that is exactly the state the daily scan is meant to fix.
@@ -120,6 +142,12 @@ def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _col(row: aiosqlite.Row, name: str, default: Any = "") -> Any:
+    """Spaltenwert mit Vorgabe. ``in row.keys()`` ist Absicht:
+    ``sqlite3.Row.__contains__`` prüft Werte, nicht Spaltennamen."""
+    return row[name] if name in row.keys() else default  # noqa: SIM118
 
 
 def _row_to_device(row: aiosqlite.Row, offline_after_s: int) -> dict[str, Any]:
@@ -163,6 +191,15 @@ def _row_to_device(row: aiosqlite.Row, offline_after_s: int) -> dict[str, Any]:
             if "last_patch_scan_at" in row.keys() and row["last_patch_scan_at"]  # noqa: SIM118
             else 0
         ),
+        "device_class": _col(row, "device_class", CLASS_AGENT) or CLASS_AGENT,
+        "ownership": _col(row, "ownership"),
+        "model": _col(row, "model"),
+        "serial": _col(row, "serial"),
+        "imei": _col(row, "imei"),
+        "notes": _col(row, "notes"),
+        # Geräte ohne Agent melden sich nicht von selbst; hier steht, wann
+        # zuletzt jemand nachgesehen hat.
+        "checked_at": int(_col(row, "checked_at", 0) or 0) or None,
         "created_at": int(row["created_at"]),
         "last_seen_at": last_seen,
         "online": online,
@@ -310,6 +347,64 @@ async def enroll_device(
     return {"device_id": device_id, "device_secret": secret}
 
 
+async def create_manual_device(
+    *,
+    hostname: str,
+    device_class: str = CLASS_MOBILE,
+    os: str = "",
+    os_version: str = "",
+    model: str = "",
+    serial: str = "",
+    imei: str = "",
+    notes: str = "",
+    ownership: str = "",
+    owner_label: str = "",
+    tags: list[str] | None = None,
+    person_id: int | None = None,
+) -> dict[str, Any]:
+    """Ein Gerät ohne Agent anlegen — Telefon, Tablet, alles von Hand Gepflegte.
+
+    Statt des Geheimnisses aus dem Enrollment steht ein Hash ohne Urbild in
+    der Zeile: es gibt kein Geheimnis, das dazu passt, also kann sich auch
+    niemand damit verbinden. ``authenticate_device`` weist die Klasse
+    zusätzlich ab."""
+    now = int(time.time())
+    cleaned_tags = ",".join([t.strip()[:40] for t in (tags or []) if t.strip()][:20])
+    async with _connect() as db:
+        cur = await db.execute(
+            "INSERT INTO devices"
+            " (hostname, owner_label, os, os_version, device_class, ownership,"
+            "  model, serial, imei, notes, tags, person_id, device_secret_hash,"
+            "  created_at, checked_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                hostname.strip()[:255],
+                owner_label.strip()[:120],
+                os[:40],
+                os_version.strip()[:200],
+                device_class,
+                ownership,
+                model.strip()[:120],
+                serial.strip()[:80],
+                imei.strip()[:40],
+                notes.strip()[:2000],
+                cleaned_tags,
+                person_id,
+                _hash_token(secrets.token_urlsafe(32)),
+                now,
+                now,
+            ),
+        )
+        await db.commit()
+        device_id = int(cur.lastrowid or 0)
+    log.info("devices.created_manual", device_id=device_id, hostname=hostname, os=os)
+    device = await get_device(device_id, offline_after_s=1)
+    if device is None:
+        # Die Zeile wurde in derselben Verbindung eingefügt und committet.
+        raise RuntimeError(f"Gerät {device_id} nach dem Anlegen nicht auffindbar")
+    return device
+
+
 async def authenticate_device(device_id: int, secret: str) -> dict[str, Any] | None:
     """Validate device credentials → public device dict, or None."""
     if not secret:
@@ -322,7 +417,14 @@ async def authenticate_device(device_id: int, secret: str) -> dict[str, Any] | N
         return None
     if not hmac.compare_digest(str(row["device_secret_hash"]), _hash_token(secret)):
         return None
-    return _row_to_device(row, offline_after_s=1)
+    device = _row_to_device(row, offline_after_s=1)
+    # Ein von Hand angelegtes Gerät hat zwar eine Zeile, aber niemals ein
+    # gültiges Geheimnis; die Prüfung hier ist der zweite Riegel davor, dass
+    # sich jemand als eines dieser Geräte ausgibt.
+    if device["device_class"] != CLASS_AGENT:
+        log.warning("devices.auth_rejected_class", device_id=device_id)
+        return None
+    return device
 
 
 # ---------------------------------------------------------------------------
@@ -432,6 +534,14 @@ async def update_device(
     rustdesk_id: str | None = None,
     person_id: int | None = None,
     clear_person: bool = False,
+    ownership: str | None = None,
+    model: str | None = None,
+    serial: str | None = None,
+    imei: str | None = None,
+    notes: str | None = None,
+    os_version: str | None = None,
+    hostname: str | None = None,
+    touch_checked: bool = False,
 ) -> dict[str, Any] | None:
     sets: list[str] = []
     params: list[Any] = []
@@ -445,6 +555,21 @@ async def update_device(
     if rustdesk_id is not None:
         sets.append("rustdesk_id = ?")
         params.append(rustdesk_id.strip()[:40])
+    for column, value, limit in (
+        ("hostname", hostname, 255),
+        ("os_version", os_version, 200),
+        ("ownership", ownership, 20),
+        ("model", model, 120),
+        ("serial", serial, 80),
+        ("imei", imei, 40),
+        ("notes", notes, 2000),
+    ):
+        if value is not None:
+            sets.append(f"{column} = ?")
+            params.append(value.strip()[:limit])
+    if touch_checked:
+        sets.append("checked_at = ?")
+        params.append(int(time.time()))
     if clear_person:
         sets.append("person_id = NULL")
     elif person_id is not None:

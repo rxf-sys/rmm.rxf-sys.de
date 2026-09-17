@@ -3,13 +3,14 @@ import { useSearchParams } from 'react-router-dom';
 import { api, apiErrorMessage } from '../api/client';
 import { formatRelative, osLabel } from '../format';
 import { osShort } from '../deviceStatus';
-import { OsIcon } from '../icons';
+import { IconPhone, OsIcon } from '../icons';
 import type { Device, InventoryMatch, PatchSummary, Person } from '../types';
 import { Dot, Skeleton } from '../ui';
 import { FilterBar, type FilterOption } from './FilterBar';
 import { Pagination } from './Pagination';
 import { usePagination } from '../hooks/usePagination';
 import { deviceState, hasProblem, loadColor, stateColor, type LoadKind } from '../deviceStatus';
+import { isAgent, ownershipLabel } from '../deviceClass';
 
 interface Props {
   devices: Device[];
@@ -90,9 +91,9 @@ function SoftwareSearch({ onOpenDevice }: { onOpenDevice: (id: number) => void }
   );
 }
 
-type Filter = 'alle' | 'ok' | 'probleme' | 'server' | 'familie' | 'offline';
+type Filter = 'alle' | 'ok' | 'probleme' | 'server' | 'familie' | 'offline' | 'mobil';
 
-const FILTERS: Filter[] = ['alle', 'ok', 'probleme', 'server', 'familie', 'offline'];
+const FILTERS: Filter[] = ['alle', 'ok', 'probleme', 'server', 'familie', 'offline', 'mobil'];
 
 const FILTER_LABEL: Record<Filter, string> = {
   alle: 'Alle',
@@ -101,16 +102,23 @@ const FILTER_LABEL: Record<Filter, string> = {
   server: 'Server',
   familie: 'Familie',
   offline: 'Offline',
+  mobil: 'Ohne Agent',
 };
 
 /** Does a device belong in this filter? One predicate per filter, so the
- *  counts on the chips and the rows below can never drift apart. */
+ *  counts on the chips and the rows below can never drift apart.
+ *
+ *  Die Zustandsfilter fragen zusätzlich nach der Geräteklasse: ein Telefon
+ *  meldet weder Erreichbarkeit noch Auslastung, stünde also dauerhaft unter
+ *  „Offline". Tags gelten dagegen für jedes Gerät. */
 function matchesFilter(d: Device, f: Filter): boolean {
   switch (f) {
+    case 'mobil':
+      return !isAgent(d);
     case 'ok':
       // Erreichbar und ohne Befund — das Gegenstück zu 'probleme', damit der
       // Zustandsbalken der Übersicht auf jede seiner Zeilen verlinken kann.
-      return d.online && !hasProblem(d);
+      return isAgent(d) && d.online && !hasProblem(d);
     case 'server':
       return d.tags.includes('server');
     case 'familie':
@@ -118,9 +126,9 @@ function matchesFilter(d: Device, f: Filter): boolean {
     case 'probleme':
       // Nur erreichbare Geräte mit einem echten Befund. Offline hat seinen
       // eigenen Filter — siehe hasProblem().
-      return hasProblem(d);
+      return isAgent(d) && hasProblem(d);
     case 'offline':
-      return !d.online;
+      return isAgent(d) && !d.online;
     default:
       return true;
   }
@@ -145,6 +153,60 @@ function Meter({ label, pct, kind, online }: { label: string; pct: number; kind:
         <span className="bar-fill" style={{ width: online ? `${pct}%` : '0%', background: color }} />
       </span>
     </span>
+  );
+}
+
+/**
+ * Eine Zeile für ein Gerät ohne Agent.
+ *
+ * Fünf Spalten (CPU, RAM, Disk, Patches, Agent) sind hier ohne Inhalt —
+ * leere Balken würden aber aussehen wie „alles auf null" statt wie „wird
+ * nicht gemessen". Stattdessen steht dort in einem Feld, was das Gerät ist
+ * und wann zuletzt jemand nachgesehen hat.
+ */
+function MobileRow({
+  d,
+  personName,
+  onOpen,
+}: {
+  d: Device;
+  personName: (id: number | null) => string;
+  onOpen: (id: number) => void;
+}) {
+  const facts = [ownershipLabel(d), d.model, d.notes].filter(Boolean).join(' · ');
+  return (
+    <button
+      className="tbl-row device-row"
+      style={{ gridTemplateColumns: COLS, minWidth: 980 }}
+      onClick={() => onOpen(d.id)}
+    >
+      <span className="cell-device">
+        <IconPhone size={13} style={{ color: 'var(--tx3)' }} />
+        <span className="cell-device-text">
+          <span className="cell-device-top">
+            <span className="name">{d.hostname}</span>
+            <span className="chip-mono" title={osLabel(d.os)}>
+              <OsIcon os={d.os} size={11} /> {d.os_version || osShort(d.os)}
+            </span>
+          </span>
+          <span className="cell-device-sub" title={[osLabel(d.os), ...d.tags].join(' · ')}>
+            {[osLabel(d.os), ...d.tags].join(' · ')}
+          </span>
+        </span>
+      </span>
+      <span style={{ color: 'var(--tx2)', fontWeight: 600 }}>
+        {personName(d.person_id) || d.owner_label || '—'}
+      </span>
+      <span
+        style={{ gridColumn: 'span 5', color: 'var(--tx3)', fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        title={facts}
+      >
+        Ohne Agent{facts ? ` · ${facts}` : ''}
+      </span>
+      <span style={{ textAlign: 'right', fontWeight: 500, fontSize: 11, color: 'var(--tx3)' }}>
+        {d.checked_at ? `geprüft ${formatRelative(d.checked_at)}` : '—'}
+      </span>
+    </button>
   );
 }
 
@@ -179,9 +241,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
   const shown = useMemo(() => base.filter((d) => matchesFilter(d, filter)), [base, filter]);
   const pager = usePagination(shown, 'devices', `${filter}|${personFilter}|${q.trim()}`);
 
-  const filterOptions: FilterOption<Filter>[] = (
-    ['alle', 'ok', 'probleme', 'server', 'familie', 'offline'] as Filter[]
-  ).map((id) => ({
+  const filterOptions: FilterOption<Filter>[] = FILTERS.map((id) => ({
     id,
     label: FILTER_LABEL[id],
     count: id === 'alle' ? undefined : base.filter((d) => matchesFilter(d, id)).length,
@@ -246,6 +306,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, onOpenDev
             </div>
           ) : (
             pager.items.map((d) => {
+              if (!isAgent(d)) return <MobileRow key={d.id} d={d} personName={personName} onOpen={onOpenDevice} />;
               const st = deviceState(d);
               const disk = Math.round(Math.max(0, ...(d.heartbeat.disks ?? []).map((x) => x.used_pct)));
               const cpu = Math.round(d.heartbeat.cpu_pct ?? 0);

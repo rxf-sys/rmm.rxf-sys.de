@@ -1283,12 +1283,12 @@ textarea.input {
    ============================================================ */
 .tabs {
   display: flex;
+  /* Umbrechen statt scrollen: eine seitlich scrollbare Reiterleiste versteckt
+     Reiter hinter einem Rand, den man erst finden muss. Bei wenig Platz steht
+     die zweite Reihe darunter — sichtbar ist alles, immer. */
+  flex-wrap: wrap;
   gap: 2px;
   border-bottom: 1px solid var(--line);
-  overflow-x: auto;
-  /* Beim Wechsel per Pfeiltaste soll der Fokusring nicht am Rand abgeschnitten
-     werden, wenn die Leiste scrollt. */
-  scrollbar-width: thin;
 }
 .tab {
   display: inline-flex;
@@ -1315,6 +1315,12 @@ textarea.input {
   border-bottom-color: var(--accent);
 }
 /* Zahl am Reiter — nur dort, wo sie eine Entscheidung trägt. */
+@media (max-width: 560px) {
+  .tab {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
 .tab-count {
   font: 700 10px var(--mono);
   font-variant-numeric: tabular-nums;

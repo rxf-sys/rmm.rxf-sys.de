@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { AUDIT_CATEGORY, auditNamesFrom, describeAudit } from '../auditText';
+import { isAgent } from '../deviceClass';
 import { deviceState } from '../deviceStatus';
 import { formatRelative } from '../format';
 import type { Fleet } from '../hooks/useFleet';
@@ -270,13 +271,18 @@ export function OverviewPage({
   }, []);
 
   const names = useMemo(() => auditNamesFrom(devices), [devices]);
+  // „Zu tun" und die Zustandszahlen beschreiben Geräte mit Agent: nur die
+  // melden sich, nur bei denen heißt Schweigen etwas. Telefone stünden sonst
+  // dauerhaft in der Offline-Zahl und die Flotte sähe halb tot aus.
+  const agents = useMemo(() => devices.filter(isAgent), [devices]);
+  const mobileCount = devices.length - agents.length;
   const tasks = useMemo(
-    () => buildTasks({ devices, patchSummary, now }),
-    [devices, patchSummary, now],
+    () => buildTasks({ devices: agents, patchSummary, now }),
+    [agents, patchSummary, now],
   );
-  const head = verdict(devices, tasks);
+  const head = verdict(agents, tasks);
 
-  const online = devices.filter((d) => d.online).length;
+  const online = agents.filter((d) => d.online).length;
   const pending = Object.values(patchSummary).reduce((a, s) => a + s.pending, 0);
   const security = Object.values(patchSummary).reduce((a, s) => a + s.security, 0);
   const patchedDevices = Object.values(patchSummary).filter((s) => s.pending > 0).length;
@@ -286,9 +292,9 @@ export function OverviewPage({
 
   const buckets = useMemo(() => {
     const counts = { ok: 0, warn: 0, crit: 0, off: 0 };
-    for (const d of devices) counts[deviceState(d)] += 1;
+    for (const d of agents) counts[deviceState(d)] += 1;
     return counts;
-  }, [devices]);
+  }, [agents]);
 
   const go = (t: TaskTarget) =>
     t.kind === 'device' ? onOpenDevice(t.id) : onNavigate(t.page, t.query);
@@ -314,7 +320,8 @@ export function OverviewPage({
             day: 'numeric',
             month: 'long',
           })}
-          {devices.length > 0 && ` · ${online} von ${devices.length} Geräten melden sich planmäßig`}
+          {agents.length > 0 && ` · ${online} von ${agents.length} Geräten melden sich planmäßig`}
+          {mobileCount > 0 && ` · ${mobileCount} ohne Agent`}
         </span>
         <div className="ov-verdict">
           <span className="ov-pip" style={{ background: SEVERITY_COLOR[head.severity] }} />
@@ -372,9 +379,12 @@ export function OverviewPage({
           <span className="ov-k">Online</span>
           <span className="ov-v">
             {online}
-            <span style={{ color: 'var(--tx3)', fontSize: 15 }}>/{devices.length}</span>
+            <span style={{ color: 'var(--tx3)', fontSize: 15 }}>/{agents.length}</span>
           </span>
-          <span className="ov-n">{devices.length - online} offline</span>
+          <span className="ov-n">
+            {agents.length - online} offline
+            {mobileCount > 0 && ` · ${mobileCount} ohne Agent`}
+          </span>
         </button>
         <button className="ov-kpi" type="button" onClick={() => onNavigate('patches')}>
           <span className="ov-k">Updates offen</span>

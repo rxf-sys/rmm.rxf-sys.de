@@ -59,6 +59,33 @@ export interface Device {
   agent_update_available: string | null;
   /** Letzter eingetroffener Update-Scan; 0 = noch nie. */
   last_patch_scan_at: number;
+  /** 'agent': Rechner mit Agent. 'mobile': von Hand gepflegtes Telefon/Tablet. */
+  device_class: DeviceClass;
+  /** Nur bei Geräten ohne Agent gesetzt. */
+  ownership: '' | 'private' | 'company';
+  model: string;
+  serial: string;
+  imei: string;
+  notes: string;
+  /** Wann zuletzt jemand von Hand nachgesehen hat; null bei Geräten mit Agent. */
+  checked_at: number | null;
+}
+
+export type DeviceClass = 'agent' | 'mobile';
+
+/** Was beim Anlegen eines Geräts ohne Agent angegeben wird. */
+export interface NewDevice {
+  hostname: string;
+  os: 'ios' | 'ipados' | 'android' | 'other';
+  os_version?: string;
+  ownership: 'private' | 'company';
+  model?: string;
+  serial?: string;
+  imei?: string;
+  notes?: string;
+  owner_label?: string;
+  tags?: string[];
+  person_id?: number | null;
 }
 
 export interface Person {

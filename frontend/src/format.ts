@@ -54,6 +54,10 @@ const OS_LABEL: Record<string, string> = {
   windows: 'Windows',
   linux: 'Linux',
   darwin: 'macOS',
+  ios: 'iOS',
+  ipados: 'iPadOS',
+  android: 'Android',
+  other: 'Sonstiges',
 };
 
 export function osLabel(os: string): string {
