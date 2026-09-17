@@ -8,6 +8,20 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Telefone und Tablets in der Flotte.** Ein Gerät kann jetzt ohne Agent
+  geführt werden: „Gerät hinzufügen" hat einen zweiten Weg für Telefon oder
+  Tablet, mit Modell, OS-Version, Seriennummer, IMEI, Notiz und
+  Besitzverhältnis (privat/Firma). Es entsteht dabei kein Zugang — die Zeile
+  ist eine Karteikarte, kein Enrollment. Die Geräteliste hat dafür den Filter
+  „Ohne Agent" und zeigt in diesen Zeilen, was das Gerät ist und wann zuletzt
+  jemand nachgesehen hat, statt fünf leerer Auslastungsbalken. Die
+  Detailseite zeigt nur Reiter, hinter denen etwas liegt, und Übersicht,
+  Updates, Skripte und Alarmregeln rechnen weiterhin nur mit Geräten mit
+  Agent — sonst stünde jedes Telefon dauerhaft als „offline" in der Bilanz.
+  Alles, was einen Agent voraussetzt (Befehle, Skripte, Update-Scan,
+  Wake-on-LAN, Agent-Update, Agent-Protokolle), lehnt der Server für diese
+  Geräte mit 409 ab; die Grenze steckt in `backend/app/device_policy.py` und
+  nicht im Ausblenden der Knöpfe.
 - Die Reiterleiste einer Geräteseite bricht bei wenig Platz um, statt seitlich
   zu scrollen: ein Scrollrand versteckt Reiter hinter einer Kante, die man erst
   finden muss. Auf schmalen Fenstern werden die Reiter zusätzlich etwas
