@@ -87,6 +87,59 @@ services:
     networks:
       - rmm
 
+  # --- MDM für iOS/iPadOS (Etappe 1) ---------------------------------------
+  # Startet NICHT mit `docker compose up`. Das Profil `mdm` ist Absicht:
+  # ohne APNs-Push-Zertifikat gibt es nichts zu starten, und ein halber
+  # MDM-Stack soll nicht beim nächsten Deploy einfach mitlaufen.
+  #
+  #   docker compose --profile mdm up -d nanomdm
+  #
+  # Schritt für Schritt — Zertifikat, Dateien, erster Start, Verlängerung:
+  # docs/MDM-SETUP.md. Vorher gelesen zu haben spart einen Fehlversuch bei
+  # Apple, den man nicht zurückdrehen kann.
+  nanomdm:
+    profiles: ["mdm"]
+    # Es gibt weder `:latest` noch Versions-Tags: das Projekt veröffentlicht
+    # nur `main` und `sha-<commit>` (geprüft am 23.09.2026). Vor dem ersten
+    # Start ein `sha-`-Tag in .env pinnen — sonst läuft unter einer Flotte
+    # von Telefonen ein beliebiger main-Stand, der sich still ändert.
+    image: ghcr.io/micromdm/nanomdm:${NANOMDM_TAG:-main}
+    container_name: rxf-rmm-mdm
+    restart: unless-stopped
+    environment:
+      # NanoMDM liest jedes Flag auch aus der Umgebung. Der API-Schlüssel
+      # schützt /v1/* (Push, Kommandos, Zertifikats-Upload) — ohne ihn
+      # kommandiert jeder im Docker-Netz jedes eingebuchte Gerät. Von außen
+      # sperrt zusätzlich der Caddyfile diese Pfade; beides zusammen, nicht
+      # eines statt des anderen.
+      NANOMDM_API: ${NANOMDM_API_KEY:-}
+      NANOMDM_LISTEN: ":9000"
+      # Gerätezertifikate kommen als Header, nicht über mTLS: Client-
+      # Zertifikate überleben den Cloudflare-Tunnel nicht. Dazu muss das
+      # Enrollment-Profil `SignMessage = true` setzen.
+      NANOMDM_CERT_HEADER: "Mdm-Signature"
+      # CA, gegen die Geräte-Identitätszertifikate geprüft werden (SCEP).
+      NANOMDM_CA: "/mdm/ca.pem"
+      NANOMDM_STORAGE: "filekv"
+      NANOMDM_STORAGE_DSN: "/mdm/db"
+    ports:
+      # Nur Loopback im LXC, nicht ins LAN: das Einspielen des
+      # Push-Zertifikats läuft über /v1/pushcert, und das geht über die
+      # Docker-DNS allein nicht vom Host aus. Caddy erreicht den Container
+      # unabhängig davon über das rmm-Netz als `nanomdm:9000`; von außen
+      # bleibt /v1/* durch den Caddyfile gesperrt.
+      - "127.0.0.1:9000:9000"
+    volumes:
+      # Push-Zertifikat, SCEP-CA und der Zustand in einem Verzeichnis: so ist
+      # klar, was gesichert werden muss. Der Inhalt ist gitignored.
+      - ./mdm:/mdm
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - rmm
+
   # --- RustDesk self-hosted relay (Phase 5) --------------------------------
   # RustDesk speaks raw TCP/UDP, which cannot ride the Cloudflare tunnel — so
   # this is the one exception to "kein direkter Port nach außen". Forward on

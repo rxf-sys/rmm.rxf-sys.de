@@ -8,6 +8,16 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Vorbereitung für MDM (iOS/iPadOS).** `infrastructure/docker-compose.yml`
+  kennt jetzt einen NanoMDM-Container, der am Compose-Profil `mdm` hängt und
+  im Normalbetrieb nicht startet — ohne APNs-Push-Zertifikat gäbe es nichts
+  zu starten. Caddy leitet `/mdm` und `/checkin` dorthin weiter und
+  beantwortet `/v1/*` und `/migration` mit 404: die Verwaltungs-API
+  kommandiert jedes eingebuchte Gerät und gehört nicht durch den Tunnel.
+  `docs/MDM-SETUP.md` führt durch das Push-Zertifikat (mdmcert.download →
+  Apple), die Dateiablage, den ersten Start und die Verlängerung nach einem
+  Jahr; `docs/OPERATIONS.md` nennt die drei Prüfungen für den laufenden
+  Betrieb, und `infrastructure/mdm/` ist gitignored.
 - **Telefone und Tablets in der Flotte.** Ein Gerät kann jetzt ohne Agent
   geführt werden: „Gerät hinzufügen" hat einen zweiten Weg für Telefon oder
   Tablet, mit Modell, OS-Version, Seriennummer, IMEI, Notiz und
