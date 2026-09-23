@@ -166,6 +166,21 @@ das Backend nur noch die Container-IP und das Login-Rate-Limit gilt faktisch
 global statt pro Angreifer. Einzutragen ist die IP des cloudflared-Hosts
 (CT 104).
 
+## MDM (Container `nanomdm`, Compose-Profil `mdm`)
+
+Nur relevant, sobald das Profil gestartet wird — im Normalbetrieb läuft der
+Container nicht. Einrichtung: [`MDM-SETUP.md`](MDM-SETUP.md).
+
+| Variable | Zweck | Default | Pflicht | Sec |
+|---|---|---|---|---|
+| `NANOMDM_TAG` | Image-Tag von `ghcr.io/micromdm/nanomdm`. Das Projekt veröffentlicht keine Versions-Tags, nur `main` und `sha-<commit>` | `main` | nein, aber ein `sha-`-Tag gehört gepinnt | ⚪ |
+| `NANOMDM_API_KEY` | Passwort für die Verwaltungs-API (`/v1/*`: Push, Kommandos, Zertifikats-Upload), Benutzername ist `nanomdm` | leer | **ja, bevor das Profil startet** | 🔴 |
+
+Leerer `NANOMDM_API_KEY` heißt: jeder, der im Docker-Netz `nanomdm:9000`
+erreicht, kann jedes eingebuchte Telefon kommandieren. Von außen sperrt der
+Caddyfile `/v1/*` und `/migration` zusätzlich mit 404 — das ist die zweite
+Sicherung, nicht die erste.
+
 ## Agent
 
 Der Agent liest **eine** Umgebungsvariable, `ProgramData` unter Windows

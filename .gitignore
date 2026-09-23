@@ -3,6 +3,14 @@
 infrastructure/.env
 # Privater Update-Signaturschlüssel (aus ./build-agent.sh keygen)
 infrastructure/.agent-sign.env
+# MDM: APNs-Push-Zertifikat, sein privater Schlüssel, die SCEP-CA und der
+# NanoMDM-Zustand. Der Push-Schlüssel ist unersetzbar — geht er verloren,
+# ist auch das Zertifikat von Apple wertlos. Siehe docs/MDM-SETUP.md.
+infrastructure/mdm/
+mdmcert.download.*
+*push.key
+*push.pem
+MDM_*_Certificate.pem
 
 # Python
 .venv/

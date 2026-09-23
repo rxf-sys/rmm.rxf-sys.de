@@ -1,6 +1,6 @@
 # Betrieb
 
-Stand: 07.09.2026. Zielumgebung: Proxmox LXC CT 111 (`192.168.2.211`),
+Stand: 23.09.2026. Zielumgebung: Proxmox LXC CT 111 (`192.168.2.211`),
 Docker Compose unter `/opt/rxf-rmm/infrastructure`.
 
 Alles hier bezieht sich auf einen laufenden Betrieb. Die einmalige
@@ -171,6 +171,10 @@ docker exec rxf-rmm-backend rm -f /tmp/check.db
 
 ### Was das Backup nicht enthält
 
+- `infrastructure/mdm/` — APNs-Push-Zertifikat, dessen privater Schlüssel
+  und die SCEP-CA (nur relevant, wenn das Profil `mdm` läuft). `push.key`
+  ist unersetzbar: ohne ihn ist auch das Zertifikat von Apple wertlos.
+  Separat und verschlüsselt sichern, siehe [`MDM-SETUP.md`](MDM-SETUP.md).
 - `infrastructure/.env` — enthält Secrets und liegt nur im LXC. Separat und
   verschlüsselt sichern.
 - `infrastructure/.agent-sign.env` — der private ed25519-Signaturschlüssel.
@@ -300,6 +304,30 @@ setzt allerdings eine bestehende Verbindung voraus).
 Geplante Ausfälle nicht mit Alarmen quittieren, sondern vorher ein
 **Wartungsfenster** setzen (Gerät → Wartung). Das unterdrückt Alarme für
 dieses Gerät, ohne Regeln anzufassen.
+
+## MDM (iOS/iPadOS)
+
+Läuft **nicht** im Normalbetrieb. Der NanoMDM-Container hängt am
+Compose-Profil `mdm`; ein `docker compose up` oder ein Deploy lässt ihn
+unangetastet. Einrichtung Schritt für Schritt — Push-Zertifikat, Dateien,
+erster Start, Verlängerung: [`MDM-SETUP.md`](MDM-SETUP.md).
+
+| Prüfung | Kommando | Erwartung |
+|---|---|---|
+| Läuft das Profil? | `docker compose --profile mdm ps` | `rxf-rmm-mdm` als `Up`, oder gar keine Zeile |
+| Server erreichbar | `curl -s https://rmm.rxf-sys.de/version` | JSON mit der NanoMDM-Version |
+| Verwaltungs-API dicht | `curl -si https://rmm.rxf-sys.de/v1/pushcert` | **404** — alles andere ist ein Fehler |
+
+Die dritte Zeile ist die wichtige: `/v1/*` verschickt Pushes und Kommandos
+an jedes eingebuchte Gerät und nimmt Zertifikats-Uploads entgegen. Caddy
+beantwortet diese Pfade deshalb mit 404, und zusätzlich schützt
+`NANOMDM_API_KEY` sie innerhalb des Docker-Netzes. Wenn dort jemals etwas
+anderes als 404 zurückkommt, gehört der Tunnel zu, bevor irgendetwas
+anderes passiert.
+
+**Das Push-Zertifikat läuft nach einem Jahr ab.** Danach bleiben die Geräte
+registriert, reagieren aber auf kein Kommando mehr — es gibt keine Meldung,
+die das ankündigt, außer dem eigenen Kalendereintrag.
 
 ## Ressourcenbedarf
 

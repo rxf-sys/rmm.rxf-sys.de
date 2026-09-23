@@ -36,6 +36,14 @@ hinter dem Cloudflare-Tunnel nicht ankommt. Voraussetzung ist ein
 APNs-Push-Zertifikat von Apple — ohne das läuft kein Kommando. Damit kommen
 Inventar, Sperren, Verloren-Modus und Richtlinien.
 
+Die Infrastruktur dafür steht bereits, aber abgeschaltet: der Container
+hängt am Compose-Profil `mdm`, Caddy kennt die Routen und sperrt die
+Verwaltungs-API. Was noch fehlt, in dieser Reihenfolge — das Push-Zertifikat
+(der Betreiber, Anleitung in [`MDM-SETUP.md`](MDM-SETUP.md)), ein
+SCEP-Server für die Geräte-Identitätszertifikate (Image muss selbst gebaut
+werden, siehe dort Teil 4), das Enrollment-Profil und die Kommandos im
+Dashboard.
+
 **Befugnisse nach Besitzverhältnis.** Privat: Inventar, Sperren,
 Verloren-Modus, Richtlinien. Firma: zusätzlich Komplett-Löschen und
 erzwungene Updates. Die Grenze gehört in den Server, nicht in die Disziplin

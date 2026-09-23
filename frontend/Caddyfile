@@ -18,6 +18,28 @@
 		reverse_proxy backend:8080
 	}
 
+	# --- MDM (iOS), siehe docs/MDM-SETUP.md ---------------------------------
+	# Die Verwaltungs-API von NanoMDM zuerst zumachen: /v1/* verschickt Pushes
+	# und Kommandos an jedes eingebuchte Gerät und lädt das Push-Zertifikat
+	# hoch, /migration nimmt fremde Enrollments an. Nichts davon gehört durch
+	# den Tunnel — auch nicht "nur solange kein Container läuft".
+	handle /v1/* {
+		respond 404
+	}
+	handle /migration* {
+		respond 404
+	}
+
+	# Was Apple-Geräte tatsächlich sprechen. Solange das mdm-Profil nicht
+	# gestartet ist, gibt es hier 502 — kein Nutzer und kein Gerät ruft diese
+	# Pfade vorher auf.
+	handle /mdm* {
+		reverse_proxy nanomdm:9000
+	}
+	handle /checkin* {
+		reverse_proxy nanomdm:9000
+	}
+
 	handle {
 		@assets path /assets/*
 		header @assets Cache-Control "public, max-age=31536000, immutable"
