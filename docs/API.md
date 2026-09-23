@@ -66,7 +66,8 @@ Aufklärungsfläche hinter einem öffentlichen Tunnel.
 | GET | `/api/devices/{device_id}` | Session | Detail inkl. letztem Heartbeat und Inventar |
 | GET | `/api/devices/{device_id}/history` | Session | Metrik-Historie (Roh + Stunden-Rollup) |
 | GET | `/api/devices/{device_id}/alerts` | Session | Alarm-Historie des Geräts |
-| PATCH | `/api/devices/{device_id}` | Operator | Label, Tags, Person, RustDesk-ID ändern |
+| POST | `/api/devices` | Operator | Gerät **ohne Agent** anlegen (Telefon/Tablet). 201 mit der neuen Zeile; es entsteht kein Zugang |
+| PATCH | `/api/devices/{device_id}` | Operator | Label, Tags, Person, RustDesk-ID ändern. Bei Geräten ohne Agent zusätzlich Bezeichnung, OS-Version, Modell, Seriennummer, IMEI, Notiz und Besitzverhältnis — bei Geräten mit Agent sind diese Felder 409 |
 | DELETE | `/api/devices/{device_id}` | Operator | Gerät entfernen; der Agent verliert damit den Zugang |
 | GET | `/api/devices/{device_id}/agent-logs` | Operator | Holt die letzten Log-Zeilen live vom Agent. 409 ohne offene Verbindung, 504 wenn der Agent nicht innerhalb von 5 s antwortet |
 | POST | `/api/devices/{device_id}/wake` | Operator | Wake-on-LAN an alle bekannten MACs. 422, wenn keine MAC bekannt ist |
@@ -75,6 +76,26 @@ Aufklärungsfläche hinter einem öffentlichen Tunnel.
 | POST | `/api/devices/enroll-tokens` | Operator | Neues Einmal-Token. Der Klartext wird **nur hier** zurückgegeben |
 | GET | `/api/devices/enroll-tokens` | Operator | Offene Token auflisten |
 | DELETE | `/api/devices/enroll-tokens/{token_id}` | Operator | Token widerrufen |
+
+### Geräteklassen
+
+`device_class` ist `agent` (Rechner mit Agent) oder `mobile` (von Hand
+gepflegtes Telefon/Tablet). Alles, was einen laufenden Agent voraussetzt,
+antwortet für `mobile` mit **409** und einem Satz, der sagt warum:
+`POST …/jobs`, `…/wake`, `…/update-agent`, `GET …/agent-logs`,
+`POST …/patches/scan`, `POST …/patches/install`. Die Liste steht in
+`backend/app/device_policy.py`; die Oberfläche blendet dieselben Knöpfe aus,
+aber die Entscheidung fällt im Server.
+
+`POST /api/devices` erzeugt bewusst **keine** Credentials: in der Zeile steht
+der Hash eines Geheimnisses, das nie jemand erfährt, und
+`authenticate_device()` weist die Klasse zusätzlich ab. Der einzige Weg zu
+einem Gerät, das sich anmelden kann, bleibt das Enrollment-Token.
+
+Feld `ownership`: `private` oder `company`. Heute Information für die
+Übersicht; sobald Verwaltungsbefehle dazukommen, entscheidet es über deren
+Umfang (privat: Inventar, Sperren, Verloren-Modus, Richtlinien — Firma
+zusätzlich Komplett-Löschen und Zwangs-Updates).
 
 ## Jobs und Skripte
 

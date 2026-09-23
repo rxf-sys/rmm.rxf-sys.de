@@ -2,18 +2,19 @@ import type {
   Account,
   Alert,
   AlertRule,
+  AlertStats,
   AuditPage,
   AutomationConfig,
-  Credential,
   CreatedEnrollToken,
+  Credential,
   Device,
   DeviceDetail,
   EnrollToken,
   FleetSample,
+  InventoryMatch,
   Job,
   MetricSample,
-  AlertStats,
-  InventoryMatch,
+  NewDevice,
   NtfyConfig,
   Patch,
   PatchSummary,
@@ -132,9 +133,23 @@ export const api = {
     get<{ samples: MetricSample[] }>(`/api/devices/${id}/history?hours=${hours}`, signal),
   alerts: (signal?: AbortSignal) => get<{ alerts: Alert[] }>('/api/alerts', signal),
   ackAlert: (id: number) => post<{ alert: Alert }>(`/api/alerts/${id}/ack`),
+  createDevice: (body: NewDevice) => post<{ device: Device }>('/api/devices', body),
   updateDevice: (
     id: number,
-    body: { owner_label?: string; tags?: string[]; rustdesk_id?: string; person_id?: number },
+    body: {
+      owner_label?: string;
+      tags?: string[];
+      rustdesk_id?: string;
+      person_id?: number;
+      // Nur bei Geräten ohne Agent: was kein Agent melden kann.
+      hostname?: string;
+      os_version?: string;
+      ownership?: 'private' | 'company';
+      model?: string;
+      serial?: string;
+      imei?: string;
+      notes?: string;
+    },
   ) => patch<{ device: Device }>(`/api/devices/${id}`, body),
   wakeDevice: (id: number) => post<{ ok: boolean; sent: number }>(`/api/devices/${id}/wake`),
   updateAgent: (id: number) => post<{ ok: boolean; version: string }>(`/api/devices/${id}/update-agent`),

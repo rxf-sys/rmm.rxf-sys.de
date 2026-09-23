@@ -3,10 +3,13 @@ import { api, apiErrorMessage } from '../api/client';
 import { formatDateTime } from '../format';
 import { IconDownload } from '../icons';
 import type { CreatedEnrollToken, EnrollToken } from '../types';
+import { MobileDeviceForm } from './MobileDeviceForm';
 import { Modal } from './Modal';
 
 interface Props {
   onClose: () => void;
+  /** Nach dem Anlegen eines Geräts ohne Agent: Flotte neu laden. */
+  onDeviceCreated?: () => void;
 }
 
 const SERVER_HINT = window.location.origin;
@@ -14,7 +17,11 @@ const SERVER_HINT = window.location.origin;
 /** Modal to mint one-time enrollment tokens and show the resulting agent
  * install command. Open tokens are listed so the admin can revoke unused
  * ones. */
-export function EnrollModal({ onClose }: Props) {
+export function EnrollModal({ onClose, onDeviceCreated }: Props) {
+  // Zwei Wege, ein Dialog: der Rechner bekommt ein Enrollment-Token, das
+  // Telefon eine Karteikarte. Getrennte Einstiege hätten bedeutet, dass man
+  // erst wissen muss, welchen man sucht.
+  const [mode, setMode] = useState<'agent' | 'mobile'>('agent');
   const [label, setLabel] = useState('');
   const [created, setCreated] = useState<CreatedEnrollToken | null>(null);
   const [tokens, setTokens] = useState<EnrollToken[]>([]);
@@ -159,7 +166,28 @@ export function EnrollModal({ onClose }: Props) {
         </button>
       }
     >
-      {!created ? (
+      {!created && (
+        <div className="row" style={{ gap: 6 }}>
+          <button
+            className={mode === 'agent' ? 'btn btn-accent btn-sm' : 'btn btn-sm'}
+            onClick={() => setMode('agent')}
+            aria-pressed={mode === 'agent'}
+          >
+            Rechner mit Agent
+          </button>
+          <button
+            className={mode === 'mobile' ? 'btn btn-accent btn-sm' : 'btn btn-sm'}
+            onClick={() => setMode('mobile')}
+            aria-pressed={mode === 'mobile'}
+          >
+            Telefon oder Tablet
+          </button>
+        </div>
+      )}
+
+      {mode === 'mobile' && !created ? (
+        <MobileDeviceForm onCreated={() => onDeviceCreated?.()} />
+      ) : !created ? (
         <>
           <span className="muted" style={{ lineHeight: 1.6 }}>
             Erzeugt ein Einmal-Token (24 h gültig). Damit meldet sich der Agent auf dem Zielgerät
@@ -248,7 +276,7 @@ export function EnrollModal({ onClose }: Props) {
         </p>
       )}
 
-      {tokens.length > 0 && (
+      {tokens.length > 0 && mode === 'agent' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div className="sidebar-label" style={{ margin: '4px 0 4px', padding: 0 }}>
             Offene Tokens

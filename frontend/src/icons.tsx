@@ -239,9 +239,20 @@ export function ServerRack({ size = 13, style }: IconProps) {
   );
 }
 
+export function IconPhone({ size = 13, style }: IconProps) {
+  return (
+    <S size={size} style={style}>
+      <rect x="6.5" y="2.5" width="11" height="19" rx="2.5" />
+      <path d="M10.5 18.5h3" />
+    </S>
+  );
+}
+
 /** The right OS mark for a device. */
 export function OsIcon({ os, size = 13, style }: { os: string } & IconProps) {
   if (os === 'windows') return <WindowsLogo size={size} style={style} />;
-  if (os === 'darwin') return <AppleLogo size={size} style={style} />;
+  if (os === 'darwin' || os === 'ios' || os === 'ipados')
+    return <AppleLogo size={size} style={style} />;
+  if (os === 'android' || os === 'other') return <IconPhone size={size} style={style} />;
   return <LinuxLogo size={size} style={style} />;
 }

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AlertsPage } from './components/AlertsPage';
 import { CommandPalette } from './components/CommandPalette';
@@ -9,6 +9,7 @@ import { Header } from './components/Header';
 import { LoginPage } from './components/LoginPage';
 import { OverviewPage } from './components/OverviewPage';
 import { Sidebar, type PageId } from './components/Sidebar';
+import { isAgent } from './deviceClass';
 import type { PatchSummary } from './types';
 import { Skeleton } from './ui';
 import { useAuth } from './hooks/useAuth';
@@ -108,6 +109,10 @@ export default function App() {
   const { user, status, login, logout } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
   const fleet = useFleet();
+  // Seiten, die von Agent-Telemetrie leben (Updates, Skripte, Alarmregeln),
+  // bekommen nur die Geräte mit Agent: ein Telefon dort zu listen hieße, eine
+  // Zeile anzubieten, auf der nichts passieren kann.
+  const agentDevices = useMemo(() => fleet.devices.filter(isAgent), [fleet.devices]);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -301,7 +306,7 @@ export default function App() {
                 <PatchesPage
                   onRefresh={fleet.refresh}
                   isOperator={isOperator}
-                  devices={fleet.devices}
+                  devices={agentDevices}
                   patchSummary={fleet.patchSummary}
                   persons={fleet.persons}
                   onOpenDevice={openDevice}
@@ -314,7 +319,7 @@ export default function App() {
                 isOperator ? (
                   <ScriptsPage
                     canManage={isOperator}
-                    devices={fleet.devices}
+                    devices={agentDevices}
                     onOpenDevice={openDevice}
                   />
                 ) : (
@@ -325,7 +330,7 @@ export default function App() {
             <Route
               path={PAGE_PATH.automation}
               element={
-                <AutomationPage devices={fleet.devices} persons={fleet.persons} isAdmin={isAdmin} />
+                <AutomationPage devices={agentDevices} persons={fleet.persons} isAdmin={isAdmin} />
               }
             />
             <Route path={PAGE_PATH.docs} element={<DocsPage />} />
@@ -363,6 +368,7 @@ export default function App() {
             setEnrollOpen(false);
             fleet.refresh();
           }}
+          onDeviceCreated={() => fleet.refresh()}
         />
       )}
     </div>

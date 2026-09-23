@@ -15,7 +15,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from .. import devices, jobs, patch_scan, patches
+from .. import device_policy, devices, jobs, patch_scan, patches
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..auth import device_visible, person_scope, require_operator, verify_session
@@ -60,8 +60,10 @@ async def scan_patches(
     user: dict = Depends(require_operator),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    if await devices.get_device(device_id, settings.offline_after_s) is None:
+    device = await devices.get_device(device_id, settings.offline_after_s)
+    if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    device_policy.ensure_supported(device, "patch_scan")
     if not manager.is_connected(device_id):
         raise HTTPException(status_code=409, detail="Gerät ist nicht verbunden")
     await manager.send(device_id, {"type": "patch_scan"})
@@ -86,8 +88,10 @@ async def install_patches(
     user: dict = Depends(require_operator),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    if await devices.get_device(device_id, settings.offline_after_s) is None:
+    device = await devices.get_device(device_id, settings.offline_after_s)
+    if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
+    device_policy.ensure_supported(device, "patch_install")
     if await jobs.active_job_of_kind(device_id, "patch_install") is not None:
         raise HTTPException(status_code=409, detail="Es läuft bereits eine Installation")
 

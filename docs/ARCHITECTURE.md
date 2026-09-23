@@ -102,6 +102,31 @@ Ein Agent kann damit ausschließlich Daten für die eigene `device_id` melden.
 Es gibt keinen Endpunkt, über den ein Gerät Daten eines anderen Geräts lesen
 oder einen Befehl absetzen könnte.
 
+### 3.3 Geräteklassen
+
+`devices.device_class` unterscheidet zwei Arten von Zeilen:
+
+- **`agent`** — alles oben Beschriebene: enrollt, meldet Heartbeats, nimmt
+  Befehle über den offenen Socket an.
+- **`mobile`** — ein Telefon oder Tablet, von Hand über
+  `POST /api/devices` angelegt. Es entsteht **kein** Zugang: gespeichert wird
+  der Hash eines Geheimnisses, das nie jemand erfährt, und
+  `authenticate_device()` lehnt die Klasse zusätzlich ab.
+
+`backend/app/device_policy.py` hält fest, welche Aktionen einen Agent
+voraussetzen (Shell, Skripte, Patch-Scan und -Installation, WoL,
+Agent-Update, Agent-Logs, Fernwartung). Jeder dieser Endpunkte fragt
+`ensure_supported()` und antwortet sonst mit 409 — die Oberfläche blendet
+dieselben Knöpfe aus, aber die Grenze steckt im Server. Aus demselben Grund
+überspringt der Alarm-Lauf Geräte ohne Agent: seine drei Regeln lesen
+Heartbeat, Plattenbelegung und Patch-Stand, und ein Telefon hat davon nichts
+— es stünde sonst dauerhaft als „offline" im Alarm.
+
+`ownership` (`private` | `company`) beschreibt das Besitzverhältnis. Heute
+Information für die Übersicht; sobald Verwaltungsbefehle dazukommen,
+entscheidet es über deren Umfang — auf einem Privatgerät niemals
+Komplett-Löschen oder erzwungene Updates.
+
 ## 4. WebSocket-Protokoll
 
 Drei Sockets, alle unter `/api`. Details zu jedem Nachrichtentyp in
@@ -187,7 +212,7 @@ Lifespan (`backend/app/main.py:115-126`).
 | `users` | Konten, Rolle, Argon2-Hash, TOTP-Secret, Backup-Codes, `person_id` | `accounts.py:42` |
 | `sessions` | Session-Hash, Präfix, Ablauf; FK auf `users` mit CASCADE | `accounts.py:53` |
 | `app_settings` | Laufzeit-Einstellungen (z. B. ntfy-Override) | `accounts.py:64` |
-| `devices` | Gerät, OS, Agent-Version, Secret-Hash, letzter Heartbeat, `person_id`, Wartungsfenster, letzter Update-Scan | `devices.py:30` |
+| `devices` | Gerät, OS, Agent-Version, Secret-Hash, letzter Heartbeat, `person_id`, Wartungsfenster, letzter Update-Scan, Geräteklasse, Besitzverhältnis, Modell/Seriennummer/IMEI/Notiz (nur ohne Agent) | `devices.py:30` |
 | `enrollment_tokens` | Einmal-Token: Hash, Ablauf, Verbrauchszeitpunkt | `devices.py:46` |
 | `inventory` | Inventar je Gerät und Art (Hardware/Software/Netz) | `devices.py:55` |
 | `jobs` | Auftrag, Kommando, Status, Exit-Code, gekappter Output | `jobs.py:32` |
