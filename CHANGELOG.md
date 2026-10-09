@@ -60,7 +60,9 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Homebrew. winget wird für das SYSTEM-Konto aus dem App-Installer-Ordner
   aufgelöst, Homebrew läuft als angemeldeter Benutzer. Jede Installation ist
   ein normaler, im Audit-Log erfasster Auftrag; die Paketkennungen sind
-  Konstanten, die ein Test auf harmlose Zeichen prüft.
+  Konstanten, die ein Test auf harmlose Zeichen prüft. Dasselbe gibt es als
+  Massenaktion in der Geräteliste: jedes Gerät bekommt den Befehl seines
+  Systems, Geräte ohne passendes Paket werden vorab genannt.
 - **Vorbereitung für MDM (iOS/iPadOS).** `infrastructure/docker-compose.yml`
   kennt jetzt einen NanoMDM-Container, der am Compose-Profil `mdm` hängt und
   im Normalbetrieb nicht startet — ohne APNs-Push-Zertifikat gäbe es nichts

@@ -5,6 +5,7 @@ import { qk } from '../../api/queryClient';
 import { Modal } from '../../components/Modal';
 import { isAgent } from '../../deviceClass';
 import { SCRIPT_OS_LABEL, osMatchesDevice } from '../../scriptOs';
+import { SOFTWARE, SOFTWARE_CATEGORY_LABEL, availableOn, type SoftwarePreset } from '../../softwareCatalog';
 import type { Device, Script } from '../../types';
 import { ErrorNote } from '../../ui';
 import { partition, reachable, skippedText } from './bulk';
@@ -245,6 +246,60 @@ export function MaintenanceDialog({
           onClose={onClose}
           disabled={plan.targets.length === 0}
           label={minutes === 0 ? 'Wartung beenden' : 'Wartung starten'}
+        />
+      </form>
+    </Modal>
+  );
+}
+
+/** Install one catalog program on every selected device that can take it,
+ *  each through its own system's package manager. */
+export function SoftwareDialog({
+  devices,
+  onClose,
+  onRun,
+}: {
+  devices: Device[];
+  onClose: () => void;
+  onRun: (preset: SoftwarePreset, targets: Device[]) => void;
+}) {
+  const [id, setId] = useState('');
+  const preset = SOFTWARE.find((p) => p.id === id) ?? null;
+  const plan = preset
+    ? partition(devices, [
+        { test: isAgent, reason: 'ohne Agent' },
+        { test: reachable, reason: 'ohne Verbindung' },
+        { test: (d) => availableOn(preset, d.os), reason: 'ohne Paket für ihr System' },
+      ])
+    : null;
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (preset && plan && plan.targets.length > 0) onRun(preset, plan.targets);
+  };
+  return (
+    <Modal title="Software installieren" onClose={onClose}>
+      <form className="bulk-form" onSubmit={submit}>
+        <label className="field">
+          <span className="field-label">Programm</span>
+          <select className="input" value={id} onChange={(e) => setId(e.target.value)}>
+            <option value="">Programm wählen …</option>
+            {Object.entries(SOFTWARE_CATEGORY_LABEL).map(([cat, label]) => (
+              <optgroup key={cat} label={label}>
+                {SOFTWARE.filter((p) => p.category === cat).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+        {plan && <Plan targets={plan.targets.length} total={devices.length} skipped={plan.skipped} />}
+        <p className="muted">Windows über winget, Linux über apt oder dnf, macOS über Homebrew. Jede Installation steht im Audit-Log.</p>
+        <Actions
+          onClose={onClose}
+          disabled={!plan || plan.targets.length === 0}
+          label={plan ? `Auf ${fmt.format(plan.targets.length)} Geräten installieren` : 'Installieren'}
         />
       </form>
     </Modal>

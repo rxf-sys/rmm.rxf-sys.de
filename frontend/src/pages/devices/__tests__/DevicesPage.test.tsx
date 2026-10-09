@@ -168,6 +168,19 @@ describe('DevicesPage Auswahl', () => {
     expect(screen.getByRole('region', { name: 'Auswahl' })).toHaveTextContent('3 ausgewählt');
   });
 
+  it('sagt beim Software-Katalog vorab, welche Geräte übersprungen werden', async () => {
+    show('/devices', [device(), fullDisk, phone], { canOperate: true });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Alle Geräte dieser Seite auswählen' }));
+    const bar = screen.getByRole('region', { name: 'Auswahl' });
+    await userEvent.click(within(bar).getByRole('button', { name: 'Software' }));
+    const dialog = screen.getByRole('dialog', { name: 'Software installieren' });
+    await userEvent.selectOptions(within(dialog).getByRole('combobox'), 'Notepad++');
+    expect(within(dialog).getByText(/Betrifft/)).toHaveTextContent(
+      'Betrifft 1 von 3 ausgewählten Geräten. Übersprungen: 1 ohne Paket für ihr System, 1 ohne Agent.',
+    );
+    expect(within(dialog).getByRole('button', { name: 'Auf 1 Geräten installieren' })).toBeEnabled();
+  });
+
   it('wählt mit Umschalt einen Bereich', async () => {
     const list = [1, 2, 3, 4].map((i) => device({ id: 10 + i, hostname: `pc-${i}` }));
     show('/devices?sort=name', list, { canOperate: true });

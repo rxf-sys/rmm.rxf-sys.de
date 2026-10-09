@@ -4,13 +4,14 @@ import { api } from '../../api/client';
 import { qk } from '../../api/queryClient';
 import { isAgent } from '../../deviceClass';
 import { useConfirm } from '../../hooks/useConfirm';
-import { IconChevronDown, IconDownload, IconPlay, IconRestart, IconTag, IconUpgrade, IconWrench, IconX } from '../../icons';
+import { IconChevronDown, IconDownload, IconPackage, IconPlay, IconRestart, IconTag, IconUpgrade, IconWrench, IconX } from '../../icons';
 import type { Device, Job } from '../../types';
 import { Menu, type MenuEntry } from '../../ui';
 import { notify, trackJobs } from '../../ui/toast';
 import { restartCommand } from '../../deviceCommands';
 import { partition, reachable, runBulk, skippedText } from './bulk';
-import { MaintenanceDialog, ScriptDialog, TagsDialog } from './BulkDialogs';
+import { MaintenanceDialog, ScriptDialog, SoftwareDialog, TagsDialog } from './BulkDialogs';
+import { installCommand } from '../../softwareCatalog';
 
 const fmt = new Intl.NumberFormat('de-DE');
 const devicesWord = (n: number) => `${fmt.format(n)} ${n === 1 ? 'Gerät' : 'Geräten'}`;
@@ -39,7 +40,7 @@ interface Props {
 export function BulkBar({ selected, hidden, allTags, onClear, onExport }: Props) {
   const qc = useQueryClient();
   const { ask, dialog: confirmDialog } = useConfirm();
-  const [open, setOpen] = useState<'script' | 'tags' | 'maintenance' | null>(null);
+  const [open, setOpen] = useState<'script' | 'software' | 'tags' | 'maintenance' | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function startJobs(targets: Device[], make: (d: Device) => Promise<{ job: Job }>, label: string) {
@@ -130,6 +131,7 @@ export function BulkBar({ selected, hidden, allTags, onClear, onExport }: Props)
   const updatable = selected.filter((d) => d.agent_update_available !== null).length;
   const actions: MenuEntry[] = [
     { label: 'Skript ausführen …', icon: <IconPlay size={14} />, onSelect: () => setOpen('script') },
+    { label: 'Software installieren …', icon: <IconPackage size={14} />, onSelect: () => setOpen('software') },
     { label: 'Neu starten …', icon: <IconRestart size={14} />, onSelect: () => void restart() },
     { label: 'Tags bearbeiten …', icon: <IconTag size={14} />, onSelect: () => setOpen('tags') },
     { label: 'Wartungsfenster …', icon: <IconWrench size={14} />, onSelect: () => setOpen('maintenance') },
@@ -151,6 +153,9 @@ export function BulkBar({ selected, hidden, allTags, onClear, onExport }: Props)
       <div className="bulkbar-actions">
         <button type="button" className="btn btn-sm" onClick={() => setOpen('script')} disabled={busy}>
           <IconPlay size={14} /> Skript ausführen
+        </button>
+        <button type="button" className="btn btn-sm" onClick={() => setOpen('software')} disabled={busy}>
+          <IconPackage size={14} /> Software
         </button>
         <button type="button" className="btn btn-sm" onClick={() => void restart()} disabled={busy}>
           <IconRestart size={14} /> Neu starten
@@ -193,6 +198,23 @@ export function BulkBar({ selected, hidden, allTags, onClear, onExport }: Props)
           onRun={(script, targets) => {
             setOpen(null);
             void startJobs(targets, (d) => api.createScriptJob(d.id, script.id), script.name);
+          }}
+        />
+      )}
+      {open === 'software' && (
+        <SoftwareDialog
+          devices={selected}
+          onClose={() => setOpen(null)}
+          onRun={(preset, targets) => {
+            setOpen(null);
+            void startJobs(
+              targets,
+              (d) => {
+                const cmd = installCommand(preset, d.os)!;
+                return api.createShellJob(d.id, cmd.command, cmd.shell);
+              },
+              `${preset.name} installieren`,
+            );
           }}
         />
       )}
