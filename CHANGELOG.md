@@ -40,6 +40,27 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   deutsche Tabellenkalkulation; Zellen, die eine Tabellenkalkulation als
   Formel ausführen würde, werden entschärft. Unter 1000 px Breite wird die
   Tabelle zu Karten.
+- **Gerätedetail neu aufgebaut.** Kopfbereich mit Status, System, letzter
+  Meldung und Tags; die wichtigste Aktion (Fernsteuerung oder Aufwecken) ist
+  der Hauptknopf, Terminal und „Neu starten" (mit einer Minute Vorwarnung)
+  daneben, alles Weitere im Menü — auf dem Telefon oben neben „Geräte". Die
+  Übersicht zeigt Auslastung mit Schwellenmarken, „Auf einen Blick",
+  Stammdaten, Sicherheit und Netzwerk; der Verlauf nutzt das neue Diagramm
+  mit Fadenkreuz per Maus, Finger und Pfeiltasten. Die Seite läuft bei 390 px
+  ohne seitliches Scrollen. „Entfernen" verlangt jetzt, den Gerätenamen
+  einzutippen — das Löschen lässt sich nicht rückgängig machen.
+- **Aktivität als Zeitleiste.** Aufträge, ausgelöste und behobene Alarme und
+  — für Admins — Änderungen aus dem Audit-Log stehen nach Tagen gruppiert in
+  einer Liste; die Ausgabe eines Auftrags klappt direkt darunter auf. Links
+  aus Toasts und der Benachrichtigungszentrale (`?tab=jobs&job=…`) öffnen den
+  Auftrag gleich.
+- **Software installieren mit einem Klick.** Der Reiter „Fernzugriff" bietet
+  einen Katalog gängiger Programme (Browser, LibreOffice, 7-Zip, Git,
+  RustDesk, WireGuard …), passend zum System über winget, apt/dnf oder
+  Homebrew. winget wird für das SYSTEM-Konto aus dem App-Installer-Ordner
+  aufgelöst, Homebrew läuft als angemeldeter Benutzer. Jede Installation ist
+  ein normaler, im Audit-Log erfasster Auftrag; die Paketkennungen sind
+  Konstanten, die ein Test auf harmlose Zeichen prüft.
 - **Vorbereitung für MDM (iOS/iPadOS).** `infrastructure/docker-compose.yml`
   kennt jetzt einen NanoMDM-Container, der am Compose-Profil `mdm` hängt und
   im Normalbetrieb nicht startet — ohne APNs-Push-Zertifikat gäbe es nichts

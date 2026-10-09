@@ -56,7 +56,7 @@ export type LoadKind = 'cpu' | 'ram' | 'disk';
  * CPU tolerates more than RAM — a box pinned at 80 % CPU is working, a box at
  * 90 % RAM is about to start swapping.
  */
-const LOAD_THRESHOLDS: Record<LoadKind, { warn: number; crit: number }> = {
+export const LOAD_THRESHOLDS: Record<LoadKind, { warn: number; crit: number }> = {
   cpu: { warn: 70, crit: 90 },
   ram: { warn: 75, crit: 90 },
   disk: { warn: 80, crit: 90 },

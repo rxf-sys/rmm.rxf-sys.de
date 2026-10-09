@@ -37,9 +37,7 @@ const AuditPage = lazy(() => import('./components/AuditPage').then((m) => ({ def
 const AutomationPage = lazy(() =>
   import('./components/AutomationPage').then((m) => ({ default: m.AutomationPage })),
 );
-const DeviceDetail = lazy(() =>
-  import('./components/DeviceDetail').then((m) => ({ default: m.DeviceDetail })),
-);
+const DevicePage = lazy(() => import('./pages/device/DevicePage').then((m) => ({ default: m.DevicePage })));
 const DocsPage = lazy(() => import('./components/DocsPage').then((m) => ({ default: m.DocsPage })));
 const PatchesPage = lazy(() =>
   import('./components/PatchesPage').then((m) => ({ default: m.PatchesPage })),
@@ -85,33 +83,27 @@ function DeviceRoute({
   favorites,
   patchSummary,
   onToggleFavorite,
-  onLeave,
   onDeleted,
-  onLogout,
 }: {
   isAdmin: boolean;
   isOperator: boolean;
   favorites: number[];
   patchSummary: PatchSummary;
   onToggleFavorite: (id: number) => void;
-  onLeave: () => void;
   onDeleted: () => void;
-  onLogout: () => Promise<void> | void;
 }) {
   const { deviceId } = useParams();
   const id = Number(deviceId);
   if (!Number.isInteger(id) || id <= 0) return <Navigate to={PAGE_PATH.devices} replace />;
   return (
-    <DeviceDetail
+    <DevicePage
       deviceId={id}
       patchCounts={patchSummary[String(id)]}
       isAdmin={isAdmin}
       isOperator={isOperator}
       favorite={favorites.includes(id)}
       onToggleFavorite={() => onToggleFavorite(id)}
-      onBack={onLeave}
       onDeleted={onDeleted}
-      onLogout={onLogout}
     />
   );
 }
@@ -332,12 +324,10 @@ export default function App() {
                   favorites={favorites}
                   patchSummary={fleet.patchSummary}
                   onToggleFavorite={toggleFavorite}
-                  onLeave={() => navigate(PAGE_PATH.devices)}
                   onDeleted={() => {
                     navigate(PAGE_PATH.devices);
                     fleet.refresh();
                   }}
-                  onLogout={logout}
                 />
               }
             />

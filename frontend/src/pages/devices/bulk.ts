@@ -5,7 +5,7 @@
  * `job.created` entries, each with its device.
  */
 import { isAgent } from '../../deviceClass';
-import type { Device, Shell } from '../../types';
+import type { Device } from '../../types';
 
 export interface BulkOutcome<T> {
   ok: T[];
@@ -35,25 +35,6 @@ export async function runBulk<T>(
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
   return out;
-}
-
-/**
- * The restart command per operating system. Every variant waits a minute and
- * tells whoever is signed in, so nobody loses their work to a reboot that
- * came out of nowhere. ASCII only: the message travels through PowerShell
- * and a console code page that may not be UTF-8.
- */
-export function restartCommand(os: string): { command: string; shell: Shell } | null {
-  switch (os) {
-    case 'windows':
-      return { command: 'shutdown.exe /r /t 60 /c "Neustart durch Vulpexa in 60 Sekunden"', shell: 'powershell' };
-    case 'linux':
-      return { command: 'shutdown -r +1 "Neustart durch Vulpexa in einer Minute"', shell: 'bash' };
-    case 'darwin':
-      return { command: 'shutdown -r +1', shell: 'zsh' };
-    default:
-      return null;
-  }
 }
 
 /** Can a job reach this device right now? Jobs are not queued: the server

@@ -539,6 +539,65 @@ select.input optgroup {
   color: var(--tx-3);
   font-size: var(--fs-sm);
 }
+/* Form layouts: a column of fields, and two or three across where there
+   is room. */
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.form-2,
+.form-3 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3) var(--sp-4);
+}
+.form-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 720px) {
+  .form-2,
+  .form-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Radio choices as pills (a native radio group underneath). */
+.choice-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.choice-group legend {
+  width: 100%;
+  margin-bottom: var(--sp-2);
+  padding: 0;
+}
+.choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  color: var(--tx-2);
+  font-weight: 600;
+  cursor: pointer;
+}
+.choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-tx);
+}
+.choice:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .field-error {
   color: var(--danger-tx);
   font-size: var(--fs-sm);
@@ -596,6 +655,61 @@ select.input optgroup {
   font: 400 var(--fs-sm) / 1.5 var(--mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+.console-state {
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--console-tx-2) 18%, transparent);
+  color: var(--console-tx-2);
+  font: 600 var(--fs-xs) / 1.8 var(--font);
+  white-space: nowrap;
+}
+.console-state.ok {
+  color: var(--console-ok);
+}
+.console-state.err {
+  color: var(--console-err);
+}
+.console-actions {
+  display: flex;
+  gap: var(--sp-1);
+  margin-left: auto;
+}
+.console-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: var(--hit-sm);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--console-line);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--console-tx-2);
+  font: 600 var(--fs-xs) var(--font);
+  cursor: pointer;
+}
+.console-btn:hover {
+  color: var(--console-tx);
+}
+.console-btn:focus-visible,
+.console-body:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.console-muted {
+  color: var(--console-tx-2);
+}
+.console-cmd {
+  color: var(--console-ok);
+}
+.console-select {
+  min-height: var(--hit-sm);
+  padding: 0 6px;
+  border: 1px solid var(--console-line);
+  border-radius: var(--r-sm);
+  background: var(--console-bg);
+  color: var(--console-tx);
+  font: 600 var(--fs-xs) var(--mono);
 }
 .console-input-row {
   display: flex;

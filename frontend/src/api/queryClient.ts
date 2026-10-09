@@ -33,5 +33,11 @@ export const qk = {
   persons: ['fleet', 'persons'] as const,
   device: (id: number) => ['device', id] as const,
   deviceAll: ['device'] as const,
+  // Under the device's own key, so refreshing a device refreshes its tabs.
+  devicePatches: (id: number) => ['device', id, 'patches'] as const,
+  deviceJobs: (id: number) => ['device', id, 'jobs'] as const,
+  deviceAlerts: (id: number) => ['device', id, 'alerts'] as const,
+  deviceHistory: (id: number, hours: number) => ['device', id, 'history', hours] as const,
+  deviceAudit: (id: number) => ['device', id, 'audit'] as const,
   scripts: ['scripts'] as const,
 };

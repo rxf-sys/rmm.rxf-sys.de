@@ -573,41 +573,6 @@
   color: var(--tx-2);
   font-size: var(--fs-sm);
 }
-.choice-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.choice-group legend {
-  width: 100%;
-  margin-bottom: var(--sp-2);
-  padding: 0;
-}
-.choice {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: var(--hit);
-  padding: 0 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  color: var(--tx-2);
-  font-weight: 600;
-  cursor: pointer;
-}
-.choice:has(input:checked) {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent-tx);
-}
-.choice:has(input:focus-visible) {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
 /* ---- Saved views ---- */
 .views {
   display: flex;

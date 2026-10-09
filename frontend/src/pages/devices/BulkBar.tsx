@@ -8,7 +8,8 @@ import { IconChevronDown, IconDownload, IconPlay, IconRestart, IconTag, IconUpgr
 import type { Device, Job } from '../../types';
 import { Menu, type MenuEntry } from '../../ui';
 import { notify, trackJobs } from '../../ui/toast';
-import { partition, reachable, restartCommand, runBulk, skippedText } from './bulk';
+import { restartCommand } from '../../deviceCommands';
+import { partition, reachable, runBulk, skippedText } from './bulk';
 import { MaintenanceDialog, ScriptDialog, TagsDialog } from './BulkDialogs';
 
 const fmt = new Intl.NumberFormat('de-DE');

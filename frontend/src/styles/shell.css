@@ -387,8 +387,11 @@ h3.panel-title {
 }
 .panel-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-2);
+  min-width: 0;
+  max-width: 100%;
   margin-left: auto;
 }
 .panel-body {
@@ -421,6 +424,10 @@ h3.panel-title {
 }
 .kv-list dd .status {
   white-space: normal;
+}
+.kv-list dd .muted {
+  font-size: inherit;
+  font-weight: 500;
 }
 
 /* ---------- Meter (ui/Meter.tsx) ---------- */
@@ -800,6 +807,11 @@ html [data-sonner-toast] [data-button] {
 }
 
 @media (max-width: 720px) {
+  /* Controls of a panel go under its title instead of squeezing beside it. */
+  .panel-actions {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
   .shell {
     grid-template-columns: minmax(0, 1fr);
   }

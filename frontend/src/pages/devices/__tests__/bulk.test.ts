@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Device } from '../../../types';
-import { partition, restartCommand, runBulk, skippedText } from '../bulk';
+import { restartCommand } from '../../../deviceCommands';
+import { partition, runBulk, skippedText } from '../bulk';
 
 describe('runBulk', () => {
   it('keeps going past failures and reports them', async () => {
