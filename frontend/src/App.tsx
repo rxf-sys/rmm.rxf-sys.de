@@ -5,11 +5,14 @@ import { AlertsPage } from './components/AlertsPage';
 import { CommandPalette } from './components/CommandPalette';
 import { ConnectionBanner } from './components/ConnectionBanner';
 import { DevicesPage } from './components/DevicesPage';
+import { BootSequence, type BootSummary } from './boot/BootSequence';
 import { EnrollModal } from './components/EnrollModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LoginPage } from './components/LoginPage';
 import { OverviewPage } from './components/OverviewPage';
 import { isAgent } from './deviceClass';
+import { deviceStatusKind } from './deviceStatus';
+import type { Device } from './types';
 import type { PatchSummary } from './types';
 import { Skeleton } from './ui';
 import { IconInfo, IconStatusDanger, IconStatusOk, IconStatusWarn } from './icons';
@@ -113,6 +116,19 @@ function DeviceRoute({
   );
 }
 
+/** What the boot sequence reports when it hands over. */
+function bootSummary(devices: Device[]): BootSummary {
+  const mix = { ok: 0, warn: 0, danger: 0, off: 0 };
+  let online = 0;
+  for (const d of devices) {
+    const k = deviceStatusKind(d);
+    if (k === 'noagent') continue;
+    mix[k] += 1;
+    if (d.online) online += 1;
+  }
+  return { devices: devices.length, online, attention: mix.warn + mix.danger + mix.off, mix };
+}
+
 export default function App() {
   const { user, status, login, logout } = useAuth();
   const { preference: themePref, resolved: theme, setPreference: setTheme, toggle: toggleTheme } = useTheme();
@@ -164,6 +180,13 @@ export default function App() {
   const goPath = useCallback((path: string) => navigate(path), [navigate]);
   useShortcuts({ enabled: user !== null, go: goShortcuts, onNavigate: goPath, onPalette: openPalette, onHelp: openHelp });
 
+  // Startup sequence: plays until auth and (when signed in) the first fleet
+  // load are done, then hands over to the shell.
+  const [booted, setBooted] = useState(false);
+  const finishBoot = useCallback(() => setBooted(true), []);
+  const bootReady = status !== 'loading' && (status === 'anon' || !fleet.loading);
+  const summary = useMemo(() => bootSummary(fleet.devices), [fleet.devices]);
+
   // The tab title names the page (and the device on device pages).
   const titleDeviceId = /^\/devices\/(\d+)/.exec(location.pathname)?.[1];
   const titleDevice = titleDeviceId ? fleet.devices.find((d) => d.id === Number(titleDeviceId))?.hostname : undefined;
@@ -185,8 +208,23 @@ export default function App() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
 
-  if (status === 'loading') return <div className="app-loading">Lade…</div>;
-  if (status === 'anon' || !user) return <LoginPage onLogin={login} />;
+  const boot = booted ? null : (
+    <BootSequence
+      ready={bootReady}
+      signedIn={status === 'loading' ? null : status === 'authed'}
+      summary={summary}
+      error={fleet.error}
+      onDone={finishBoot}
+    />
+  );
+  if (status === 'loading') return boot;
+  if (status === 'anon' || !user)
+    return (
+      <>
+        <LoginPage onLogin={login} />
+        {boot}
+      </>
+    );
 
   const isAdmin = user.role === 'admin';
   // Techniker: hands-on device work (jobs, scripts, patches, remote, enrollment).
@@ -226,6 +264,7 @@ export default function App() {
       : [{ label: PAGE_LABEL[page] }];
 
   return (
+    <>
     <div className="shell">
       <a className="skip-link" href="#main">
         Zum Inhalt springen
@@ -425,5 +464,7 @@ export default function App() {
         }}
       />
     </div>
+    {boot}
+    </>
   );
 }

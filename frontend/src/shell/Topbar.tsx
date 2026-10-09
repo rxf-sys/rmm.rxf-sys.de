@@ -25,7 +25,7 @@ export function Topbar({ crumbs, alerts, devices, canEnroll, onOpenPalette, onOp
   return (
     <header className="topbar">
       <Link to="/" className="topbar-mark" aria-label="Vulpexa, zur Übersicht">
-        <img src="/favicon.svg" alt="" width={26} height={26} />
+        <img src="/favicon.svg" alt="" width={26} height={26} data-boot-target />
       </Link>
       <nav className="crumbs" aria-label="Pfad">
         <ol>

@@ -51,6 +51,7 @@ export function LoginPage({ onLogin }: Props) {
       <form className="login-card" onSubmit={submit}>
         <div className="brand" style={{ padding: 0 }}>
           <img
+            data-boot-target
             src="/favicon.svg"
             alt="Vulpexa"
             width={34}

@@ -22,6 +22,7 @@ import './styles/base.css';
 import './styles/app.css';
 import './styles/components.css';
 import './styles/shell.css';
+import './styles/boot.css';
 
 const queryClient = createQueryClient();
 

@@ -14,10 +14,18 @@
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111219" />
     <meta name="color-scheme" content="light dark" />
     <script src="/theme-init.js"></script>
+    <style>
+      .boot-static { position: fixed; inset: 0; background: #1c1f33; }
+      @media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .boot-static { background: #0c0d13; } }
+      :root[data-theme='dark'] .boot-static { background: #0c0d13; }
+    </style>
     <title>Vulpexa</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Ink stage until the app mounts and takes over with the boot sequence:
+         no white flash on a slow connection. Inline style is allowed by the
+         CSP (style-src 'unsafe-inline'); scripts are not, none here. -->
+    <div id="root"><div class="boot-static"></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
