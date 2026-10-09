@@ -7,6 +7,20 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Behoben
+- **Endlos-Abruf nach dem Login.** Jeder angemeldete Tab rief
+  `/api/devices`, `/api/alerts`, `/api/patches/summary` und `/api/persons`
+  ununterbrochen ab — gemessen 569-mal je Endpunkt in zehn Sekunden
+  Leerlauf. `useFleet` gab bei jedem Render eine neue `refresh`-Funktion
+  zurück, und der Login-Effekt in `App.tsx` hing genau davon ab. Die
+  Funktion ist jetzt stabil; Abrufe laufen einzeln, ein Auftrag während eines
+  laufenden Abrufs wird zu genau einem Folgeabruf zusammengefasst,
+  WebSocket-Hinweise lösen höchstens alle zwei Sekunden einen Abruf aus, und
+  im versteckten Tab ruht das Polling.
+- **Alarm-Sturm erzeugte Abruf-Sturm.** Jeder ausgelöste Alarm schickte einen
+  eigenen Fleet-Hinweis. Fallen viele Geräte gleichzeitig aus, bündelt der
+  Server die Hinweise jetzt in ein Fenster von 0,5 s.
+
 ### Hinzugefügt
 - **Vorbereitung für MDM (iOS/iPadOS).** `infrastructure/docker-compose.yml`
   kennt jetzt einen NanoMDM-Container, der am Compose-Profil `mdm` hängt und
