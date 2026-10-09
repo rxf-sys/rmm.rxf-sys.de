@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OverviewPage } from '../OverviewPage';
 import type { Account, Device } from '../../types';
 import type { Fleet } from '../../hooks/useFleet';
-import type { PageId } from '../Sidebar';
+import type { PageId } from '../../routes';
 
 // Die Seite lädt Audit-Einträge und die Flottenlast selbst nach; beides ist
 // hier nicht der Prüfgegenstand — außer dort, wo der Audit-Abruf scheitert.

@@ -1,22 +1,29 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { AlertsPage } from './components/AlertsPage';
 import { CommandPalette } from './components/CommandPalette';
 import { ConnectionBanner } from './components/ConnectionBanner';
 import { DevicesPage } from './components/DevicesPage';
 import { EnrollModal } from './components/EnrollModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Header } from './components/Header';
 import { LoginPage } from './components/LoginPage';
 import { OverviewPage } from './components/OverviewPage';
-import { Sidebar, type PageId } from './components/Sidebar';
 import { isAgent } from './deviceClass';
 import type { PatchSummary } from './types';
 import { Skeleton } from './ui';
+import { IconInfo, IconStatusDanger, IconStatusOk, IconStatusWarn } from './icons';
+import { BottomNav } from './shell/BottomNav';
+import { MoreSheet } from './shell/MoreSheet';
+import { Rail } from './shell/Rail';
+import { ShortcutsDialog } from './shell/ShortcutsDialog';
+import { Topbar, type Crumb } from './shell/Topbar';
+import { setToastNavigator } from './ui/toast';
+import { useShortcuts, type GoShortcut } from './hooks/useShortcuts';
 import { useAuth } from './hooks/useAuth';
 import { useFleet } from './hooks/useFleet';
 import { useTheme } from './hooks/useTheme';
-import { PAGE_LABEL, PAGE_PATH, devicePath, pageForPath } from './routes';
+import { PAGE_LABEL, PAGE_PATH, devicePath, pageForPath, type PageId } from './routes';
 
 // Übersicht und Geräteliste tragen das erste Bild und bleiben im Hauptbündel.
 // Alles andere wird beim ersten Aufruf nachgeladen: die Detailseite, die
@@ -108,7 +115,7 @@ function DeviceRoute({
 
 export default function App() {
   const { user, status, login, logout } = useAuth();
-  const { resolved: theme, toggle: toggleTheme } = useTheme();
+  const { preference: themePref, resolved: theme, setPreference: setTheme, toggle: toggleTheme } = useTheme();
   const fleet = useFleet(user !== null);
   // Seiten, die von Agent-Telemetrie leben (Updates, Skripte, Alarmregeln),
   // bekommen nur die Geräte mit Agent: ein Telefon dort zu listen hieße, eine
@@ -119,7 +126,8 @@ export default function App() {
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [favorites, setFavorites] = useState<number[]>(loadFavorites);
 
   const toggleFavorite = useCallback((id: number) => {
@@ -134,18 +142,48 @@ export default function App() {
     });
   }, []);
 
-  // ⌘K / Ctrl+K toggles the palette. Escape is handled inside the dialogs
-  // themselves (components/Modal.tsx), so it is not intercepted here.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setPaletteOpen((o) => !o);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+    setToastNavigator((path) => navigate(path));
+    return () => setToastNavigator(null);
+  }, [navigate]);
+
+  const goShortcuts = useMemo<GoShortcut[]>(
+    () => [
+      { key: 'o', path: PAGE_PATH.overview, label: 'Übersicht' },
+      { key: 'd', path: PAGE_PATH.devices, label: 'Geräte' },
+      { key: 'a', path: PAGE_PATH.alerts, label: 'Alarme' },
+      { key: 'p', path: PAGE_PATH.patches, label: 'Patches' },
+      { key: 's', path: PAGE_PATH.scripts, label: 'Skripte' },
+      { key: 'u', path: PAGE_PATH.automation, label: 'Automatisierung' },
+      { key: 'l', path: PAGE_PATH.audit, label: 'Audit-Log' },
+    ],
+    [],
+  );
+  const openPalette = useCallback(() => setPaletteOpen((o) => !o), []);
+  const openHelp = useCallback(() => setHelpOpen(true), []);
+  const goPath = useCallback((path: string) => navigate(path), [navigate]);
+  useShortcuts({ enabled: user !== null, go: goShortcuts, onNavigate: goPath, onPalette: openPalette, onHelp: openHelp });
+
+  // The tab title names the page (and the device on device pages).
+  const titleDeviceId = /^\/devices\/(\d+)/.exec(location.pathname)?.[1];
+  const titleDevice = titleDeviceId ? fleet.devices.find((d) => d.id === Number(titleDeviceId))?.hostname : undefined;
+  const pageTitle = titleDeviceId ? (titleDevice ?? 'Gerät') : PAGE_LABEL[pageForPath(location.pathname)];
+  useEffect(() => {
+    document.title = `${pageTitle} · Vulpexa`;
+  }, [pageTitle]);
+
+  // A new page moves focus to the content, so a screen reader starts reading
+  // there instead of at the top of the shell. Not on the very first render.
+  const mainRef = useRef<HTMLElement>(null);
+  const firstPath = useRef(true);
+  useEffect(() => {
+    if (firstPath.current) {
+      firstPath.current = false;
+      return;
+    }
+    mainRef.current?.focus({ preventScroll: true });
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   if (status === 'loading') return <div className="app-loading">Lade…</div>;
   if (status === 'anon' || !user) return <LoginPage onLogin={login} />;
@@ -158,7 +196,7 @@ export default function App() {
   // drawer hanging over the new page is the one thing they must never do.
   const closeOverlays = () => {
     setPaletteOpen(false);
-    setNavOpen(false);
+    setMoreOpen(false);
   };
   // `query` trägt Filter mit (z. B. die Übersicht, die auf die Geräteseite mit
   // genau einem Filter verweist) — der Pfad bleibt die Wahrheit über die Seite.
@@ -179,45 +217,40 @@ export default function App() {
   const detailIdRaw = detailMatch?.[1];
   const detailId = detailIdRaw ? Number(detailIdRaw) : null;
   const detailDevice = detailId !== null ? fleet.devices.find((d) => d.id === detailId) : undefined;
-  const crumbCur =
-    detailId !== null ? (detailDevice?.hostname ?? `Gerät ${detailId}`) : PAGE_LABEL[page];
-  const crumbPre = detailId !== null ? 'Vulpexa / Geräte / ' : 'Vulpexa / ';
+  const crumbs: Crumb[] =
+    detailId !== null
+      ? [
+          { label: PAGE_LABEL.devices, to: PAGE_PATH.devices },
+          { label: detailDevice?.hostname ?? `Gerät ${detailId}` },
+        ]
+      : [{ label: PAGE_LABEL[page] }];
 
   return (
-    <div className={navOpen ? 'app-shell nav-open' : 'app-shell'}>
-      {navOpen && (
-        <button
-          type="button"
-          className="nav-backdrop"
-          aria-label="Navigation schließen"
-          onClick={() => setNavOpen(false)}
-        />
-      )}
-      <Sidebar
-        page={page}
-        onNavigate={goPage}
+    <div className="shell">
+      <a className="skip-link" href="#main">
+        Zum Inhalt springen
+      </a>
+      <Rail
         user={user}
         devices={fleet.devices}
         favorites={favorites}
         openAlerts={openAlerts}
         openPatches={openPatches}
-        onOpenDevice={openDevice}
-        theme={theme}
-        onToggleTheme={toggleTheme}
+        theme={themePref}
+        onTheme={setTheme}
+        onShortcuts={openHelp}
         onLogout={() => void logout()}
       />
-      <div className="main">
-        <Header
-          crumbPre={crumbPre}
-          crumbCur={crumbCur}
-          openAlerts={openAlerts}
+      <div className="shell-main">
+        <Topbar
+          crumbs={crumbs}
+          alerts={fleet.alerts}
+          devices={fleet.devices}
           canEnroll={isOperator}
           onOpenPalette={() => setPaletteOpen(true)}
-          onOpenAlerts={() => goPage('alerts')}
           onOpenEnroll={() => setEnrollOpen(true)}
-          onToggleNav={() => setNavOpen((o) => !o)}
         />
-        <div className="content">
+        <main id="main" ref={mainRef} className="shell-content" tabIndex={-1}>
           <ConnectionBanner error={fleet.error} loadedAt={fleet.loadedAt} onRetry={fleet.refresh} />
           {/* Ein Skelett statt eines leeren Rahmens, solange ein Seitenbündel
               unterwegs ist — im LAN ist das ein Wimpernschlag, über eine
@@ -339,7 +372,8 @@ export default function App() {
             </Routes>
           </Suspense>
           </ErrorBoundary>
-        </div>
+        </main>
+        <BottomNav openAlerts={openAlerts} moreOpen={moreOpen} onMore={() => setMoreOpen((o) => !o)} />
       </div>
 
       {paletteOpen && (
@@ -357,6 +391,16 @@ export default function App() {
           onToggleTheme={toggleTheme}
         />
       )}
+      {moreOpen && (
+        <MoreSheet
+          user={user}
+          theme={themePref}
+          onTheme={setTheme}
+          onLogout={() => void logout()}
+          onClose={() => setMoreOpen(false)}
+        />
+      )}
+      {helpOpen && <ShortcutsDialog go={goShortcuts} onClose={() => setHelpOpen(false)} />}
       {enrollOpen && (
         <EnrollModal
           onClose={() => {
@@ -366,6 +410,20 @@ export default function App() {
           onDeviceCreated={() => fleet.refresh()}
         />
       )}
+      <Toaster
+        theme={theme}
+        position="bottom-right"
+        containerAriaLabel="Benachrichtigungen"
+        closeButton
+        visibleToasts={4}
+        mobileOffset={{ bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))', left: '12px', right: '12px' }}
+        icons={{
+          success: <IconStatusOk size={16} />,
+          error: <IconStatusDanger size={16} />,
+          warning: <IconStatusWarn size={16} />,
+          info: <IconInfo size={16} />,
+        }}
+      />
     </div>
   );
 }

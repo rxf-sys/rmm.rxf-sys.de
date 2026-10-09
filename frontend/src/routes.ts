@@ -1,4 +1,15 @@
-import type { PageId } from './components/Sidebar';
+/** Every top-level page of the dashboard. */
+export type PageId =
+  | 'overview'
+  | 'devices'
+  | 'persons'
+  | 'alerts'
+  | 'patches'
+  | 'scripts'
+  | 'automation'
+  | 'docs'
+  | 'audit'
+  | 'admin';
 
 /**
  * The URL is the source of truth for navigation.
@@ -27,7 +38,7 @@ export const PAGE_LABEL: Record<PageId, string> = {
   devices: 'Geräte',
   persons: 'Personen',
   alerts: 'Alarm-Center',
-  patches: 'Patch-Management',
+  patches: 'Patches',
   scripts: 'Skripte',
   automation: 'Automatisierung',
   docs: 'Dokumentation',

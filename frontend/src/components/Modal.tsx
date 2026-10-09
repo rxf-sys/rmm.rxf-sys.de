@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react';
+import { IconX } from '../icons';
 
 /** Elements that can hold focus, in DOM order. Used for the focus trap. */
 const FOCUSABLE =
@@ -49,8 +50,15 @@ export function Modal({
   // unmount. The ref is read in the cleanup, so it must be captured up front.
   useEffect(() => {
     restoreTo.current = document.activeElement as HTMLElement | null;
-    const first = panelRef.current?.querySelector<HTMLElement>(FOCUSABLE);
-    (first ?? panelRef.current)?.focus();
+    // An element marked data-autofocus wins (ConfirmDialog points it at
+    // "Abbrechen", so Enter never confirms a destructive action by accident);
+    // otherwise the first field or control.
+    const preferred = panelRef.current?.querySelector<HTMLElement>('[data-autofocus]');
+    const first =
+      panelRef.current?.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled]), select:not([disabled])') ??
+      panelRef.current?.querySelector<HTMLElement>(`.modal-body ${FOCUSABLE.split(', ').join(', .modal-body ')}`) ??
+      panelRef.current?.querySelector<HTMLElement>(FOCUSABLE);
+    (preferred ?? first ?? panelRef.current)?.focus();
     return () => restoreTo.current?.focus?.();
   }, []);
 
@@ -96,15 +104,18 @@ export function Modal({
         onKeyDown={onKeyDown}
       >
         {!hideTitle && (
-          <div className="row">
-            <span id={titleId} style={{ fontWeight: 800, fontSize: 16 }}>
+          <div className="modal-head">
+            <h2 id={titleId} className="modal-title">
               {title}
-            </span>
+            </h2>
             {headerExtra}
+            <button type="button" className="btn-icon ghost modal-close" aria-label="Schließen" onClick={onClose}>
+              <IconX size={16} />
+            </button>
           </div>
         )}
         {hideTitle ? headerExtra : null}
-        {children}
+        <div className="modal-body">{children}</div>
       </div>
     </div>
   );

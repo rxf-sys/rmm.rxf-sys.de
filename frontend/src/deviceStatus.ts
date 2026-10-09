@@ -4,7 +4,7 @@
  * component and non-component exports breaks React Fast Refresh, which is
  * what react-refresh/only-export-components warns about. */
 
-import type { Device } from './types';
+import type { Alert, Device } from './types';
 
 export type DeviceState = 'ok' | 'warn' | 'crit' | 'off';
 
@@ -87,4 +87,26 @@ const OS_SHORT: Record<string, string> = {
 };
 export function osShort(os: string): string {
   return OS_SHORT[os] ?? os.slice(0, 3).toUpperCase();
+}
+
+/** Status kind for StatusBadge: devices without an agent have no live state. */
+export function deviceStatusKind(d: Device): 'ok' | 'warn' | 'danger' | 'off' | 'noagent' {
+  if (d.device_class === 'mobile') return 'noagent';
+  const s = deviceState(d);
+  return s === 'off' ? 'off' : s === 'crit' ? 'danger' : s === 'warn' ? 'warn' : 'ok';
+}
+
+const STATUS_WORD = { ok: 'OK', warn: 'Warnung', danger: 'Kritisch', off: 'Offline', noagent: 'Ohne Agent' } as const;
+
+/** The word for a device's status, as shown next to its icon. */
+export function deviceStatusLabel(d: Device): string {
+  return STATUS_WORD[deviceStatusKind(d)];
+}
+
+/** Severity of an alert as the device's current state tells it: a disk
+ *  alert on a device that is critical right now is critical. */
+export function alertStatusKind(a: Alert, device: Device | undefined): 'off' | 'danger' | 'warn' {
+  if (a.rule === 'offline') return 'off';
+  if (a.rule === 'disk' && device && deviceStatusKind(device) === 'danger') return 'danger';
+  return 'warn';
 }

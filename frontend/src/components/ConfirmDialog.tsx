@@ -41,7 +41,7 @@ export function ConfirmDialog({
 
   return (
     <Modal title={title} onClose={onCancel}>
-      <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--tx2)' }}>{body}</div>
+      <div className="confirm-body">{body}</div>
       {requireText !== undefined && (
         <label className="field" htmlFor={inputId}>
           <span className="field-label">
@@ -57,16 +57,16 @@ export function ConfirmDialog({
           />
         </label>
       )}
-      <div className="row" style={{ gap: 8 }}>
+      <div className="modal-actions">
+        <button className="btn" onClick={onCancel} disabled={busy} data-autofocus={requireText === undefined ? '' : undefined}>
+          Abbrechen
+        </button>
         <button
-          className={danger ? 'btn btn-danger' : 'btn btn-primary'}
+          className={danger ? 'btn btn-danger-solid' : 'btn btn-primary'}
           onClick={onConfirm}
           disabled={busy || locked}
         >
-          {busy ? 'Läuft…' : confirmLabel}
-        </button>
-        <button className="btn" onClick={onCancel} disabled={busy}>
-          Abbrechen
+          {busy ? 'Läuft …' : confirmLabel}
         </button>
       </div>
     </Modal>

@@ -14,7 +14,7 @@
  *    right now; an empty list is a valid and good answer.
  */
 
-import type { PageId } from './components/Sidebar';
+import type { PageId } from './routes';
 import { hasProblem } from './deviceStatus';
 import type { Device, PatchSummary } from './types';
 

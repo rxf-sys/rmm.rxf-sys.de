@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Device } from '../types';
 import { IconSearch } from '../icons';
 import { deviceState, osShort, stateColor } from '../deviceStatus';
-import type { PageId } from './Sidebar';
+import type { PageId } from '../routes';
 import { Modal } from './Modal';
 
 interface Result {

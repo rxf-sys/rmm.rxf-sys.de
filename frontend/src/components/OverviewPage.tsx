@@ -9,7 +9,7 @@ import { niceCeiling, segmentsOf } from '../fleetChart';
 import { buildTasks, verdict, type OverviewTask, type TaskTarget } from '../overviewTasks';
 import type { Account, AuditEvent, FleetSample } from '../types';
 import { Skeleton } from '../ui';
-import type { PageId } from './Sidebar';
+import type { PageId } from '../routes';
 
 interface Props {
   fleet: Fleet;
