@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect } from 'react';
 import { api, apiErrorMessage, openFleetSocket } from '../api/client';
+import { qk } from '../api/queryClient';
 import type { Alert, Device, PatchSummary, Person } from '../types';
 
 export interface Fleet {
@@ -21,15 +23,15 @@ const REFRESH_MS = 30_000;
 // that stays down has every open tab knocking twelve times a minute, forever.
 const WS_RETRY_MIN_MS = 2_000;
 const WS_RETRY_MAX_MS = 60_000;
-// Floor between two fleet loads triggered by socket hints. An alert storm
-// (a site losing its uplink takes hundreds of devices offline at once) used
-// to turn every single `alert.fired` into a full refetch of the device list.
+// Floor between two refreshes triggered by socket hints. An alert storm (a
+// site losing its uplink takes hundreds of devices offline at once) used to
+// turn every single `alert.fired` into a full refetch of the device list.
 export const MIN_REFRESH_GAP_MS = 2_000;
 
 export interface RefreshScheduler {
   /** Ask for a load. Throttled to one start per `minGapMs`; `immediate`
-   *  skips the throttle (an explicit user or login refresh). A request while
-   *  a load is in flight queues exactly one follow-up load. */
+   *  skips the throttle. A request while a load is in flight queues exactly
+   *  one follow-up load. */
   request: (opts?: { immediate?: boolean }) => void;
   cancel: () => void;
 }
@@ -86,60 +88,20 @@ export function createRefreshScheduler(load: () => Promise<void>, minGapMs: numb
 }
 
 /**
- * Polls the fleet-wide snapshot (devices + alerts + patch summary) used by the
- * app shell (sidebar badges, command palette, favorites) and the overview /
- * patches pages. One shared poller keeps those in sync without each surface
- * fetching devices separately.
+ * The fleet socket carries no data, only `{"type":"refresh"}` hints. Each
+ * hint marks the fleet queries (and an open device page) stale; the throttle
+ * keeps a burst of hints to one refetch per gap.
  */
-export function useFleet(): Fleet {
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [patchSummary, setPatchSummary] = useState<PatchSummary>({});
-  const [persons, setPersons] = useState<Person[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [loadedAt, setLoadedAt] = useState<number | null>(null);
-
-  const load = useCallback((signal: AbortSignal): Promise<void> => {
-    return Promise.all([
-      api.devices(signal),
-      api.alerts(signal),
-      api.patchSummary(signal).catch(() => ({ summary: {} as PatchSummary })),
-      api.persons(signal).catch(() => ({ persons: [] as Person[] })),
-    ])
-      .then(([d, a, p, pe]) => {
-        setDevices(d.devices);
-        setAlerts(a.alerts);
-        setPatchSummary(p.summary);
-        setPersons(pe.persons);
-        setError(null);
-        setLoadedAt(Math.floor(Date.now() / 1000));
-        setLoading(false);
-      })
-      .catch((e) => {
-        if (!signal.aborted) {
-          setError(apiErrorMessage(e));
-          setLoading(false);
-        }
-      });
-  }, []);
-
-  // Live fleet events (device online/offline, alert, patches) trigger a
-  // throttled refetch; the interval is the fallback when the socket is down.
-  // Nothing polls while the tab is hidden — a phone in a pocket has no reader.
-  const schedulerRef = useRef<RefreshScheduler | null>(null);
+function useFleetSocket(enabled: boolean): void {
+  const qc = useQueryClient();
   useEffect(() => {
-    const ctrl = new AbortController();
-    const scheduler = createRefreshScheduler(() => load(ctrl.signal), MIN_REFRESH_GAP_MS);
-    schedulerRef.current = scheduler;
-    scheduler.request({ immediate: true });
-    const timer = setInterval(() => {
-      if (document.visibilityState !== 'hidden') scheduler.request();
-    }, REFRESH_MS);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') scheduler.request();
-    };
-    document.addEventListener('visibilitychange', onVisible);
+    if (!enabled) return;
+    const scheduler = createRefreshScheduler(async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: qk.fleet }),
+        qc.invalidateQueries({ queryKey: qk.deviceAll }),
+      ]);
+    }, MIN_REFRESH_GAP_MS);
 
     let closed = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -182,28 +144,76 @@ export function useFleet(): Fleet {
 
     return () => {
       closed = true;
-      schedulerRef.current = null;
       scheduler.cancel();
-      clearInterval(timer);
       clearTimeout(retry);
-      document.removeEventListener('visibilitychange', onVisible);
       ws?.close();
-      ctrl.abort();
     };
-  }, [load]);
+  }, [enabled, qc]);
+}
 
-  // Stable identity: App re-runs an effect whenever this changes, and a fresh
-  // closure per render turned that effect into an endless refetch loop.
-  const refresh = useCallback(() => schedulerRef.current?.request({ immediate: true }), []);
+const EMPTY_DEVICES: Device[] = [];
+const EMPTY_ALERTS: Alert[] = [];
+const EMPTY_SUMMARY: PatchSummary = {};
+const EMPTY_PERSONS: Person[] = [];
+
+/**
+ * The fleet-wide snapshot behind the shell (sidebar badges, command palette,
+ * favourites) and the overview, device and patch screens. Nothing is fetched
+ * before `enabled` (a session exists): requests made before login only
+ * collected 401s.
+ */
+export function useFleet(enabled: boolean): Fleet {
+  const qc = useQueryClient();
+  const common = { enabled, refetchInterval: REFRESH_MS } as const;
+
+  const devices = useQuery({
+    ...common,
+    queryKey: qk.devices,
+    queryFn: ({ signal }) => api.devices(signal).then((r) => r.devices),
+  });
+  const alerts = useQuery({
+    ...common,
+    queryKey: qk.alerts,
+    queryFn: ({ signal }) => api.alerts(signal).then((r) => r.alerts),
+  });
+  // Both are decoration on the fleet view: a failure leaves them empty
+  // rather than turning the whole dashboard into an error page.
+  const patchSummary = useQuery({
+    ...common,
+    queryKey: qk.patchSummary,
+    queryFn: ({ signal }) =>
+      api
+        .patchSummary(signal)
+        .then((r) => r.summary)
+        .catch(() => EMPTY_SUMMARY),
+  });
+  const persons = useQuery({
+    ...common,
+    queryKey: qk.persons,
+    queryFn: ({ signal }) =>
+      api
+        .persons(signal)
+        .then((r) => r.persons)
+        .catch(() => EMPTY_PERSONS),
+  });
+
+  useFleetSocket(enabled);
+
+  const refresh = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: qk.fleet });
+  }, [qc]);
+
+  const failed = devices.error ?? alerts.error;
+  const updated = Math.max(devices.dataUpdatedAt, alerts.dataUpdatedAt);
 
   return {
-    devices,
-    alerts,
-    patchSummary,
-    persons,
-    loading,
-    error,
-    loadedAt,
+    devices: devices.data ?? EMPTY_DEVICES,
+    alerts: alerts.data ?? EMPTY_ALERTS,
+    patchSummary: patchSummary.data ?? EMPTY_SUMMARY,
+    persons: persons.data ?? EMPTY_PERSONS,
+    loading: enabled && (devices.isPending || alerts.isPending),
+    error: failed ? apiErrorMessage(failed) : null,
+    loadedAt: updated > 0 ? Math.floor(updated / 1000) : null,
     refresh,
   };
 }

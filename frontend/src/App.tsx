@@ -5,6 +5,7 @@ import { CommandPalette } from './components/CommandPalette';
 import { ConnectionBanner } from './components/ConnectionBanner';
 import { DevicesPage } from './components/DevicesPage';
 import { EnrollModal } from './components/EnrollModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Header } from './components/Header';
 import { LoginPage } from './components/LoginPage';
 import { OverviewPage } from './components/OverviewPage';
@@ -108,7 +109,7 @@ function DeviceRoute({
 export default function App() {
   const { user, status, login, logout } = useAuth();
   const { resolved: theme, toggle: toggleTheme } = useTheme();
-  const fleet = useFleet();
+  const fleet = useFleet(user !== null);
   // Seiten, die von Agent-Telemetrie leben (Updates, Skripte, Alarmregeln),
   // bekommen nur die Geräte mit Agent: ein Telefon dort zu listen hieße, eine
   // Zeile anzubieten, auf der nichts passieren kann.
@@ -132,14 +133,6 @@ export default function App() {
       return next;
     });
   }, []);
-
-  // The fleet poller mounts before login, so its first fetch 401s and the
-  // next tick is 30 s out. Refetch immediately once a session exists.
-  const userId = user?.id ?? null;
-  const refresh = fleet.refresh;
-  useEffect(() => {
-    if (userId !== null) refresh();
-  }, [userId, refresh]);
 
   // ⌘K / Ctrl+K toggles the palette. Escape is handled inside the dialogs
   // themselves (components/Modal.tsx), so it is not intercepted here.
@@ -229,6 +222,7 @@ export default function App() {
           {/* Ein Skelett statt eines leeren Rahmens, solange ein Seitenbündel
               unterwegs ist — im LAN ist das ein Wimpernschlag, über eine
               schlechte Leitung nicht. */}
+          <ErrorBoundary key={location.pathname} variant="page">
           <Suspense fallback={<div className="screen"><Skeleton h={160} /></div>}>
             <Routes>
             <Route
@@ -344,6 +338,7 @@ export default function App() {
             <Route path="*" element={<Navigate to={PAGE_PATH.overview} replace />} />
             </Routes>
           </Suspense>
+          </ErrorBoundary>
         </div>
       </div>
 

@@ -26,6 +26,13 @@ import type {
   SessionInfo,
   Shell,
 } from '../types';
+import {
+  AlertsResponse,
+  DeviceDetailResponse,
+  DevicesResponse,
+  PatchSummaryResponse,
+  check,
+} from './schemas';
 
 /** Filters accepted by GET /api/audit. Everything is optional; an empty
  *  object is "the most recent 100 events". */
@@ -41,7 +48,7 @@ export interface AuditQuery {
   q?: string;
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public status: number,
     public body: string,
@@ -71,6 +78,15 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+/** GET with the response checked against a schema (see schemas.ts). */
+async function getChecked<T>(
+  schema: Parameters<typeof check<T>>[0],
+  path: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  return check(schema, path, await get<unknown>(path, signal));
+}
+
 async function send<T>(
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
@@ -92,6 +108,8 @@ const del = <T>(path: string) => send<T>('DELETE', path);
 
 /** Pull a human-readable message out of an ApiError's JSON body. */
 export function apiErrorMessage(e: unknown): string {
+  // fetch() rejects with a TypeError when the network or the server is gone.
+  if (e instanceof TypeError) return 'Server nicht erreichbar';
   if (e instanceof ApiError) {
     try {
       const parsed = JSON.parse(e.body) as { detail?: string };
@@ -126,12 +144,14 @@ export const api = {
   revokeSession: (prefix: string) => del<{ ok: boolean }>(`/api/auth/sessions/${prefix}`),
   revokeOtherSessions: () => post<{ ok: boolean; revoked: number }>('/api/auth/sessions/revoke-others'),
 
-  devices: (signal?: AbortSignal) => get<{ devices: Device[] }>('/api/devices', signal),
-  device: (id: number, signal?: AbortSignal) =>
-    get<DeviceDetail>(`/api/devices/${id}`, signal),
+  devices: (signal?: AbortSignal): Promise<{ devices: Device[] }> =>
+    getChecked(DevicesResponse, '/api/devices', signal),
+  device: (id: number, signal?: AbortSignal): Promise<DeviceDetail> =>
+    getChecked(DeviceDetailResponse, `/api/devices/${id}`, signal),
   deviceHistory: (id: number, hours: number, signal?: AbortSignal) =>
     get<{ samples: MetricSample[] }>(`/api/devices/${id}/history?hours=${hours}`, signal),
-  alerts: (signal?: AbortSignal) => get<{ alerts: Alert[] }>('/api/alerts', signal),
+  alerts: (signal?: AbortSignal): Promise<{ alerts: Alert[] }> =>
+    getChecked(AlertsResponse, '/api/alerts', signal),
   ackAlert: (id: number) => post<{ alert: Alert }>(`/api/alerts/${id}/ack`),
   createDevice: (body: NewDevice) => post<{ device: Device }>('/api/devices', body),
   updateDevice: (
@@ -268,8 +288,8 @@ export const api = {
     get<{ hours: number; samples: FleetSample[] }>(`/api/fleet/metrics?hours=${hours}`, signal),
 
   // Patches
-  patchSummary: (signal?: AbortSignal) =>
-    get<{ summary: PatchSummary }>('/api/patches/summary', signal),
+  patchSummary: (signal?: AbortSignal): Promise<{ summary: PatchSummary }> =>
+    getChecked(PatchSummaryResponse, '/api/patches/summary', signal),
   devicePatches: (deviceId: number, signal?: AbortSignal) =>
     get<{ patches: Patch[]; installing_job: number | null; last_scan_at: number }>(
       `/api/devices/${deviceId}/patches`,

@@ -1075,3 +1075,39 @@ kbd,
 .switch:disabled {
   opacity: 0.5;
 }
+
+/* ---------- Crash screen (ErrorBoundary) ---------- */
+
+.crash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  min-height: 100vh;
+  padding: var(--sp-6);
+  text-align: center;
+}
+.crash-page {
+  min-height: 0;
+  margin: var(--sp-6);
+  padding: var(--sp-10) var(--sp-6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.crash p {
+  max-width: 56ch;
+  color: var(--tx-2);
+}
+.crash pre {
+  max-width: 64ch;
+  margin: 0;
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+}
+.crash-actions {
+  display: flex;
+  gap: var(--sp-2);
+}

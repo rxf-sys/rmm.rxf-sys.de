@@ -1,6 +1,9 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../api/client';
+import { createQueryClient } from '../../api/queryClient';
 import { createRefreshScheduler, useFleet } from '../useFleet';
 
 vi.mock('../../api/client', async () => {
@@ -72,13 +75,21 @@ describe('createRefreshScheduler', () => {
   });
 });
 
+/** One client per test; a client per render would itself change identities. */
+function makeWrapper() {
+  const client = createQueryClient();
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client }, children);
+  };
+}
+
 describe('useFleet', () => {
   afterEach(() => vi.clearAllMocks());
 
   it('keeps refresh stable across renders', async () => {
     // A new refresh closure per render made App's login effect re-run on
     // every render — 569 requests per endpoint in ten idle seconds.
-    const { result, rerender } = renderHook(() => useFleet());
+    const { result, rerender } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     const first = result.current.refresh;
     rerender();
@@ -86,15 +97,22 @@ describe('useFleet', () => {
     expect(result.current.refresh).toBe(first);
   });
 
+  it('fetches nothing before there is a session', async () => {
+    const { result } = renderHook(() => useFleet(false), { wrapper: makeWrapper() });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(result.current.loading).toBe(false);
+    expect(vi.mocked(api.devices)).not.toHaveBeenCalled();
+  });
+
   it('does not refetch on its own after the first load', async () => {
-    const { result } = renderHook(() => useFleet());
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     await new Promise((r) => setTimeout(r, 50));
     expect(vi.mocked(api.devices)).toHaveBeenCalledTimes(1);
   });
 
-  it('runs an explicit refresh right away', async () => {
-    const { result } = renderHook(() => useFleet());
+  it('refetches on an explicit refresh', async () => {
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     act(() => result.current.refresh());
     await waitFor(() => expect(vi.mocked(api.devices)).toHaveBeenCalledTimes(2));
