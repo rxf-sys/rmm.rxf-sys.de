@@ -2,6 +2,7 @@ export { Dot } from './legacy';
 export { EmptyState } from './EmptyState';
 export { ErrorNote } from './ErrorNote';
 export { KeyValue } from './KeyValue';
+export { LineChart, type ChartSeries } from './LineChart';
 export { Menu, type MenuEntry } from './Menu';
 export { Meter, type MeterLevel } from './Meter';
 export { PageHeader } from './PageHeader';

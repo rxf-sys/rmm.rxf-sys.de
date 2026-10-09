@@ -1111,3 +1111,142 @@ kbd,
   display: flex;
   gap: var(--sp-2);
 }
+
+/* ---------- Line chart (ui/LineChart.tsx) ---------- */
+
+.lc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.lc-frame {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+}
+.lc-y {
+  position: relative;
+}
+.lc-y span {
+  position: absolute;
+  right: var(--sp-2);
+  color: var(--tx-3);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+.lc-plot {
+  position: relative;
+  min-width: 0;
+  border-radius: var(--r-xs);
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+.lc-plot:focus-visible {
+  outline-offset: 4px;
+}
+.lc-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.lc-grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+.lc-cross {
+  stroke: var(--tx-3);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.lc-dot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.lc-tip {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 132px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  font-size: var(--fs-sm);
+  transform: translate(-50%, calc(-100% - 8px));
+  pointer-events: none;
+  white-space: nowrap;
+}
+.lc-tip-when {
+  color: var(--tx-3);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.lc-tip-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--tx-2);
+}
+.lc-tip-row b {
+  margin-left: auto;
+  color: var(--tx);
+  font-variant-numeric: tabular-nums;
+}
+.lc-x {
+  position: relative;
+  height: 16px;
+  margin-left: 40px;
+}
+.lc-x span {
+  position: absolute;
+  color: var(--tx-3);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.lc-x span:first-child {
+  transform: none;
+}
+.lc-x span:last-child {
+  transform: translateX(-100%);
+}
+.lc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+}
+.lc-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.lc-legend b {
+  color: var(--tx);
+  font-variant-numeric: tabular-nums;
+}
+.lc-swatch {
+  display: inline-block;
+  width: 16px;
+  border-top: 2px solid;
+}
+.lc-swatch.dashed {
+  border-top-style: dashed;
+}

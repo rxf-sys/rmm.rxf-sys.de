@@ -53,6 +53,22 @@ function names(devices: Device[], limit = 3): string {
   return rest > 0 ? `${shown.join(', ')} und ${rest} weitere` : shown.join(', ');
 }
 
+const bytes = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
+
+/** "Noch 61 GB frei auf /" for the fullest disk, or a generic hint when the
+ *  agent does not report absolute sizes. */
+function freeSpaceNote(d: Device): string {
+  const disk = (d.heartbeat.disks ?? []).reduce<NonNullable<Device['heartbeat']['disks']>[number] | null>(
+    (a, x) => (!a || x.used_pct > a.used_pct ? x : a),
+    null,
+  );
+  if (!disk || !disk.total_b) return 'Ab 90 % wird es kritisch — aufräumen, bevor Updates scheitern.';
+  const free = Math.max(0, disk.total_b - (disk.used_b ?? (disk.used_pct / 100) * disk.total_b));
+  const gb = free / 1024 ** 3;
+  const amount = gb >= 1024 ? `${bytes.format(gb / 1024)} TB` : `${bytes.format(gb)} GB`;
+  return `Noch ${amount} frei auf ${disk.mount}. Ab 90 % wird es kritisch.`;
+}
+
 function relativeDays(ts: number, now: number): number {
   return Math.floor((now - ts) / DAY);
 }
@@ -144,7 +160,9 @@ export function buildTasks({ devices, patchSummary, now }: TaskInput): OverviewT
         oneDisk
           ? `${oneDisk.hostname}: Platte zu ${Math.round(maxDisk(oneDisk))} % voll`
           : `${diskWarn.length} Geräte über 80 % Plattenbelegung`,
-      why: names(diskWarn),
+      // One device: its name is already in the title — say how much room is
+      // left instead. Several: name them.
+      why: oneDisk ? freeSpaceNote(oneDisk) : names(diskWarn),
       target: oneDisk
         ? { kind: 'device', id: oneDisk.id }
         : { kind: 'page', page: 'devices', query: 'filter=probleme' },

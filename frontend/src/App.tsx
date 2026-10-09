@@ -9,7 +9,7 @@ import { BootSequence, type BootSummary } from './boot/BootSequence';
 import { EnrollModal } from './components/EnrollModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LoginPage } from './components/LoginPage';
-import { OverviewPage } from './components/OverviewPage';
+import { OverviewPage } from './pages/overview/OverviewPage';
 import { isAgent } from './deviceClass';
 import { deviceStatusKind } from './deviceStatus';
 import type { Device } from './types';

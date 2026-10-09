@@ -1,10 +1,13 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../../../api/client';
 import { OverviewPage } from '../OverviewPage';
-import type { Account, Device } from '../../types';
-import type { Fleet } from '../../hooks/useFleet';
-import type { PageId } from '../../routes';
+import type { Account, Device } from '../../../types';
+import type { Fleet } from '../../../hooks/useFleet';
+import type { PageId } from '../../../routes';
 
 // Die Seite lädt Audit-Einträge und die Flottenlast selbst nach; beides ist
 // hier nicht der Prüfgegenstand — außer dort, wo der Audit-Abruf scheitert.
@@ -12,13 +15,16 @@ const { auditMock } = vi.hoisted(() => ({
   auditMock: vi.fn<() => Promise<{ events: unknown[]; total: number }>>(),
 }));
 
-vi.mock('../../api/client', () => ({
-  api: {
-    audit: () => auditMock(),
-    fleetMetrics: () => Promise.resolve({ hours: 24, samples: [] }),
-  },
-  apiErrorMessage: (e: unknown) => String(e),
-}));
+vi.mock('../../../api/client', async () => {
+  const actual = await vi.importActual<typeof import('../../../api/client')>('../../../api/client');
+  return {
+    ...actual,
+    api: {
+      audit: () => auditMock(),
+      fleetMetrics: () => Promise.resolve({ hours: 24, samples: [] }),
+    },
+  };
+});
 
 const user: Account = {
   id: 1,
@@ -78,15 +84,20 @@ function fleet(over: Partial<Fleet> = {}): Fleet {
 function renderPage(over: Partial<Fleet> = {}) {
   const onOpenDevice = vi.fn<(id: number) => void>();
   const onNavigate = vi.fn<(p: PageId, query?: string) => void>();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <OverviewPage
-      fleet={fleet(over)}
-      user={user}
-      onOpenDevice={onOpenDevice}
-      onNavigate={onNavigate}
-      onOpenEnroll={() => {}}
-      canEnroll
-    />,
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <OverviewPage
+          fleet={fleet(over)}
+          user={user}
+          onOpenDevice={onOpenDevice}
+          onNavigate={onNavigate}
+          onOpenEnroll={() => {}}
+          canEnroll
+        />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
   return { onOpenDevice, onNavigate };
 }
@@ -108,27 +119,29 @@ describe('OverviewPage', () => {
     expect(screen.getByText('1 Punkt braucht heute Aufmerksamkeit.')).toBeInTheDocument();
   });
 
-  it('opens the device a task points at', async () => {
-    const { onOpenDevice } = renderPage({
+  it('links each task to the device it points at', () => {
+    renderPage({
       devices: [
         device({ id: 7, hostname: 'nas-fritz', heartbeat: { disks: [{ mount: '/', used_pct: 93, total_b: 1 }] } }),
       ],
     });
-    await userEvent.click(screen.getByText('nas-fritz: Platte zu 93 % voll'));
-    expect(onOpenDevice).toHaveBeenCalledWith(7);
+    const task = screen.getByText('nas-fritz: Platte zu 93 % voll').closest('li')!;
+    expect(within(task).getByRole('link', { name: /Gerät öffnen/ })).toHaveAttribute('href', '/devices/7');
   });
 
-  it('sends the state legend to the devices page with that filter', async () => {
-    const { onNavigate } = renderPage({
-      devices: [device({ online: false, last_seen_at: 1 })],
-    });
-    await userEvent.click(screen.getByRole('button', { name: /Offline/ }));
-    expect(onNavigate).toHaveBeenCalledWith('devices', 'filter=offline');
+  it('links each Lagebild group to the device list with that filter', () => {
+    renderPage({ devices: [device({ online: false, last_seen_at: 1 })] });
+    expect(screen.getByRole('link', { name: /Offline: 1 Geräte/ })).toHaveAttribute('href', '/devices?filter=offline');
+  });
+
+  it('draws every device as a cell that opens it', () => {
+    renderPage({ devices: [device({ id: 3, hostname: 'küchen-tablet-ü' })] });
+    expect(screen.getByRole('link', { name: 'küchen-tablet-ü, OK' })).toHaveAttribute('href', '/devices/3');
   });
 
   it('says plainly when there is nothing open', () => {
     renderPage();
-    expect(screen.getByText(/Keine offenen Befunde/)).toBeInTheDocument();
+    expect(screen.getByText(/Platten unter 80 %/)).toBeInTheDocument();
     expect(screen.getByText('Nichts Dringendes — die Flotte läuft.')).toBeInTheDocument();
   });
 
@@ -153,7 +166,7 @@ describe('OverviewPage', () => {
   it('drops the activity card when the audit log is out of reach', async () => {
     // Techniker und Betrachter bekommen dort 403 — eine Karte, die dauerhaft
     // „Keine Ereignisse" sagt, ist schlechter als keine Karte.
-    auditMock.mockRejectedValue(new Error('403'));
+    auditMock.mockRejectedValue(new ApiError(403, '{"detail":"forbidden"}'));
     renderPage();
     await waitFor(() =>
       expect(screen.queryByRole('heading', { name: 'Letzte Aktivität' })).not.toBeInTheDocument(),
