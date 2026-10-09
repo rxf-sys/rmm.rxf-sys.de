@@ -4,7 +4,7 @@ import { Toaster } from 'sonner';
 import { AlertsPage } from './components/AlertsPage';
 import { CommandPalette } from './components/CommandPalette';
 import { ConnectionBanner } from './components/ConnectionBanner';
-import { DevicesPage } from './components/DevicesPage';
+import { DevicesPage } from './pages/devices/DevicesPage';
 import { BootSequence, type BootSummary } from './boot/BootSequence';
 import { EnrollModal } from './components/EnrollModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -318,7 +318,8 @@ export default function App() {
                   patchSummary={fleet.patchSummary}
                   persons={fleet.persons}
                   loading={fleet.loading}
-                  onOpenDevice={openDevice}
+                  canOperate={isOperator}
+                  onOpenEnroll={isOperator ? () => setEnrollOpen(true) : undefined}
                 />
               }
             />

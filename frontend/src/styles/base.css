@@ -21,6 +21,11 @@ html {
   box-sizing: border-box;
 }
 
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
+}
+
 body {
   margin: 0;
   min-height: 100vh;

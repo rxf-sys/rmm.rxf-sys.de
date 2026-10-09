@@ -22,6 +22,24 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Server die Hinweise jetzt in ein Fenster von 0,5 s.
 
 ### Hinzugefügt
+- **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist
+  eine echte Tabelle mit sortierbaren Spalten (Status, Auslastung, Updates,
+  Agent-Version, zuletzt gesehen; Geräte mit Befund stehen standardmäßig
+  oben) und mitlaufendem Kopf. Admins und Techniker wählen Geräte per
+  Kästchen aus — mit Umschalt auch einen Bereich, über den Kopf eine ganze
+  Seite oder alle Treffer — und starten für die Auswahl ein Skript aus der
+  Bibliothek, einen Neustart mit einer Minute Vorwarnung für angemeldete
+  Benutzer, ein Wartungsfenster, ein Agent-Update oder ändern einen Tag.
+  Jede Aktion läuft über den Endpunkt des einzelnen Geräts und landet damit
+  pro Gerät im Audit-Log; der Dialog nennt vorab, welche Geräte übersprungen
+  werden (ohne Agent, ohne Verbindung, anderes Betriebssystem). Gestarteten
+  Aufträgen folgt ein einziger Toast mit Fortschritt statt einer Meldung je
+  Gerät. Filter, Person, Suche und Sortierung stehen in der Adresse und
+  lassen sich als benannte Ansicht im Browser speichern. „CSV exportieren"
+  liefert die gefilterte Liste oder die Auswahl als Semikolon-CSV für eine
+  deutsche Tabellenkalkulation; Zellen, die eine Tabellenkalkulation als
+  Formel ausführen würde, werden entschärft. Unter 1000 px Breite wird die
+  Tabelle zu Karten.
 - **Vorbereitung für MDM (iOS/iPadOS).** `infrastructure/docker-compose.yml`
   kennt jetzt einen NanoMDM-Container, der am Compose-Profil `mdm` hängt und
   im Normalbetrieb nicht startet — ohne APNs-Push-Zertifikat gäbe es nichts

@@ -33,4 +33,5 @@ export const qk = {
   persons: ['fleet', 'persons'] as const,
   device: (id: number) => ['device', id] as const,
   deviceAll: ['device'] as const,
+  scripts: ['scripts'] as const,
 };

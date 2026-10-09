@@ -109,3 +109,84 @@ export function trackJob(job: Job, opts: { deviceName: string; label: string }):
   };
   setTimeout(poll, POLL_MS);
 }
+
+const BULK_POLL_MS = 3_000;
+/** Jobs checked per round. A hundred restarts must not turn into fifty
+ *  requests a second; each job is looked at every few rounds instead. */
+const BULK_POLL_BATCH = 6;
+
+/**
+ * Follow many jobs with a single toast: "Neustart läuft auf 12 Geräten —
+ * 7 von 12 fertig · 1 fehlgeschlagen", then one verdict. Each finished job
+ * still lands in the notification centre on its own, with its device. One
+ * job is just `trackJob`.
+ */
+export function trackJobs(entries: { job: Job; deviceName: string }[], label: string): void {
+  if (entries.length === 0) return;
+  if (entries.length === 1) {
+    trackJob(entries[0]!.job, { deviceName: entries[0]!.deviceName, label });
+    return;
+  }
+  const total = entries.length;
+  const id = `jobs-${entries[0]!.job.id}`;
+  const queue = [...entries];
+  const failed: { job: Job; deviceName: string }[] = [];
+  let finished = 0;
+  const started = Date.now();
+  const progress = () =>
+    `${finished} von ${total} fertig${failed.length ? ` · ${failed.length} fehlgeschlagen` : ''}`;
+  toast.loading(`${label} läuft auf ${total} Geräten`, { id, description: progress(), duration: Infinity });
+
+  const conclude = () => {
+    if (failed.length === 0) {
+      toast.success(`${label} abgeschlossen`, { id, description: `${total} Geräte`, duration: 6000 });
+      return;
+    }
+    const first = failed[0]!;
+    toast.error(`${label}: ${failed.length} von ${total} fehlgeschlagen`, {
+      id,
+      description: failed.map((f) => f.deviceName).slice(0, 3).join(', ') + (failed.length > 3 ? ' …' : ''),
+      duration: 12000,
+      action: { label: 'Ausgabe', onClick: () => navigate?.(jobPath(first.job.device_id, first.job.id)) },
+    });
+  };
+
+  const round = () => {
+    const batch = queue.splice(0, BULK_POLL_BATCH);
+    void Promise.all(
+      batch.map((e) =>
+        api.job(e.job.id).then(
+          ({ job: j }) => {
+            if (!TERMINAL.has(j.status)) return queue.push(e);
+            finished += 1;
+            if (j.status !== 'done') failed.push({ job: j, deviceName: e.deviceName });
+            pushResult({
+              jobId: j.id,
+              deviceId: j.device_id,
+              deviceName: e.deviceName,
+              label,
+              status: j.status,
+              exitCode: j.exit_code,
+              finishedAt: Math.floor(Date.now() / 1000),
+            });
+          },
+          // A failed poll is not a failed job; it goes back in line.
+          () => queue.push(e),
+        ),
+      ),
+    ).then(() => {
+      if (queue.length === 0) return conclude();
+      if (Date.now() - started >= MAX_WAIT_MS) {
+        toast.warning(`${label}: ${queue.length} Geräte noch ohne Ergebnis`, {
+          id,
+          description: 'Das Ergebnis steht im Auftragsverlauf der Geräte.',
+          duration: 10000,
+        });
+        return;
+      }
+      toast.loading(`${label} läuft auf ${total} Geräten`, { id, description: progress(), duration: Infinity });
+      setTimeout(round, BULK_POLL_MS);
+    });
+  };
+  setTimeout(round, BULK_POLL_MS);
+}

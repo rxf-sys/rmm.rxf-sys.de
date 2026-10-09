@@ -785,7 +785,14 @@ select.input optgroup {
   box-shadow: var(--shadow-lg);
   animation: v-pop var(--dur-2) var(--ease-out);
 }
+.modal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: calc(-1 * var(--sp-1)) calc(-1 * var(--sp-2)) 0 0;
+}
 .modal-title {
+  margin: 0;
   font-size: var(--fs-xl);
   font-weight: 800;
   letter-spacing: -0.01em;
@@ -798,7 +805,21 @@ select.input optgroup {
   margin-top: var(--sp-2);
 }
 .modal-close {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--hit);
+  height: var(--hit);
   margin-left: auto;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--tx-3);
+  cursor: pointer;
+}
+.modal-close:hover {
+  background: var(--hover);
+  color: var(--tx);
 }
 /* On phones a dialog is a sheet from the bottom edge, in thumb reach. */
 @media (max-width: 720px) {

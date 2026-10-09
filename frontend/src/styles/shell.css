@@ -298,8 +298,16 @@
     color: var(--tx-2);
   }
 }
+.search-trigger-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .search-trigger kbd {
+  flex: none;
   margin-left: auto;
+  white-space: nowrap;
 }
 
 .shell-content {

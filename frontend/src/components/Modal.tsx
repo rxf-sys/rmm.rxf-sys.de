@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { IconX } from '../icons';
 
 /** Elements that can hold focus, in DOM order. Used for the focus trap. */
@@ -86,7 +87,10 @@ export function Modal({
     [onClose],
   );
 
-  return (
+  // Rendered into <body>: a dialog opened from inside a fixed or transformed
+  // element (the bulk bar, a popover) would otherwise be positioned and
+  // stacked relative to that element instead of the viewport.
+  return createPortal(
     <div className={`overlay ${wrapClassName}`}>
       {/* A real button, so "click the backdrop to close" is also reachable by
           keyboard and announced. It sits behind the panel via CSS. */}
@@ -117,6 +121,7 @@ export function Modal({
         {hideTitle ? headerExtra : null}
         <div className="modal-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
