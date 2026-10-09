@@ -107,7 +107,7 @@ function DeviceRoute({
 
 export default function App() {
   const { user, status, login, logout } = useAuth();
-  const { theme, toggle: toggleTheme } = useTheme();
+  const { resolved: theme, toggle: toggleTheme } = useTheme();
   const fleet = useFleet();
   // Seiten, die von Agent-Telemetrie leben (Updates, Skripte, Alarmregeln),
   // bekommen nur die Geräte mit Agent: ein Telefon dort zu listen hieße, eine
