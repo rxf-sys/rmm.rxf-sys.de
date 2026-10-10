@@ -196,13 +196,15 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
         if rule is not None and rule["enabled"]:
             after_s = rule["threshold"] or settings.offline_alert_after_s
             last_seen = d.get("last_seen_at")
-            # Never-seen devices (enrolled, agent not started yet) don't page.
-            is_offline = last_seen is not None and (now - last_seen) > after_s
             key = (d["id"], "offline")
-            if is_offline and key not in open_alerts:
-                minutes = int((now - last_seen) / 60)
-                await _fire(d["id"], "offline", f"{name} ist offline (seit ~{minutes} min)")
-            elif not is_offline and d["online"] and key in open_alerts:
+            # Never-seen devices (enrolled, agent not started yet) don't page.
+            # The None check sits in the condition itself rather than in a
+            # flag, so the type checker sees last_seen is set in this branch.
+            if last_seen is not None and (now - last_seen) > after_s:
+                if key not in open_alerts:
+                    minutes = int((now - last_seen) / 60)
+                    await _fire(d["id"], "offline", f"{name} ist offline (seit ~{minutes} min)")
+            elif d["online"] and key in open_alerts:
                 await _resolve(open_alerts[key]["id"])
                 await notify(
                     "RMM: wieder online", f"{name} ist wieder erreichbar", "white_check_mark", ""
@@ -235,13 +237,15 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
             age_days = rule["threshold"] or settings.patch_alert_age_days
             oldest = await patches.oldest_pending_security(d["id"])
             key = (d["id"], "patch_age")
-            overdue = oldest is not None and (now - oldest) > age_days * 86400
-            if overdue and key not in open_alerts:
-                days = int((now - oldest) / 86400)
-                await _fire(
-                    d["id"], "patch_age", f"{name}: Sicherheitsupdates seit {days} Tagen offen"
-                )
-            elif not overdue and key in open_alerts:
+            # Same shape as the offline rule: the None check in the condition
+            # narrows `oldest` for the message below.
+            if oldest is not None and (now - oldest) > age_days * 86400:
+                if key not in open_alerts:
+                    days = int((now - oldest) / 86400)
+                    await _fire(
+                        d["id"], "patch_age", f"{name}: Sicherheitsupdates seit {days} Tagen offen"
+                    )
+            elif key in open_alerts:
                 await _resolve(open_alerts[key]["id"])
                 await notify(
                     "RMM: Updates installiert",
@@ -258,10 +262,11 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
         ) as cur:
             unsent = await cur.fetchall()
     tag_by_rule = {"offline": "red_circle", "disk": "floppy_disk", "patch_age": "package"}
-    for row in unsent:
-        tags = tag_by_rule.get(row["rule"], "warning")
-        if await notify("RMM: Alarm", str(row["message"]), tags, "high"):
-            await _mark_notified(int(row["id"]))
+    # Not `row`: that name already holds the _open_alerts() dicts above.
+    for pending in unsent:
+        tags = tag_by_rule.get(pending["rule"], "warning")
+        if await notify("RMM: Alarm", str(pending["message"]), tags, "high"):
+            await _mark_notified(int(pending["id"]))
 
 
 def _row_to_dict(r: aiosqlite.Row) -> dict[str, Any]:

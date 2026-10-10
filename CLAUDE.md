@@ -38,7 +38,7 @@ ursprüngliche Phasenplan liegt archiviert unter `docs/_archiv/RMM-PLAN.md`.
 
 ```bash
 # Backend
-cd backend && ruff check . && pytest -v --cov=app --cov-fail-under=70
+cd backend && ruff check . && mypy app && pytest -v --cov=app --cov-fail-under=70
 
 # Frontend (tsc -b strict + vite build ist das CI-Gate)
 cd frontend && npm run build
