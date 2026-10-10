@@ -56,6 +56,9 @@ select = [
     "ASYNC",  # async pitfalls (blocking calls in coroutines)
     "BLE",    # blind except
     "RUF",    # ruff-specific
+    # Naive datetimes compare wall-clock readings, not instants; that is how
+    # the update-scan slot ended up in the future on the spring DST switch.
+    "DTZ",
 ]
 # German prose uses typographic characters that ruff flags as confusable with
 # their ASCII lookalikes; they are intentional here.
