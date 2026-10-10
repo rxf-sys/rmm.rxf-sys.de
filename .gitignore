@@ -25,6 +25,11 @@ htmlcov/
 # Node
 node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+
+# Datenbank der End-to-End-Tests (aus tests/fixtures/seed_demo.py)
+backend/e2e.db*
 
 # Go
 agent/rmm-agent
