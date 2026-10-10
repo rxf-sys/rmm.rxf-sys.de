@@ -498,7 +498,9 @@ async def run_script_schedules(settings: Settings, now: float | None = None) -> 
             await audit_record(
                 "script.scheduled_run",
                 device_id=d["id"],
+                script_id=script["id"],
                 script=script["name"],
+                content_sha256=scripts.content_sha256(script["content"]),
                 actor="automation",
             )
             created.append(job["id"])

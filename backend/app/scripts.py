@@ -8,6 +8,7 @@ history of jobs that already ran the old version.
 
 from __future__ import annotations
 
+import hashlib
 import time
 from contextlib import AbstractAsyncContextManager
 from pathlib import Path
@@ -82,6 +83,16 @@ async def ensure_schema(settings: Settings) -> None:
 def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
     """Shared connection helper — see app/db.py."""
     return db_connect(_db_path)
+
+
+def content_sha256(content: str) -> str:
+    """Fingerprint of a script body for the audit log.
+
+    The library is editable, so "script X ran" alone does not say which
+    version ran. The same hash on job.created and on the script.created or
+    script.updated row that produced the body ties the two together, without
+    copying a body that may hold credentials into the log."""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 def _validate(name: str, shell: str, os: str, content: str, category: str) -> None:

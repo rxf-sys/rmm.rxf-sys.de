@@ -44,7 +44,12 @@ async def create_script(body: ScriptBody, user: dict = Depends(require_operator)
     except scripts.ScriptError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     await audit_record(
-        "script.created", user=user["username"], name=body.name, danger=body.danger
+        "script.created",
+        user=user["username"],
+        script_id=script["id"],
+        script=script["name"],
+        danger=script["danger"],
+        content_sha256=scripts.content_sha256(script["content"]),
     )
     return {"script": script}
 
@@ -53,6 +58,12 @@ async def create_script(body: ScriptBody, user: dict = Depends(require_operator)
 async def update_script(
     script_id: int, body: ScriptBody, user: dict = Depends(require_operator)
 ) -> dict:
+    # Read before writing: the audit row says what the script was, and a
+    # script that turns harmless (danger true → false) is exactly the edit
+    # someone will want to find later.
+    previous = await scripts.get(script_id)
+    if previous is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skript nicht gefunden")
     try:
         script = await scripts.update(
             script_id,
@@ -68,7 +79,15 @@ async def update_script(
         raise HTTPException(status_code=422, detail=str(e)) from e
     if script is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skript nicht gefunden")
-    await audit_record("script.updated", user=user["username"], script_id=script_id)
+    await audit_record(
+        "script.updated",
+        user=user["username"],
+        script_id=script_id,
+        content_sha256=scripts.content_sha256(script["content"]),
+        content_sha256_from=scripts.content_sha256(previous["content"]),
+        danger_from=previous["danger"],
+        danger_to=script["danger"],
+    )
     return {"script": script}
 
 

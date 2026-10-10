@@ -240,6 +240,64 @@ class UpdateDeviceRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=2000)
 
 
+# Fields the audit row names but does not quote: notes, serial and IMEI are
+# the device record's business, and the log only has to say who touched them.
+_NAMED_ONLY_FIELDS = (
+    "owner_label",
+    "hostname",
+    "os_version",
+    "ownership",
+    "model",
+    "serial",
+    "imei",
+    "notes",
+)
+
+
+async def _person_name(person_id: int | None) -> str:
+    person = await persons.get_person(person_id) if person_id else None
+    return str(person["name"]) if person else ""
+
+
+async def _audit_changes(before: dict, after: dict, body: UpdateDeviceRequest) -> dict[str, Any]:
+    """What a PATCH actually changed, for the audit row.
+
+    Only fields the request carried are compared, so a heartbeat landing in
+    between is not attributed to the operator. Their stored values before
+    and after are compared rather than the raw body, so trimming or tag
+    clean-up does not show up as a change that never happened.
+
+    Person and RustDesk ID carry from/to: the first decides who sees the
+    device, the second where a remote session connects. Tags carry what was
+    added and removed. Everything else is listed by name."""
+    submitted = {name for name, value in body.model_dump().items() if value is not None}
+    changed: list[str] = []
+    detail: dict[str, Any] = {}
+    if "person_id" in submitted and before["person_id"] != after["person_id"]:
+        changed.append("person_id")
+        detail["person_id_from"] = before["person_id"]
+        detail["person_id_to"] = after["person_id"]
+        # Names as a snapshot, like hostnames: "Person 3" says nothing once
+        # the person is gone.
+        detail["person_from"] = await _person_name(before["person_id"])
+        detail["person_to"] = await _person_name(after["person_id"])
+    if "tags" in submitted:
+        added = [t for t in after["tags"] if t not in before["tags"]]
+        removed = [t for t in before["tags"] if t not in after["tags"]]
+        if added or removed:
+            changed.append("tags")
+            detail["tags_added"] = added
+            detail["tags_removed"] = removed
+    if "rustdesk_id" in submitted and before["rustdesk_id"] != after["rustdesk_id"]:
+        changed.append("rustdesk_id")
+        detail["rustdesk_id_from"] = before["rustdesk_id"]
+        detail["rustdesk_id_to"] = after["rustdesk_id"]
+    changed.extend(
+        name for name in _NAMED_ONLY_FIELDS if name in submitted and before[name] != after[name]
+    )
+    return {"changed": changed, **detail}
+
+
 @router.patch("/{device_id}")
 async def update_device(
     device_id: int,
@@ -279,7 +337,12 @@ async def update_device(
     )
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
-    await audit_record("devices.updated", user=user["username"], device_id=device_id)
+    await audit_record(
+        "devices.updated",
+        user=user["username"],
+        device_id=device_id,
+        **await _audit_changes(current, device, body),
+    )
     # Re-read with the real threshold so the response carries correct 'online'.
     fresh = await devices.get_device(device_id, settings.offline_after_s)
     return {"device": _with_connected(fresh or device)}
