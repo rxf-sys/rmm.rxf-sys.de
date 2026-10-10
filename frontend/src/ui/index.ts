@@ -11,3 +11,4 @@ export { Popover } from './Popover';
 export { usePopoverClose } from './popoverContext';
 export { Skeleton, SkeletonRows } from './Skeleton';
 export { StatusBadge, type StatusKind } from './StatusBadge';
+export { Switch } from './Switch';

@@ -34,9 +34,7 @@ import { PAGE_LABEL, PAGE_PATH, devicePath, pageForPath, type PageId } from './r
 // Bündels aus, das jeder Login vollständig herunterlud.
 const AdminPage = lazy(() => import('./components/AdminPage').then((m) => ({ default: m.AdminPage })));
 const AuditPage = lazy(() => import('./components/AuditPage').then((m) => ({ default: m.AuditPage })));
-const AutomationPage = lazy(() =>
-  import('./components/AutomationPage').then((m) => ({ default: m.AutomationPage })),
-);
+const AutomationPage = lazy(() => import('./pages/automation/AutomationPage').then((m) => ({ default: m.AutomationPage })));
 const DevicePage = lazy(() => import('./pages/device/DevicePage').then((m) => ({ default: m.DevicePage })));
 const DocsPage = lazy(() => import('./components/DocsPage').then((m) => ({ default: m.DocsPage })));
 const PatchesPage = lazy(() =>
@@ -45,9 +43,7 @@ const PatchesPage = lazy(() =>
 const PersonsPage = lazy(() =>
   import('./components/PersonsPage').then((m) => ({ default: m.PersonsPage })),
 );
-const ScriptsPage = lazy(() =>
-  import('./components/ScriptsPage').then((m) => ({ default: m.ScriptsPage })),
-);
+const ScriptsPage = lazy(() => import('./pages/scripts/ScriptsPage').then((m) => ({ default: m.ScriptsPage })));
 
 const FAV_KEY = 'vulpexa-favorites';
 // Das Produkt hieß einmal anders; wer Favoriten hat, soll sie behalten.
@@ -374,11 +370,7 @@ export default function App() {
               path={PAGE_PATH.scripts}
               element={
                 isOperator ? (
-                  <ScriptsPage
-                    canManage={isOperator}
-                    devices={agentDevices}
-                    onOpenDevice={openDevice}
-                  />
+                  <ScriptsPage canManage={isOperator} devices={agentDevices} />
                 ) : (
                   <Forbidden />
                 )

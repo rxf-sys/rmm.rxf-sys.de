@@ -63,6 +63,18 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Konstanten, die ein Test auf harmlose Zeichen prüft. Dasselbe gibt es als
   Massenaktion in der Geräteliste: jedes Gerät bekommt den Befehl seines
   Systems, Geräte ohne passendes Paket werden vorab genannt.
+- **Skript-Bibliothek als Liste und Detail.** Links die Skripte mit Suche
+  (auch im Quelltext), System- und Kategoriefilter und Favoriten, rechts das
+  gewählte Skript mit Quelltext samt Zeilennummern und „Ausführen auf …" —
+  die Ausgabe läuft direkt darunter mit, statt auf die Geräteseite zu
+  springen. Angeboten werden nur verbundene Geräte mit passendem System.
+  Bearbeiten und Neuanlage im selben Bereich, Vorlagen als Galerie mit
+  Systemfilter. Die Auswahl steht in der Adresse (`?script=`); auf schmalen
+  Bildschirmen wechseln Liste und Detail.
+- **Automatisierung aufgeräumt.** Patch-Fenster weiter als Satz mit
+  Auswahlfeldern, dazu klarer Status; Alarmregeln und geplante Skripte mit
+  Schalter und Menü je Zeile, Bearbeiten in Dialogen statt Inline-Formularen,
+  die Regel-Erklärung als aufklappbarer Hinweis.
 - **Vorbereitung für MDM (iOS/iPadOS).** `infrastructure/docker-compose.yml`
   kennt jetzt einen NanoMDM-Container, der am Compose-Profil `mdm` hängt und
   im Normalbetrieb nicht startet — ohne APNs-Push-Zertifikat gäbe es nichts

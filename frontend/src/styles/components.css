@@ -905,6 +905,9 @@ select.input optgroup {
   gap: var(--sp-2);
   margin: calc(-1 * var(--sp-1)) calc(-1 * var(--sp-2)) 0 0;
 }
+.modal.modal-wide {
+  width: 880px;
+}
 .modal-title {
   margin: 0;
   font-size: var(--fs-xl);

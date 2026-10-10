@@ -400,6 +400,11 @@ h3.panel-title {
 .panel-body.flush {
   padding: 0;
 }
+/* An empty state inside a panel is part of it, not a box within a box. */
+.panel-body > .empty {
+  border: 0;
+  background: none;
+}
 
 /* ---------- Key/value list (ui/KeyValue.tsx) ---------- */
 
@@ -807,11 +812,6 @@ html [data-sonner-toast] [data-button] {
 }
 
 @media (max-width: 720px) {
-  /* Controls of a panel go under its title instead of squeezing beside it. */
-  .panel-actions {
-    flex-basis: 100%;
-    margin-left: 0;
-  }
   .shell {
     grid-template-columns: minmax(0, 1fr);
   }
