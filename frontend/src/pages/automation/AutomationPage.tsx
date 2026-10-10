@@ -110,7 +110,23 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
     scope_kind: s.scope_kind,
     scope_value: s.scope_kind === 'all' ? '' : s.scope_value,
   });
+  /** A destructive script that runs on its own, on many devices, costs the
+   *  same deliberate step as running it once by hand: its name, typed. */
+  const confirmDestructive = async (sc: ScheduleDraft | ScriptSchedule) => {
+    const script = scriptsQ.data?.find((x) => x.id === sc.script_id);
+    if (!script?.danger) return true;
+    const when = `${sc.weekday === null ? 'täglich' : `jeden ${WEEKDAY_NAMES[sc.weekday]}`} um ${hh(sc.hour)}`;
+    return ask({
+      title: `„${script.name}" automatisch ausführen?`,
+      body: `Das Skript ist als destruktiv markiert. Es läuft ${when} ohne weitere Rückfrage auf jedem passenden Gerät, das dann verbunden ist (gilt für: ${scopeLabel(sc, persons)}).`,
+      confirmLabel: 'Zeitplan aktivieren',
+      danger: true,
+      requireText: script.name,
+    });
+  };
+
   const saveSchedule = async (d: ScheduleDraft) => {
+    if (d.enabled && !(await confirmDestructive(d))) return;
     try {
       if (d.id === null) await api.createSchedule(scheduleBody(d, true));
       else await api.updateSchedule(d.id, scheduleBody(d, d.enabled));
@@ -122,6 +138,7 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
     }
   };
   const toggleSchedule = async (s: ScriptSchedule) => {
+    if (!s.enabled && !(await confirmDestructive(s))) return;
     try {
       await api.updateSchedule(s.id, scheduleBody(s, !s.enabled));
       await reload();

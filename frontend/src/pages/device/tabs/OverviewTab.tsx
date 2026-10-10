@@ -51,7 +51,7 @@ const speed = (mbit: number) =>
  * same thresholds as the device list, so the same machine never looks more
  * dramatic on one page than on the other.
  */
-export function OverviewTab({ detail, onGoTab }: { detail: DeviceDetail; onGoTab: (t: TabId) => void }) {
+export function OverviewTab({ detail, isOperator, onGoTab }: { detail: DeviceDetail; isOperator: boolean; onGoTab: (t: TabId) => void }) {
   const d = detail.device;
   const hb = d.heartbeat;
   const hw = (detail.inventory.hardware?.data ?? {}) as Record<string, unknown>;
@@ -219,8 +219,10 @@ export function OverviewTab({ detail, onGoTab }: { detail: DeviceDetail; onGoTab
               'RustDesk',
               d.rustdesk_id ? (
                 <span className="num">{d.rustdesk_id}</span>
-              ) : (
+              ) : isOperator ? (
                 <GoLink onClick={() => onGoTab('remote')}>Einrichten</GoLink>
+              ) : (
+                <span className="muted">nicht eingerichtet</span>
               ),
             ],
           ]}

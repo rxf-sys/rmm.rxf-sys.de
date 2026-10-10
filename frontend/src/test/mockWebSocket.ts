@@ -10,7 +10,7 @@ export class MockWebSocket {
 
   onopen: (() => void) | null = null;
   onmessage: ((e: { data: string }) => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((e: { code: number }) => void) | null = null;
   onerror: (() => void) | null = null;
   closed = false;
 
@@ -24,9 +24,10 @@ export class MockWebSocket {
   emit(payload: unknown) {
     this.onmessage?.({ data: JSON.stringify(payload) });
   }
-  /** Simulate the peer going away (not a local close). */
-  drop() {
-    this.onclose?.();
+  /** Simulate the peer going away (not a local close); 1006 is an
+   *  abnormal drop, 44xx the server refusing for good. */
+  drop(code = 1006) {
+    this.onclose?.({ code });
   }
   close() {
     this.closed = true;

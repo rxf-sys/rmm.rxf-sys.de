@@ -7,6 +7,7 @@ import { qk } from '../../api/queryClient';
 import { DeviceTabs } from '../../components/DeviceTabs';
 import { isAgent } from '../../deviceClass';
 import { restartCommand } from '../../deviceCommands';
+import { safeDeepLink } from '../../remoteDesk';
 import { useConfirm } from '../../hooks/useConfirm';
 import { IconUpgrade } from '../../icons';
 import { EmptyState, ErrorNote, Skeleton } from '../../ui';
@@ -88,7 +89,14 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
   const openSession = async () => {
     try {
       const r = await api.remoteSession(deviceId);
-      window.location.href = r.deep_link;
+      // The ID can come from the agent; only a well-formed rustdesk:// link
+      // is handed to the local client.
+      const link = safeDeepLink(r.deep_link);
+      if (!link) {
+        notify.error('Sitzung nicht geöffnet', 'Die gemeldete RustDesk-ID ist ungültig.');
+        return;
+      }
+      window.location.href = link;
     } catch (e) {
       notify.error('Sitzung nicht geöffnet', e);
     }
@@ -217,7 +225,7 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
       <div role="tabpanel" id={panelId} aria-labelledby={`${panelId}-tab-${tab}`} className="dv-panel">
         {tab === 'overview' &&
           (agent ? (
-            <OverviewTab detail={detail} onGoTab={setTab} />
+            <OverviewTab detail={detail} isOperator={isOperator} onGoTab={setTab} />
           ) : (
             <MobileOverviewTab device={d} isOperator={isOperator} onEdit={() => setEditing(true)} />
           ))}

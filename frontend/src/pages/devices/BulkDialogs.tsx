@@ -5,19 +5,45 @@ import { qk } from '../../api/queryClient';
 import { Modal } from '../../components/Modal';
 import { isAgent } from '../../deviceClass';
 import { SCRIPT_OS_LABEL, osMatchesDevice } from '../../scriptOs';
-import { SOFTWARE, SOFTWARE_CATEGORY_LABEL, availableOn, type SoftwarePreset } from '../../softwareCatalog';
+import { SOFTWARE, SOFTWARE_CATEGORY_LABEL, availableOn, installCommand, managerFor, type SoftwarePreset } from '../../softwareCatalog';
 import type { Device, Script } from '../../types';
 import { ErrorNote } from '../../ui';
+import { deviceLabel } from '../../deviceLabel';
 import { partition, reachable, skippedText } from './bulk';
 
 const fmt = new Intl.NumberFormat('de-DE');
 
-function Plan({ targets, total, skipped }: { targets: number; total: number; skipped: { reason: string; count: number }[] }) {
+/** How many devices an action reaches, which ones, and what it skips. The
+ *  names matter: a count alone does not say whether the server you meant to
+ *  leave out is in there. */
+function Plan({
+  targets,
+  total,
+  skipped,
+  dups,
+}: {
+  targets: Device[];
+  total: number;
+  skipped: { reason: string; count: number }[];
+  dups: Set<string>;
+}) {
+  const labels = targets.map((d) => deviceLabel(d, dups));
   return (
-    <p className="bulk-plan" aria-live="polite">
-      Betrifft <b>{fmt.format(targets)}</b> von {fmt.format(total)} ausgewählten Geräten.
-      {skipped.length > 0 && <> Übersprungen: {skippedText(skipped)}.</>}
-    </p>
+    <div className="bulk-plan" aria-live="polite">
+      <p>
+        Betrifft <b>{fmt.format(targets.length)}</b> von {fmt.format(total)} ausgewählten Geräten.
+        {skipped.length > 0 && <> Übersprungen: {skippedText(skipped)}.</>}
+      </p>
+      {labels.length > 0 &&
+        (labels.length <= 6 ? (
+          <p className="bulk-names">{labels.join(', ')}</p>
+        ) : (
+          <details>
+            <summary>Alle {fmt.format(labels.length)} Geräte anzeigen</summary>
+            <p className="bulk-names">{labels.join(', ')}</p>
+          </details>
+        ))}
+    </div>
   );
 }
 
@@ -37,10 +63,12 @@ function Actions({ onClose, label, disabled, danger }: { onClose: () => void; la
 /** Pick a library script and run it on every selected device it fits. */
 export function ScriptDialog({
   devices,
+  dups,
   onClose,
   onRun,
 }: {
   devices: Device[];
+  dups: Set<string>;
   onClose: () => void;
   onRun: (script: Script, targets: Device[]) => void;
 }) {
@@ -95,7 +123,7 @@ export function ScriptDialog({
             </select>
           </label>
         )}
-        {plan && <Plan targets={plan.targets.length} total={devices.length} skipped={plan.skipped} />}
+        {plan && <Plan targets={plan.targets} total={devices.length} skipped={plan.skipped} dups={dups} />}
         {script?.danger && (
           <div className="field">
             <label className="field-label" htmlFor={confirmId}>
@@ -207,10 +235,12 @@ const WINDOWS: { minutes: number; label: string }[] = [
 /** Silence alerts on the selected devices for a while, or end it early. */
 export function MaintenanceDialog({
   devices,
+  dups,
   onClose,
   onApply,
 }: {
   devices: Device[];
+  dups: Set<string>;
   onClose: () => void;
   onApply: (minutes: number, targets: Device[]) => void;
 }) {
@@ -241,7 +271,7 @@ export function MaintenanceDialog({
             </label>
           ))}
         </fieldset>
-        <Plan targets={plan.targets.length} total={devices.length} skipped={plan.skipped} />
+        <Plan targets={plan.targets} total={devices.length} skipped={plan.skipped} dups={dups} />
         <Actions
           onClose={onClose}
           disabled={plan.targets.length === 0}
@@ -256,10 +286,12 @@ export function MaintenanceDialog({
  *  each through its own system's package manager. */
 export function SoftwareDialog({
   devices,
+  dups,
   onClose,
   onRun,
 }: {
   devices: Device[];
+  dups: Set<string>;
   onClose: () => void;
   onRun: (preset: SoftwarePreset, targets: Device[]) => void;
 }) {
@@ -294,8 +326,19 @@ export function SoftwareDialog({
             ))}
           </select>
         </label>
-        {plan && <Plan targets={plan.targets.length} total={devices.length} skipped={plan.skipped} />}
+        {plan && <Plan targets={plan.targets} total={devices.length} skipped={plan.skipped} dups={dups} />}
         <p className="muted">Windows über winget, Linux über apt oder dnf, macOS über Homebrew. Jede Installation steht im Audit-Log.</p>
+        {preset && plan && plan.targets.length > 0 && (
+          <details className="bulk-cmds">
+            <summary>Befehle anzeigen</summary>
+            {Array.from(new Set(plan.targets.map((d) => d.os))).map((os) => (
+              <div key={os}>
+                <p className="field-label">{managerFor(os)}</p>
+                <pre>{installCommand(preset, os)?.command}</pre>
+              </div>
+            ))}
+          </details>
+        )}
         <Actions
           onClose={onClose}
           disabled={!plan || plan.targets.length === 0}

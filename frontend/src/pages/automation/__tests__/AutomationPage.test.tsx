@@ -1,14 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AutomationConfig } from '../../../types';
+import type { AutomationConfig, Script } from '../../../types';
 import { AutomationPage } from '../AutomationPage';
 
-const { cfgMock, updateRuleMock } = vi.hoisted(() => ({
+const { cfgMock, updateRuleMock, updateScheduleMock, scriptsMock } = vi.hoisted(() => ({
   cfgMock: vi.fn<() => Promise<AutomationConfig>>(),
   updateRuleMock: vi.fn<(id: number, body: unknown) => Promise<unknown>>(),
+  updateScheduleMock: vi.fn<(id: number, body: unknown) => Promise<unknown>>(),
+  scriptsMock: vi.fn<() => Promise<{ scripts: Script[] }>>(),
 }));
 vi.mock('../../../api/client', async () => {
   const actual = await vi.importActual<typeof import('../../../api/client')>('../../../api/client');
@@ -16,8 +18,9 @@ vi.mock('../../../api/client', async () => {
     ...actual,
     api: {
       automation: () => cfgMock(),
-      scripts: () => Promise.resolve({ scripts: [] }),
+      scripts: () => scriptsMock(),
       updateRule: (id: number, body: unknown) => updateRuleMock(id, body),
+      updateSchedule: (id: number, body: unknown) => updateScheduleMock(id, body),
     },
   };
 });
@@ -46,6 +49,7 @@ describe('AutomationPage', () => {
     vi.clearAllMocks();
     cfgMock.mockResolvedValue(cfg);
     updateRuleMock.mockResolvedValue({});
+    scriptsMock.mockResolvedValue({ scripts: [] });
   });
 
   it('reads the patch window as a sentence', async () => {
@@ -58,6 +62,20 @@ describe('AutomationPage', () => {
     show(true);
     await userEvent.click(await screen.findByRole('switch', { name: /Regel Disk-Belegung/ }));
     expect(updateRuleMock).toHaveBeenCalledWith(3, { type: 'disk', enabled: false, threshold: 85, scope_kind: 'tag', scope_value: 'server' });
+  });
+
+  it('asks for the name before a destructive script runs on a schedule', async () => {
+    cfgMock.mockResolvedValue({
+      ...cfg,
+      schedules: [{ id: 4, script_id: 9, enabled: false, weekday: null, hour: 3, scope_kind: 'all', scope_value: '', last_run: null, created_at: 0 }],
+    });
+    scriptsMock.mockResolvedValue({ scripts: [{ id: 9, name: 'Platte löschen', danger: true } as Script] });
+    show(true);
+    await userEvent.click(await screen.findByRole('switch', { name: /Zeitplan Platte löschen/ }));
+    const dialog = await screen.findByRole('dialog', { name: /automatisch ausführen/ });
+    expect(dialog).toHaveTextContent('täglich um 03:00');
+    expect(within(dialog).getByRole('button', { name: 'Zeitplan aktivieren' })).toBeDisabled();
+    expect(updateScheduleMock).not.toHaveBeenCalled();
   });
 
   it('lets non-admins look but not change', async () => {

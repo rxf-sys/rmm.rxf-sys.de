@@ -9,6 +9,7 @@ import { osMatchesDevice, shellsFor } from '../../../scriptOs';
 import { SOFTWARE, SOFTWARE_CATEGORY_LABEL, availableOn, installCommand, managerFor, type SoftwarePreset } from '../../../softwareCatalog';
 import type { Device, Job, Script, Shell } from '../../../types';
 import { EmptyState, ErrorNote, Panel } from '../../../ui';
+import { cleanRustdeskId, isRustdeskId } from '../../../remoteDesk';
 import { notify, trackJob } from '../../../ui/toast';
 import { JobConsole } from '../JobConsole';
 
@@ -28,7 +29,7 @@ function RemoteSetup({ device }: { device: Device }) {
   const save = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await api.updateDevice(device.id, { rustdesk_id: manualId.trim() });
+      await api.updateDevice(device.id, { rustdesk_id: cleanRustdeskId(manualId) });
       notify.success('RustDesk-ID gespeichert');
       void qc.invalidateQueries({ queryKey: qk.device(device.id) });
     } catch (err) {
@@ -64,7 +65,7 @@ function RemoteSetup({ device }: { device: Device }) {
         </label>
         <div className="dv-inline-row">
           <input id={idField} className="input" value={manualId} onChange={(e) => setManualId(e.target.value)} inputMode="numeric" placeholder="z. B. 123 456 789" />
-          <button type="submit" className="btn" disabled={!manualId.trim()}>
+          <button type="submit" className="btn" disabled={!isRustdeskId(cleanRustdeskId(manualId))}>
             Speichern
           </button>
         </div>

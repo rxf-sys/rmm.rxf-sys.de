@@ -15,6 +15,9 @@ const EMPTY: JobStreamState = { output: '', status: null, exitCode: null, connec
 const RECONNECT_MIN_MS = 1_000;
 const RECONNECT_MAX_MS = 15_000;
 
+/** Close codes of /api/jobs/{id}/ws that a retry cannot change. */
+const FINAL_CLOSE_CODES = new Set([4401, 4403, 4404]);
+
 const isTerminal = (s: JobStatus | null) => s === 'done' || s === 'failed' || s === 'timeout';
 
 /**
@@ -97,9 +100,16 @@ export function useJobStream(jobId: number | null): JobStreamState {
         // 'ping' keepalives are ignored.
       };
 
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         if (closed || isTerminal(statusRef.current)) return;
         setState((s) => ({ ...s, connected: false }));
+        // Not signed in, not allowed, no such job: asking again changes
+        // nothing, so stop instead of reconnecting for as long as the page
+        // stays open.
+        if (FINAL_CLOSE_CODES.has(ev.code)) {
+          closed = true;
+          return;
+        }
         retry = setTimeout(connect, delay);
         delay = Math.min(delay * 2, RECONNECT_MAX_MS);
       };

@@ -87,11 +87,16 @@ describe('DevicePage', () => {
   });
 
   it('shows viewers no hands-on tabs and no device actions', async () => {
+    deviceMock.mockResolvedValue({ device: device({ rustdesk_id: '123456789' }), inventory: {} });
     show('/devices/7', viewer);
     const tabs = await screen.findByRole('tablist');
     const names = within(tabs).getAllByRole('tab').map((t) => t.textContent);
     expect(names).not.toContain('Aktivität');
     expect(names).not.toContain('Passwörter');
+    // The backend refuses remote sessions to viewers; offering one would
+    // only end in an error toast.
+    expect(names).not.toContain('Fernzugriff');
+    expect(screen.queryByRole('button', { name: /Fernsteuerung/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Neu starten/ })).not.toBeInTheDocument();
   });
 

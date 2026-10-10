@@ -458,6 +458,35 @@
   color: var(--tx-2);
   font-size: var(--fs-sm);
 }
+.bulk-plan p {
+  margin: 0;
+}
+.bulk-plan details {
+  margin-top: var(--sp-1);
+}
+.bulk-plan .bulk-names {
+  margin-top: var(--sp-1);
+  color: var(--tx);
+  overflow-wrap: anywhere;
+}
+.bulk-cmds summary,
+.bulk-plan summary {
+  color: var(--accent-tx);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.bulk-cmds pre {
+  max-height: 200px;
+  margin: var(--sp-1) 0 var(--sp-3);
+  padding: var(--sp-3);
+  overflow: auto;
+  border-radius: var(--r-md);
+  background: var(--console-bg);
+  color: var(--console-tx);
+  font: 400 var(--fs-xs) / 1.5 var(--mono);
+  white-space: pre-wrap;
+}
 /* ---- Saved views ---- */
 .views {
   display: flex;

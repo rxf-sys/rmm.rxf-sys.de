@@ -170,7 +170,14 @@ export function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: numb
           </>
         )}
       </Panel>
-      {installingJob !== null && (
+      {installingJob !== null && !isOperator && (
+        // The job output socket is operator-only; viewers get the fact, not
+        // a console that can never connect.
+        <p className="dv-note" role="status">
+          Auf diesem Gerät läuft gerade eine Update-Installation.
+        </p>
+      )}
+      {installingJob !== null && isOperator && (
         <JobConsole
           jobId={installingJob}
           title={`Installation · Auftrag #${installingJob}`}

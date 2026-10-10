@@ -22,7 +22,9 @@ export const TABS: {
   { id: 'overview', label: 'Übersicht' },
   { id: 'history', label: 'Verlauf', agentOnly: true },
   { id: 'inventory', label: 'Inventar', agentOnly: true },
-  { id: 'remote', label: 'Fernzugriff', agentOnly: true },
+  // Remote desktop, terminal and installs are operator actions; a viewer
+  // would only find a tab that refuses them.
+  { id: 'remote', label: 'Fernzugriff', operatorOnly: true, agentOnly: true },
   { id: 'patches', label: 'Updates', agentOnly: true },
   // Job commands and output can hold secrets; the API is operator-only.
   { id: 'jobs', label: 'Aktivität', operatorOnly: true, agentOnly: true },

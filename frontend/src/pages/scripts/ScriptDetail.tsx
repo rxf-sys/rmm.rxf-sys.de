@@ -1,8 +1,9 @@
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { formatAgo, formatDateTime } from '../../format';
 import { useConfirm } from '../../hooks/useConfirm';
 import { IconBookmark, IconCheck, IconChevronLeft, IconCopy, IconMore, IconPlay } from '../../icons';
+import { deviceLabel, duplicateHostnames } from '../../deviceLabel';
 import { osMatchesDevice } from '../../scriptOs';
 import type { Device, Job, Script } from '../../types';
 import { Menu, StatusBadge } from '../../ui';
@@ -50,25 +51,27 @@ export function ScriptDetail({ script: s, devices, canManage, favorite, onToggle
   const { ask, dialog } = useConfirm();
   const targetId = useId();
   const runnable = devices.filter((d) => d.connected && osMatchesDevice(s.os, d.os));
+  const dups = useMemo(() => duplicateHostnames(devices), [devices]);
   const [target, setTarget] = useState<number | ''>('');
   const [active, setActive] = useState<{ job: Job; host: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const chosen = runnable.find((d) => d.id === target) ?? null;
+  const chosenLabel = chosen ? deviceLabel(chosen, dups) : '';
 
   const run = async () => {
     if (!chosen) return;
     // A destructive script asks for its own name: a stray click reaches a real
     // machine as root.
     const ok = await ask({
-      title: s.danger ? `Destruktives Skript auf ${chosen.hostname}` : `${s.name} auf ${chosen.hostname} ausführen?`,
+      title: s.danger ? `Destruktives Skript auf ${chosenLabel}` : `${s.name} auf ${chosenLabel} ausführen?`,
       body: s.danger ? (
         <p>
-          <b>{s.name}</b> ist als destruktiv markiert und läuft auf <b>{chosen.hostname}</b> mit vollen Rechten. Es kann
+          <b>{s.name}</b> ist als destruktiv markiert und läuft auf <b>{chosenLabel}</b> mit vollen Rechten. Es kann
           Daten zerstören oder das Gerät lahmlegen.
         </p>
       ) : (
         <p>
-          Läuft auf <b>{chosen.hostname}</b> mit vollen Rechten.
+          Läuft auf <b>{chosenLabel}</b> mit vollen Rechten.
         </p>
       ),
       confirmLabel: 'Jetzt ausführen',
@@ -78,8 +81,8 @@ export function ScriptDetail({ script: s, devices, canManage, favorite, onToggle
     if (!ok) return;
     try {
       const r = await api.createScriptJob(chosen.id, s.id);
-      setActive({ job: r.job, host: chosen.hostname });
-      trackJob(r.job, { deviceName: chosen.hostname, label: s.name });
+      setActive({ job: r.job, host: chosenLabel });
+      trackJob(r.job, { deviceName: chosenLabel, label: s.name });
     } catch (e) {
       notify.error('Skript nicht gestartet', e);
     }
@@ -150,7 +153,7 @@ export function ScriptDetail({ script: s, devices, canManage, favorite, onToggle
               </option>
               {runnable.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.hostname}
+                  {deviceLabel(d, dups)}
                 </option>
               ))}
             </select>

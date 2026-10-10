@@ -40,6 +40,17 @@ export interface JobResult {
 const MAX_RESULTS = 20;
 let results: JobResult[] = [];
 const listeners = new Set<() => void>();
+/** Bumped on sign-out: pollers started before compare and stop. */
+let generation = 0;
+
+/** Forget this session's job results and stop following its jobs — the next
+ *  account in this tab must not see them. */
+export function resetJobResults(): void {
+  generation += 1;
+  results = [];
+  listeners.forEach((l) => l());
+  toast.dismiss();
+}
 
 function pushResult(r: JobResult): void {
   results = [r, ...results.filter((x) => x.jobId !== r.jobId)].slice(0, MAX_RESULTS);
@@ -76,6 +87,7 @@ export function trackJob(job: Job, opts: { deviceName: string; label: string }):
   const open = { label: 'Ausgabe', onClick: () => navigate?.(jobPath(job.device_id, job.id)) };
   toast.loading(`${opts.label} läuft`, { id, description: opts.deviceName, duration: Infinity, action: open });
   const started = Date.now();
+  const gen = generation;
 
   const finish = (j: Job) => {
     pushResult({
@@ -95,9 +107,11 @@ export function trackJob(job: Job, opts: { deviceName: string; label: string }):
   };
 
   const poll = () => {
+    if (gen !== generation) return;
     api
       .job(job.id)
       .then(({ job: j }) => {
+        if (gen !== generation) return;
         if (TERMINAL.has(j.status)) finish(j);
         else if (Date.now() - started < MAX_WAIT_MS) setTimeout(poll, POLL_MS);
         else toast.dismiss(id);
@@ -136,6 +150,7 @@ export function trackJobs(entries: { job: Job; deviceName: string }[], label: st
   const progress = () =>
     `${finished} von ${total} fertig${failed.length ? ` · ${failed.length} fehlgeschlagen` : ''}`;
   toast.loading(`${label} läuft auf ${total} Geräten`, { id, description: progress(), duration: Infinity });
+  const gen = generation;
 
   const conclude = () => {
     if (failed.length === 0) {
@@ -152,6 +167,7 @@ export function trackJobs(entries: { job: Job; deviceName: string }[], label: st
   };
 
   const round = () => {
+    if (gen !== generation) return;
     const batch = queue.splice(0, BULK_POLL_BATCH);
     void Promise.all(
       batch.map((e) =>
@@ -175,6 +191,7 @@ export function trackJobs(entries: { job: Job; deviceName: string }[], label: st
         ),
       ),
     ).then(() => {
+      if (gen !== generation) return;
       if (queue.length === 0) return conclude();
       if (Date.now() - started >= MAX_WAIT_MS) {
         toast.warning(`${label}: ${queue.length} Geräte noch ohne Ergebnis`, {

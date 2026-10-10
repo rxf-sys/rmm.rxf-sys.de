@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import { qk } from '../../api/queryClient';
 import { isAgent } from '../../deviceClass';
@@ -12,19 +12,22 @@ import { restartCommand } from '../../deviceCommands';
 import { partition, reachable, runBulk, skippedText } from './bulk';
 import { MaintenanceDialog, ScriptDialog, SoftwareDialog, TagsDialog } from './BulkDialogs';
 import { installCommand } from '../../softwareCatalog';
+import { deviceLabel, duplicateHostnames } from '../../deviceLabel';
 
 const fmt = new Intl.NumberFormat('de-DE');
 const devicesWord = (n: number) => `${fmt.format(n)} ${n === 1 ? 'Gerät' : 'Geräten'}`;
 
 /** "pc-1, pc-2, nas und 4 weitere" */
-function names(devices: Device[]): string {
-  const shown = devices.slice(0, 4).map((d) => d.hostname);
+function names(devices: Device[], dups: Set<string>): string {
+  const shown = devices.slice(0, 4).map((d) => deviceLabel(d, dups));
   const rest = devices.length - shown.length;
   return rest > 0 ? `${shown.join(', ')} und ${rest} weitere` : shown.join(', ');
 }
 
 interface Props {
   selected: Device[];
+  /** The whole fleet, to tell devices with the same hostname apart. */
+  fleet: Device[];
   /** Selected devices the current filter hides. */
   hidden: number;
   allTags: string[];
@@ -37,9 +40,10 @@ interface Props {
  * per-device endpoint, so it is checked and audited once per device, and
  * every action says up front which devices it will skip and why.
  */
-export function BulkBar({ selected, hidden, allTags, onClear, onExport }: Props) {
+export function BulkBar({ selected, fleet, hidden, allTags, onClear, onExport }: Props) {
   const qc = useQueryClient();
   const { ask, dialog: confirmDialog } = useConfirm();
+  const dups = useMemo(() => duplicateHostnames(fleet), [fleet]);
   const [open, setOpen] = useState<'script' | 'software' | 'tags' | 'maintenance' | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -79,10 +83,10 @@ export function BulkBar({ selected, hidden, allTags, onClear, onExport }: Props)
     }
     const n = plan.targets.length;
     const ok = await ask({
-      title: n === 1 ? `${plan.targets[0]!.hostname} neu starten?` : `${fmt.format(n)} Geräte neu starten?`,
+      title: n === 1 ? `${deviceLabel(plan.targets[0]!, dups)} neu starten?` : `${fmt.format(n)} Geräte neu starten?`,
       body: (
         <>
-          <p>{names(plan.targets)}</p>
+          <p>{names(plan.targets, dups)}</p>
           <p>Angemeldete Benutzer bekommen eine Minute Vorwarnung; nicht gespeicherte Arbeit geht danach verloren.</p>
           {plan.skipped.length > 0 && <p className="muted">Übersprungen: {skippedText(plan.skipped)}.</p>}
         </>
@@ -117,7 +121,7 @@ export function BulkBar({ selected, hidden, allTags, onClear, onExport }: Props)
       title: `Agent auf ${devicesWord(plan.targets.length)} aktualisieren?`,
       body: (
         <>
-          <p>{names(plan.targets)}</p>
+          <p>{names(plan.targets, dups)}</p>
           <p>Der Agent lädt die neue Version, prüft ihre Signatur und startet sich neu. Das Gerät selbst läuft weiter.</p>
           {plan.skipped.length > 0 && <p className="muted">Übersprungen: {skippedText(plan.skipped)}.</p>}
         </>
@@ -194,6 +198,7 @@ export function BulkBar({ selected, hidden, allTags, onClear, onExport }: Props)
       {open === 'script' && (
         <ScriptDialog
           devices={selected}
+          dups={dups}
           onClose={() => setOpen(null)}
           onRun={(script, targets) => {
             setOpen(null);
@@ -204,6 +209,7 @@ export function BulkBar({ selected, hidden, allTags, onClear, onExport }: Props)
       {open === 'software' && (
         <SoftwareDialog
           devices={selected}
+          dups={dups}
           onClose={() => setOpen(null)}
           onRun={(preset, targets) => {
             setOpen(null);
@@ -241,6 +247,7 @@ export function BulkBar({ selected, hidden, allTags, onClear, onExport }: Props)
       {open === 'maintenance' && (
         <MaintenanceDialog
           devices={selected}
+          dups={dups}
           onClose={() => setOpen(null)}
           onApply={(minutes, targets) => {
             setOpen(null);

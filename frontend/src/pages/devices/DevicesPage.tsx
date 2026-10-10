@@ -430,6 +430,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, canOperat
           {canOperate && selectedDevices.length > 0 && (
             <BulkBar
               selected={selectedDevices}
+              fleet={devices}
               hidden={hiddenSelected}
               allTags={allTags}
               onClear={() => setSelected(new Set())}
