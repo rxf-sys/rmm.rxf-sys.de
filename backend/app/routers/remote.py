@@ -73,6 +73,14 @@ async def remote_session(
         raise HTTPException(
             status_code=409, detail="Für dieses Gerät ist keine RustDesk-ID hinterlegt"
         )
+    # Rows written before IDs were validated can still hold anything; the
+    # link goes to a protocol handler on the operator's machine, so an
+    # invalid value never becomes one.
+    if not devices.valid_rustdesk_id(rid):
+        raise HTTPException(
+            status_code=409,
+            detail="Die hinterlegte RustDesk-ID ist ungültig — bitte am Gerät neu eintragen",
+        )
     await audit_record("remote.session_opened", user=user["username"], device_id=device_id)
     # The operator's local RustDesk client handles the rustdesk:// scheme.
     return {"rustdesk_id": rid, "deep_link": f"rustdesk://{rid}"}

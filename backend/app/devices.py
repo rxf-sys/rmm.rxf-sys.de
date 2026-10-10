@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import time
 from contextlib import AbstractAsyncContextManager
@@ -76,6 +77,16 @@ _db_path: str = ""
 MAX_HEARTBEAT_BYTES = 16_384
 MAX_INVENTORY_BYTES = 1_048_576
 INVENTORY_KINDS = ("hardware", "software")
+
+# A RustDesk ID is numeric, or a custom alias set on the client. Nothing else
+# is accepted: the value ends up in a rustdesk:// link that the operator's
+# machine hands to a protocol handler, and it arrives from an agent (or a
+# form) that the server does not get to trust.
+_RUSTDESK_ID = re.compile(r"[0-9]{6,12}|[A-Za-z0-9_-]{6,16}")
+
+
+def valid_rustdesk_id(value: str) -> bool:
+    return _RUSTDESK_ID.fullmatch(value) is not None
 
 
 class EnrollmentError(Exception):
@@ -440,8 +451,12 @@ async def record_heartbeat(device_id: int, payload: dict[str, Any]) -> None:
     now = int(time.time())
     agent_version = str(payload.get("agent_version", ""))[:40]
     # The agent reports its RustDesk ID once the client is installed; keep the
-    # last non-empty value so a heartbeat before install doesn't wipe it.
-    rustdesk_id = str(payload.get("rustdesk_id", ""))[:40]
+    # last non-empty value so a heartbeat before install doesn't wipe it. A
+    # value that is not an ID is dropped the same way, so the stored one stays.
+    rustdesk_id = str(payload.get("rustdesk_id", "")).strip()
+    if rustdesk_id and not valid_rustdesk_id(rustdesk_id):
+        log.warning("devices.rustdesk_id_rejected", device_id=device_id, length=len(rustdesk_id))
+        rustdesk_id = ""
     # Track live hostname renames; empty (older agents) leaves the enrollment
     # value untouched.
     hostname = str(payload.get("hostname", "")).strip()[:255]
