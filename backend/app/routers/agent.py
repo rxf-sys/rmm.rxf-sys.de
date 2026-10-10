@@ -392,14 +392,23 @@ async def agent_ws(ws: WebSocket, settings: Settings = Depends(get_settings)) ->
                 # before installing, so this is a hint, not a trusted push.
                 if not update_offered:
                     update_offered = True
-                    upd = releases.update_for(
-                        str(payload.get("agent_version", "")) or device["agent_version"],
-                        device["os"],
-                        device["arch"],
-                    )
+                    # Same 40-character cap as the stored column: the value
+                    # comes from the agent and now also lands in the audit log.
+                    reported = str(payload.get("agent_version", ""))[:40] or device["agent_version"]
+                    upd = releases.update_for(reported, device["os"], device["arch"])
                     if upd is not None:
                         await ws.send_json({"type": "update", "payload": upd})
-                        log.info("agent.update_offered", device_id=device_id, version=upd["version"])
+                        # A command to a device like the operator-triggered
+                        # push (device.agent_update), so it is audited the
+                        # same way. Nobody clicked anything: the actor is the
+                        # same system actor the daily patch scan uses.
+                        await audit_record(
+                            "agent.update_offered",
+                            actor="automation",
+                            device_id=device_id,
+                            version=upd["version"],
+                            from_version=reported,
+                        )
                 await metrics.record(
                     device_id,
                     cpu_pct=_as_pct(payload.get("cpu_pct")),

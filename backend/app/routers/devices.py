@@ -217,7 +217,7 @@ async def device_agent_logs(
     device_policy.ensure_supported(device, "agent_logs")
     if not manager.is_connected(device_id):
         raise HTTPException(status_code=409, detail="Gerät ist nicht verbunden")
-    lines = await manager.request_logs(device_id)
+    lines = await manager.request_logs(device_id, actor=user["username"])
     if lines is None:
         raise HTTPException(status_code=504, detail="Agent hat nicht rechtzeitig geantwortet")
     return {"lines": lines}

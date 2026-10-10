@@ -256,9 +256,14 @@ def test_job_end_to_end_live_stream(ws_client: TestClient, settings: Settings):
     assert final["output"] == "hi\n"
 
 
-def test_outdated_agent_is_offered_an_update(ws_client: TestClient):
+def test_outdated_agent_is_offered_an_update(ws_client: TestClient, settings: Settings):
     """An agent reporting an old version gets an `update` message with the
     signed download pointer."""
+    # A never-scanned device is also due for the daily scan, and that request
+    # goes out first on the same heartbeat. The test only passed when an
+    # earlier test had already marked device 1 as asked in patch_scan's
+    # in-memory map.
+    settings.patch_scan_enabled = False
     releases.reset_for_tests(
         {
             "version": "0.9.0",
@@ -279,6 +284,75 @@ def test_outdated_agent_is_offered_an_update(ws_client: TestClient):
             assert msg["type"] == "update"
             assert msg["payload"]["version"] == "0.9.0"
             assert msg["payload"]["url"] == "/api/agent/download/linux-amd64"
+    finally:
+        releases.reset_for_tests(None, "")
+
+
+def test_automatic_update_push_is_audited_once_per_connection(
+    ws_client: TestClient, settings: Settings
+):
+    """The automatic `update` is a command to a device like the operator's
+    push, so it lands in the audit log — with the system actor, because
+    nobody clicked anything, and only for the one offer per connection."""
+    # The daily scan request would ride on the same heartbeat; keep it out.
+    settings.patch_scan_enabled = False
+    releases.reset_for_tests(
+        {
+            "version": "0.9.0",
+            "targets": {
+                "linux-amd64": {"file": "rmm-agent-linux-amd64", "sha256": "aa", "sig": "bb"}
+            },
+        },
+        "/tmp/rel",
+    )
+    try:
+        raw, _ = asyncio.run(devices.create_enrollment_token("t", 1))
+        creds = asyncio.run(
+            devices.enroll_device(token=raw, hostname="old-agent", os="linux", arch="amd64")
+        )
+        with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as ws:
+            ws.send_json({"type": "heartbeat", "payload": {"agent_version": "0.1.0"}})
+            ws.send_json({"type": "heartbeat", "payload": {"agent_version": "0.1.0"}})
+            pushed = _sync(ws)
+        assert [m["type"] for m in pushed] == ["update"]
+
+        events = asyncio.run(audit.query(category="device"))["events"]
+        offers = [e for e in events if e["event"] == "agent.update_offered"]
+        assert len(offers) == 1
+        offer = offers[0]
+        assert offer["actor"] == "automation"
+        assert offer["device_id"] == creds["device_id"]
+        assert offer["category"] == "device"
+        assert offer["detail"]["version"] == "0.9.0"
+        assert offer["detail"]["from_version"] == "0.1.0"
+        assert offer["detail"]["hostname"] == "old-agent"
+    finally:
+        releases.reset_for_tests(None, "")
+
+
+def test_current_agent_gets_no_update_and_no_audit_record(
+    ws_client: TestClient, settings: Settings
+):
+    settings.patch_scan_enabled = False
+    releases.reset_for_tests(
+        {
+            "version": "0.9.0",
+            "targets": {
+                "linux-amd64": {"file": "rmm-agent-linux-amd64", "sha256": "aa", "sig": "bb"}
+            },
+        },
+        "/tmp/rel",
+    )
+    try:
+        raw, _ = asyncio.run(devices.create_enrollment_token("t", 1))
+        creds = asyncio.run(
+            devices.enroll_device(token=raw, hostname="new-agent", os="linux", arch="amd64")
+        )
+        with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as ws:
+            ws.send_json({"type": "heartbeat", "payload": {"agent_version": "0.9.0"}})
+            assert _sync(ws) == []
+        events = asyncio.run(audit.query())["events"]
+        assert not [e for e in events if e["event"] == "agent.update_offered"]
     finally:
         releases.reset_for_tests(None, "")
 

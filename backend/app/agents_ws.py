@@ -15,6 +15,8 @@ from typing import Any
 import structlog
 from fastapi import WebSocket
 
+from .audit import record as audit_record
+
 log = structlog.get_logger("agents_ws")
 
 
@@ -28,13 +30,20 @@ class ConnectionManager:
     async def request_logs(
         self,
         device_id: int,
+        *,
+        actor: str,
         # ASYNC109 wants callers to own the deadline; here the timeout *is*
         # enforced in this function (asyncio.wait_for below), and the caller is
         # an HTTP handler that only needs "logs or nothing".
         timeout: float = 5.0,  # noqa: ASYNC109
     ) -> list[str] | None:
         """Ask a connected agent for its recent log lines. Returns None when
-        the device isn't connected or doesn't answer in time."""
+        the device isn't connected or doesn't answer in time.
+
+        ``actor`` is required because this sends a command to a device, and
+        every command lands in the audit log. Recording it here rather than in
+        the HTTP handler means no future caller can send ``get_logs`` without
+        the record."""
         if not self.is_connected(device_id):
             return None
         loop = asyncio.get_running_loop()
@@ -43,6 +52,11 @@ class ConnectionManager:
         try:
             if not await self.send(device_id, {"type": "get_logs"}):
                 return None
+            # Written once the command has left the server, before waiting for
+            # the answer: the agent has been asked either way, and a timeout
+            # must not erase that from the record. The waiter is registered
+            # above, so a reply arriving during this write is not lost.
+            await audit_record("device.agent_logs", actor=actor, device_id=device_id)
             return await asyncio.wait_for(fut, timeout)
         except TimeoutError:
             # The agent is connected but did not answer in time — an empty
