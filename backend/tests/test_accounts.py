@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from httpx import AsyncClient
+from structlog.testing import capture_logs
 
 from app import accounts
 from app.config import Settings
@@ -80,8 +81,12 @@ async def test_bootstrap_admin_rejects_short_password(client: AsyncClient, setti
     tool that runs shell commands as root on every managed device.
     """
     s = settings.model_copy(update={"bootstrap_admin_password": "short"})
-    await accounts.bootstrap_admin(s)
+    with capture_logs() as logs:
+        await accounts.bootstrap_admin(s)
     assert await accounts.count_users() == 0
+    [entry] = [e for e in logs if e["event"] == "accounts.bootstrap_rejected"]
+    # The AccountError's traceback stays in the log next to its message.
+    assert entry["exc_info"] is True
 
 
 async def test_create_user_rejects_short_password(client: AsyncClient):

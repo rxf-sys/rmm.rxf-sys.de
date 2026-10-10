@@ -59,6 +59,9 @@ select = [
     # Naive datetimes compare wall-clock readings, not instants; that is how
     # the update-scan slot ended up in the future on the spring DST switch.
     "DTZ",
+    # Only this one from tryceratops: log.error inside `except` drops the
+    # traceback, log.exception keeps it. The rest of TRY is style.
+    "TRY400",
 ]
 # German prose uses typographic characters that ruff flags as confusable with
 # their ASCII lookalikes; they are intentional here.
