@@ -92,82 +92,8 @@
   cursor: pointer;
 }
 
-/* ---- Table ---- */
-.dt-wrap {
-  container-type: inline-size;
-}
-.dt {
-  width: 100%;
-  table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: var(--fs-md);
-}
-.dt th {
-  position: sticky;
-  top: var(--topbar-h);
-  z-index: 1;
-  padding: 0;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--tx-3);
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  text-align: left;
-  white-space: nowrap;
-}
-.dt td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-  vertical-align: middle;
-}
-.dt tbody tr:last-child td {
-  border-bottom: 0;
-}
-.dt tbody tr {
-  cursor: pointer;
-  transition: background-color var(--dur-1) var(--ease-out);
-}
-@media (hover: hover) and (pointer: fine) {
-  .dt tbody tr:hover {
-    background: var(--hover);
-  }
-  .dt tbody tr:hover .dl-link {
-    color: var(--accent-tx);
-  }
-}
-.dt tbody tr.is-selected {
-  background: var(--accent-soft);
-}
-.th-sort {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  min-height: 38px;
-  padding: 0 12px;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-.th-sort:hover,
-.th-sort.active {
-  color: var(--tx);
-}
-.th-ico {
-  display: inline-grid;
-  opacity: 0;
-  transition: opacity var(--dur-1) var(--ease-out);
-}
-.th-sort:hover .th-ico,
-.th-sort:focus-visible .th-ico,
-.th-ico.active {
-  opacity: 1;
-}
-
-/* Column widths. The name takes what is left. */
+/* ---- Table: the shared .dt styles live in components.css; here only the
+   column widths. The name takes what is left. ---- */
 .dt .c-check {
   width: 44px;
   padding-right: 0;
@@ -279,48 +205,6 @@
   gap: 4px;
 }
 
-/* ---- Load figure: number first, a short bar for the eye ---- */
-.mm {
-  display: grid;
-  grid-template-columns: 4.6ch minmax(0, 52px);
-  align-items: center;
-  gap: 8px;
-}
-.mm-val {
-  color: var(--tx-2);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  text-align: right;
-}
-.mm-track {
-  position: relative;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--surface-3);
-}
-.mm-track span {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 2px;
-  background: var(--tx-3);
-  opacity: 0.55;
-}
-.mm.lvl-warn .mm-val {
-  color: var(--warn-tx);
-}
-.mm.lvl-warn .mm-track span {
-  background: var(--warn);
-  opacity: 1;
-}
-.mm.lvl-crit .mm-val {
-  color: var(--danger-tx);
-  font-weight: 700;
-}
-.mm.lvl-crit .mm-track span {
-  background: var(--danger);
-  opacity: 1;
-}
 
 .upd {
   display: inline-flex;
