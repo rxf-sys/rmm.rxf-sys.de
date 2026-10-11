@@ -247,7 +247,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   kommen Tests für das Viewer-Scoping von `/api/fleet/metrics` und
   `/api/inventory/search`, für `4403` am Job-Socket (auch für den Viewer, dem
   das Gerät gehört) und für den Fleet-Socket, der ohne Sitzung `4401` sendet
-  und auch angemeldet nur Hinweise ohne Nutzdaten.
+  und auch angemeldet nur Hinweise ohne Nutzdaten. Die Matrix und die
+  Socket-Tests schalten Auth am zwischengespeicherten `get_settings()` ein,
+  das `verify_session` und die Sockets selbst lesen; ein nachträglich
+  gesetztes `AUTH_ENABLED` kam dort nie an, sodass ein lokales
+  `AUTH_ENABLED=false` die Tests scheitern ließ, ohne etwas über die Prüfung
+  zu sagen.
 
 - Alle Module öffnen die Datenbank über einen gemeinsamen Helfer
   (`app/db.py`), der Fremdschlüssel einschaltet. Vorher taten das zwei von

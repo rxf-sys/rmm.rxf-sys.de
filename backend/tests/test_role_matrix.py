@@ -2,7 +2,11 @@
 
 ``AUTH_ENABLED=false`` hands every request an admin (``app/auth.py``), which
 hides exactly the bugs this file is for. Everything here runs with auth on
-(the conftest default) and a real session per role.
+and a real session per role. That is not the conftest's doing: its Settings
+reach only ``Depends(get_settings)``, while ``verify_session`` calls
+``get_settings()`` itself and gets the lru_cached Settings built from the
+process environment. ``_auth_on`` therefore pins ``auth_enabled`` on that
+cached object, so a local ``AUTH_ENABLED=false`` cannot change the outcome.
 
 Guard levels (``app/auth.py``):
 
@@ -47,6 +51,7 @@ from app import (
     persons,
     scripts,
 )
+from app.config import get_settings
 from app.main import app
 
 try:
@@ -244,6 +249,12 @@ _MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 # Argon2 at production cost takes ~0.1 s per hash; the matrix creates two
 # accounts per case and is not about password hashing.
 _FAST_HASHER = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)
+
+
+@pytest.fixture(autouse=True)
+def _auth_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    # See the module docstring: the cached Settings, not the conftest's.
+    monkeypatch.setattr(get_settings(), "auth_enabled", True)
 
 
 @pytest_asyncio.fixture

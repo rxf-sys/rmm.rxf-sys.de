@@ -360,6 +360,21 @@ def test_current_agent_gets_no_update_and_no_audit_record(
         releases.reset_for_tests(None, "")
 
 
+@pytest.fixture
+def auth_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin auth on for the session checks of the job and fleet sockets.
+
+    Both sockets, like verify_session, call get_settings() directly, so the
+    conftest override never reaches them; they see the lru_cached Settings
+    built from the process environment when app.main was imported. Setting
+    AUTH_ENABLED afterwards changes nothing, so the cached object itself is
+    patched (as test_agent_setup.py does for app_env). Without this, a local
+    AUTH_ENABLED=false turns these tests into failures that say nothing
+    about the sockets."""
+    monkeypatch.setattr(get_settings(), "auth_enabled", True)
+
+
+@pytest.mark.usefixtures("auth_on")
 def test_job_ws_requires_auth(ws_client: TestClient):
     creds = _enroll("noauth-pc")
     job = asyncio.run(
@@ -378,10 +393,8 @@ def _login_as(ws_client: TestClient, username: str, role: str, person_id: int | 
     assert r.status_code == 200, r.text
 
 
-def test_job_ws_refuses_a_viewer_with_4403(ws_client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    # The socket reads the settings itself, outside the dependency override;
-    # pin auth on so a local AUTH_ENABLED=false cannot turn this into a pass.
-    monkeypatch.setenv("AUTH_ENABLED", "true")
+@pytest.mark.usefixtures("auth_on")
+def test_job_ws_refuses_a_viewer_with_4403(ws_client: TestClient):
     creds = _enroll("oma-pc")
     person = asyncio.run(persons.create_person("Oma"))
     asyncio.run(devices.update_device(creds["device_id"], person_id=person["id"]))
@@ -405,8 +418,8 @@ def test_job_ws_refuses_a_viewer_with_4403(ws_client: TestClient, monkeypatch: p
         assert ws.receive_json()["type"] == "done"
 
 
-def test_fleet_ws_requires_a_session(ws_client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("AUTH_ENABLED", "true")
+@pytest.mark.usefixtures("auth_on")
+def test_fleet_ws_requires_a_session(ws_client: TestClient):
     before = set(fleet_hub._subs)
     with ws_client.websocket_connect("/api/fleet/ws") as ws:
         with pytest.raises(WebSocketDisconnect) as exc:
@@ -425,10 +438,10 @@ def _wait_for_new_fleet_subscriber(before: set) -> None:
         time.sleep(0.01)
 
 
-def test_fleet_ws_sends_hints_without_data(ws_client: TestClient, monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.usefixtures("auth_on")
+def test_fleet_ws_sends_hints_without_data(ws_client: TestClient):
     """Every session gets every hint, whatever it may see. That is only safe
     while a hint carries nothing: the client re-reads REST, which filters."""
-    monkeypatch.setenv("AUTH_ENABLED", "true")
     # A viewer without a person: no device of the fleet is visible to it.
     _login_as(ws_client, "zuschauer", "viewer")
     creds = _enroll("geheim-pc")
