@@ -302,13 +302,6 @@ export function onDevices(n: number): string {
   return `${fmt.format(n)} ${n === 1 ? 'Gerät' : 'Geräten'}`;
 }
 
-/** "pc-1, pc-2, nas und 4 weitere" */
-export function names(devices: Device[]): string {
-  const shown = devices.slice(0, 4).map((d) => d.hostname);
-  const rest = devices.length - shown.length;
-  return rest > 0 ? `${shown.join(', ')} und ${rest} weitere` : shown.join(', ');
-}
-
 /** What an empty list says. With only the status filter set, the answer is
  *  good news and is said as such. */
 export function emptyText(state: StateFilter, narrowedOtherwise: boolean): { title: string; text: string | null } {

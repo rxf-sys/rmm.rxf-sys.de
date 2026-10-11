@@ -1,7 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { AlertsPage } from './components/AlertsPage';
 import { CommandPalette } from './components/CommandPalette';
 import { ConnectionBanner } from './components/ConnectionBanner';
 import { DevicesPage } from './pages/devices/DevicesPage';
@@ -32,14 +31,13 @@ import { PAGE_LABEL, PAGE_PATH, devicePath, pageForPath, type PageId } from './r
 // Alles andere wird beim ersten Aufruf nachgeladen: die Detailseite, die
 // Doku und die Administration machten zusammen den größten Teil eines
 // Bündels aus, das jeder Login vollständig herunterlud.
+const AlertsPage = lazy(() => import('./pages/alerts/AlertsPage').then((m) => ({ default: m.AlertsPage })));
 const AdminPage = lazy(() => import('./components/AdminPage').then((m) => ({ default: m.AdminPage })));
 const AuditPage = lazy(() => import('./components/AuditPage').then((m) => ({ default: m.AuditPage })));
 const AutomationPage = lazy(() => import('./pages/automation/AutomationPage').then((m) => ({ default: m.AutomationPage })));
 const DevicePage = lazy(() => import('./pages/device/DevicePage').then((m) => ({ default: m.DevicePage })));
 const DocsPage = lazy(() => import('./components/DocsPage').then((m) => ({ default: m.DocsPage })));
-const PatchesPage = lazy(() =>
-  import('./components/PatchesPage').then((m) => ({ default: m.PatchesPage })),
-);
+const PatchesPage = lazy(() => import('./pages/patches/PatchesPage').then((m) => ({ default: m.PatchesPage })));
 const PersonsPage = lazy(() =>
   import('./components/PersonsPage').then((m) => ({ default: m.PersonsPage })),
 );

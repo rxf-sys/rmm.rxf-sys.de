@@ -340,77 +340,16 @@
 .dl.has-bulk {
   padding-bottom: 76px;
 }
-.bulkbar {
-  position: fixed;
-  bottom: var(--sp-5);
-  left: calc(50vw + var(--rail-w) / 2);
-  z-index: var(--z-sticky);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  max-width: calc(100vw - var(--rail-w) - 2 * var(--sp-6));
-  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
-  border: 1px solid var(--shell-line);
-  border-radius: var(--r-lg);
-  background: var(--shell);
-  box-shadow: var(--shadow-lg);
-  color: var(--shell-tx);
-  transform: translateX(-50%);
-  animation: bulk-in var(--dur-2) var(--ease-out);
-}
-@keyframes bulk-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 8px);
-  }
-}
-.bulkbar-count {
-  margin: 0 var(--sp-2) 0 0;
-  font-size: var(--fs-sm);
-  white-space: nowrap;
-}
-.bulkbar-count .muted {
-  color: var(--shell-tx-2);
-}
-.bulkbar-actions {
-  display: flex;
-  gap: var(--sp-1);
-}
-.bulkbar .btn:not(.btn-primary) {
-  border-color: transparent;
-  background: transparent;
-  color: var(--shell-tx);
-}
-.bulkbar .btn:not(.btn-primary):hover:not(:disabled) {
-  background: var(--shell-active);
-}
-.bulkbar :focus-visible {
-  outline-color: var(--shell-focus);
-}
-.bulkbar-menu {
-  display: none;
-}
 /* Seven buttons need the room of a wide screen; below that one menu. */
 @media (max-width: 1280px) {
-  .bulkbar-actions {
+  .dl .bulkbar-actions {
     display: none;
   }
-  .bulkbar-menu {
+  .dl .bulkbar-menu {
     display: block;
   }
 }
 @media (max-width: 720px) {
-  .bulkbar {
-    right: var(--sp-3);
-    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
-    left: var(--sp-3);
-    max-width: none;
-    transform: none;
-    animation-name: bulk-in-phone;
-  }
-  .bulkbar-count {
-    flex: 1;
-  }
   .dl-search {
     flex-basis: 100%;
     max-width: none;
@@ -432,17 +371,6 @@
     border-radius: 0;
   }
 }
-@keyframes bulk-in-phone {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .bulkbar {
-    animation: none;
-  }
-}
 
 /* ---- Bulk dialogs ---- */
 .bulk-form {
@@ -461,16 +389,11 @@
 .bulk-plan p {
   margin: 0;
 }
-.bulk-plan details {
+.bulk-plan .bulk-names,
+.bulk-plan .bulk-names-more {
   margin-top: var(--sp-1);
 }
-.bulk-plan .bulk-names {
-  margin-top: var(--sp-1);
-  color: var(--tx);
-  overflow-wrap: anywhere;
-}
-.bulk-cmds summary,
-.bulk-plan summary {
+.bulk-cmds summary {
   color: var(--accent-tx);
   font-size: var(--fs-sm);
   font-weight: 600;

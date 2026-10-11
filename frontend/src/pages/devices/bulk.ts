@@ -5,6 +5,7 @@
  * `job.created` entries, each with its device.
  */
 import { isAgent } from '../../deviceClass';
+import { deviceLabel } from '../../deviceLabel';
 import type { Device } from '../../types';
 
 export interface BulkOutcome<T> {
@@ -62,4 +63,12 @@ export function partition(
 /** "2 ohne Verbindung, 1 anderes Betriebssystem" */
 export function skippedText(skipped: { reason: string; count: number }[]): string {
   return skipped.map((s) => `${s.count} ${s.reason}`).join(', ');
+}
+
+/** "pc-1, pc-2, nas und 4 weitere" — `dups` from duplicateHostnames tells
+ *  devices with the same hostname apart. */
+export function names(devices: Device[], dups: Set<string>): string {
+  const shown = devices.slice(0, 4).map((d) => deviceLabel(d, dups));
+  const rest = devices.length - shown.length;
+  return rest > 0 ? `${shown.join(', ')} und ${rest} weitere` : shown.join(', ');
 }

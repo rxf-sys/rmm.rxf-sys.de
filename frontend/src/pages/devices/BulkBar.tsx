@@ -9,20 +9,13 @@ import type { Device, Job } from '../../types';
 import { Menu, type MenuEntry } from '../../ui';
 import { notify, trackJobs } from '../../ui/toast';
 import { restartCommand } from '../../deviceCommands';
-import { partition, reachable, runBulk, skippedText } from './bulk';
+import { names, partition, reachable, runBulk, skippedText } from './bulk';
 import { MaintenanceDialog, ScriptDialog, SoftwareDialog, TagsDialog } from './BulkDialogs';
 import { installCommand } from '../../softwareCatalog';
 import { deviceLabel, duplicateHostnames } from '../../deviceLabel';
 
 const fmt = new Intl.NumberFormat('de-DE');
 const devicesWord = (n: number) => `${fmt.format(n)} ${n === 1 ? 'Gerät' : 'Geräten'}`;
-
-/** "pc-1, pc-2, nas und 4 weitere" */
-function names(devices: Device[], dups: Set<string>): string {
-  const shown = devices.slice(0, 4).map((d) => deviceLabel(d, dups));
-  const rest = devices.length - shown.length;
-  return rest > 0 ? `${shown.join(', ')} und ${rest} weitere` : shown.join(', ');
-}
 
 interface Props {
   selected: Device[];

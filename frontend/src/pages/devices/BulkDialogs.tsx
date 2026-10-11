@@ -8,14 +8,12 @@ import { SCRIPT_OS_LABEL, osMatchesDevice } from '../../scriptOs';
 import { SOFTWARE, SOFTWARE_CATEGORY_LABEL, availableOn, installCommand, managerFor, type SoftwarePreset } from '../../softwareCatalog';
 import type { Device, Script } from '../../types';
 import { ErrorNote } from '../../ui';
-import { deviceLabel } from '../../deviceLabel';
 import { partition, reachable, skippedText } from './bulk';
+import { DeviceNames } from './DeviceNames';
 
 const fmt = new Intl.NumberFormat('de-DE');
 
-/** How many devices an action reaches, which ones, and what it skips. The
- *  names matter: a count alone does not say whether the server you meant to
- *  leave out is in there. */
+/** How many devices an action reaches, which ones, and what it skips. */
 function Plan({
   targets,
   total,
@@ -27,22 +25,13 @@ function Plan({
   skipped: { reason: string; count: number }[];
   dups: Set<string>;
 }) {
-  const labels = targets.map((d) => deviceLabel(d, dups));
   return (
     <div className="bulk-plan" aria-live="polite">
       <p>
         Betrifft <b>{fmt.format(targets.length)}</b> von {fmt.format(total)} ausgewählten Geräten.
         {skipped.length > 0 && <> Übersprungen: {skippedText(skipped)}.</>}
       </p>
-      {labels.length > 0 &&
-        (labels.length <= 6 ? (
-          <p className="bulk-names">{labels.join(', ')}</p>
-        ) : (
-          <details>
-            <summary>Alle {fmt.format(labels.length)} Geräte anzeigen</summary>
-            <p className="bulk-names">{labels.join(', ')}</p>
-          </details>
-        ))}
+      <DeviceNames devices={targets} dups={dups} />
     </div>
   );
 }

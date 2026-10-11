@@ -276,7 +276,7 @@ describe('PatchesPage Auswahl', () => {
     await userEvent.click(within(bar).getByRole('button', { name: /Sicherheitsupdates installieren/ }));
 
     const dialog = screen.getByRole('dialog', { name: 'Sicherheitsupdates auf buero-pc installieren?' });
-    expect(dialog).toHaveTextContent('buero-pc — 2 Sicherheitsupdates insgesamt.');
+    expect(dialog).toHaveTextContent('2 Sicherheitsupdates insgesamt auf:buero-pc');
     // nas has a security update but no connection; laptop and neu have none.
     expect(dialog).toHaveTextContent('Übersprungen: 1 ohne Verbindung, 2 ohne offene Sicherheitsupdates — nas, laptop, neu.');
     expect(installMock).not.toHaveBeenCalled();

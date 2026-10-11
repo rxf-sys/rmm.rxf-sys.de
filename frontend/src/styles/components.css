@@ -1510,3 +1510,104 @@ kbd,
   background: var(--danger);
   opacity: 1;
 }
+
+/* ---------- Bulk bar (devices, patches) ----------
+   Docked over the bottom of the content while a selection exists. Which
+   width collapses the buttons into one menu depends on how many a page
+   offers, so each page sets that breakpoint itself. */
+.bulkbar {
+  position: fixed;
+  bottom: var(--sp-5);
+  left: calc(50vw + var(--rail-w) / 2);
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: calc(100vw - var(--rail-w) - 2 * var(--sp-6));
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
+  border: 1px solid var(--shell-line);
+  border-radius: var(--r-lg);
+  background: var(--shell);
+  box-shadow: var(--shadow-lg);
+  color: var(--shell-tx);
+  transform: translateX(-50%);
+  animation: bulk-in var(--dur-2) var(--ease-out);
+}
+@keyframes bulk-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+.bulkbar-count {
+  margin: 0 var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.bulkbar-count .muted {
+  color: var(--shell-tx-2);
+}
+.bulkbar-actions {
+  display: flex;
+  gap: var(--sp-1);
+}
+/* A count inside a button, e.g. how many selected devices it applies to. */
+.bulkbar-n {
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--shell-active);
+  font-size: var(--fs-xs);
+}
+.bulkbar .btn:not(.btn-primary) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--shell-tx);
+}
+.bulkbar .btn:not(.btn-primary):hover:not(:disabled) {
+  background: var(--shell-active);
+}
+.bulkbar :focus-visible {
+  outline-color: var(--shell-focus);
+}
+.bulkbar-menu {
+  display: none;
+}
+@media (max-width: 720px) {
+  .bulkbar {
+    right: var(--sp-3);
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    left: var(--sp-3);
+    max-width: none;
+    transform: none;
+    animation-name: bulk-in-phone;
+  }
+  .bulkbar-count {
+    flex: 1;
+  }
+}
+@keyframes bulk-in-phone {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bulkbar {
+    animation: none;
+  }
+}
+
+/* ---------- Device names in bulk confirmations (DeviceNames) ---------- */
+.bulk-names {
+  color: var(--tx);
+  overflow-wrap: anywhere;
+}
+.bulk-names-more > summary {
+  color: var(--accent-tx);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.bulk-names-more > .bulk-names {
+  margin-top: var(--sp-1);
+}

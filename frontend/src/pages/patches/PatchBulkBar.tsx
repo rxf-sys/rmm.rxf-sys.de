@@ -34,21 +34,21 @@ export function PatchBulkBar({ count, hidden, withSecurity, busy, onScan, onInst
   ];
 
   return (
-    <div className="pt-bulk" role="region" aria-label="Auswahl">
-      <p className="pt-bulk-count" aria-live="polite">
+    <div className="bulkbar" role="region" aria-label="Auswahl">
+      <p className="bulkbar-count" aria-live="polite">
         <b className="num">{fmt.format(count)}</b> ausgewählt
-        {hidden > 0 && <span className="pt-bulk-muted"> · {fmt.format(hidden)} davon ausgeblendet</span>}
+        {hidden > 0 && <span className="muted"> · {fmt.format(hidden)} davon ausgeblendet</span>}
       </p>
-      <div className="pt-bulk-actions">
+      <div className="bulkbar-actions">
         <button type="button" className="btn btn-sm" onClick={onScan} disabled={busy}>
           <IconRestart size={14} /> Jetzt prüfen
         </button>
         <button type="button" className="btn btn-sm" onClick={onInstall} disabled={busy || noSecurity} title={installHint}>
           <IconShield size={14} /> Sicherheitsupdates installieren
-          {!noSecurity && <span className="pt-bulk-n num">{fmt.format(withSecurity)}</span>}
+          {!noSecurity && <span className="bulkbar-n num">{fmt.format(withSecurity)}</span>}
         </button>
       </div>
-      <div className="pt-bulk-menu">
+      <div className="bulkbar-menu">
         <Menu
           label="Aktionen für die Auswahl"
           placement="top-end"

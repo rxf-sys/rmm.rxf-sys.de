@@ -17,7 +17,6 @@ import {
   matchesOs,
   matchesQuery,
   matchesState,
-  names,
   nextSort,
   onDevices,
   parseSort,
@@ -229,9 +228,6 @@ describe('Kennzahlen', () => {
 
 describe('Texte', () => {
   it('benennt Geräte kurz', () => {
-    const many = ['a', 'b', 'c', 'd', 'e', 'f'].map((h, i) => device({ id: i, hostname: h }));
-    expect(names(many.slice(0, 2))).toBe('a, b');
-    expect(names(many)).toBe('a, b, c, d und 2 weitere');
     expect(onDevices(1)).toBe('1 Gerät');
     expect(onDevices(1200)).toBe('1.200 Geräten');
   });

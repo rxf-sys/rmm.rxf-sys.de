@@ -34,7 +34,7 @@ import {
   tabOf,
   type Tab,
 } from './alertList';
-import { useCachedQueryState } from './useCachedQueryState';
+import { useCachedQueryState } from '../../hooks/useCachedQueryState';
 
 interface Props {
   alerts: Alert[];

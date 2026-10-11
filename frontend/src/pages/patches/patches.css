@@ -379,62 +379,6 @@
 .pt.has-bulk {
   padding-bottom: 76px;
 }
-.pt-bulk {
-  position: fixed;
-  bottom: var(--sp-5);
-  left: calc(50vw + var(--rail-w) / 2);
-  z-index: var(--z-sticky);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  max-width: calc(100vw - var(--rail-w) - 2 * var(--sp-6));
-  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
-  border: 1px solid var(--shell-line);
-  border-radius: var(--r-lg);
-  background: var(--shell);
-  box-shadow: var(--shadow-lg);
-  color: var(--shell-tx);
-  transform: translateX(-50%);
-  animation: pt-bulk-in var(--dur-2) var(--ease-out);
-}
-@keyframes pt-bulk-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 8px);
-  }
-}
-.pt-bulk-count {
-  margin: 0 var(--sp-2) 0 0;
-  font-size: var(--fs-sm);
-  white-space: nowrap;
-}
-.pt-bulk-muted {
-  color: var(--shell-tx-2);
-}
-.pt-bulk-actions {
-  display: flex;
-  gap: var(--sp-1);
-}
-.pt-bulk-n {
-  padding: 0 6px;
-  border-radius: var(--r-pill);
-  background: var(--shell-active);
-  font-size: var(--fs-xs);
-}
-.pt-bulk .btn:not(.btn-primary) {
-  border-color: transparent;
-  background: transparent;
-  color: var(--shell-tx);
-}
-.pt-bulk .btn:not(.btn-primary):hover:not(:disabled) {
-  background: var(--shell-active);
-}
-.pt-bulk :focus-visible {
-  outline-color: var(--shell-focus);
-}
-.pt-bulk-menu {
-  display: none;
-}
 
 /* ---- Narrow screens ---- */
 @media (max-width: 1100px) {
@@ -444,10 +388,10 @@
 }
 /* Two labelled buttons need the room of a wide screen; below that one menu. */
 @media (max-width: 900px) {
-  .pt-bulk-actions {
+  .pt .bulkbar-actions {
     display: none;
   }
-  .pt-bulk-menu {
+  .pt .bulkbar-menu {
     display: block;
   }
 }
@@ -503,27 +447,5 @@
     border-right: 0;
     border-left: 0;
     border-radius: 0;
-  }
-  .pt-bulk {
-    right: var(--sp-3);
-    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
-    left: var(--sp-3);
-    max-width: none;
-    transform: none;
-    animation-name: pt-bulk-in-phone;
-  }
-  .pt-bulk-count {
-    flex: 1;
-  }
-}
-@keyframes pt-bulk-in-phone {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pt-bulk {
-    animation: none;
   }
 }

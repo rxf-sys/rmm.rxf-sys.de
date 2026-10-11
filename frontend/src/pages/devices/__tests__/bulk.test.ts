@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Device } from '../../../types';
 import { restartCommand } from '../../../deviceCommands';
-import { partition, runBulk, skippedText } from '../bulk';
+import { names, partition, runBulk, skippedText } from '../bulk';
 
 describe('runBulk', () => {
   it('keeps going past failures and reports them', async () => {
@@ -60,5 +60,19 @@ describe('partition', () => {
     );
     expect(targets.map((x) => x.id)).toEqual([1]);
     expect(skippedText(skipped)).toBe('1 ohne Verbindung, 1 ohne Agent');
+  });
+});
+
+describe('names', () => {
+  const d = (id: number, hostname: string) => ({ id, hostname }) as Device;
+
+  it('names four devices and counts the rest', () => {
+    const many = ['a', 'b', 'c', 'd', 'e', 'f'].map((h, i) => d(i, h));
+    expect(names(many.slice(0, 2), new Set())).toBe('a, b');
+    expect(names(many, new Set())).toBe('a, b, c, d und 2 weitere');
+  });
+
+  it('tells devices with the same hostname apart', () => {
+    expect(names([d(1, 'nas'), d(2, 'nas')], new Set(['nas']))).toBe('nas (#1), nas (#2)');
   });
 });

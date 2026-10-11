@@ -75,6 +75,20 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Auswahlfeldern, dazu klarer Status; Alarmregeln und geplante Skripte mit
   Schalter und Menü je Zeile, Bearbeiten in Dialogen statt Inline-Formularen,
   die Regel-Erklärung als aufklappbarer Hinweis.
+- **Alarm-Center neu aufgebaut.** Reiter Offen / Quittiert / Behoben mit
+  Zahlen und Filter nach Person, beides in der Adresse. Offene Alarme stehen
+  nach Dringlichkeit: erst Plattenalarme kritischer Geräte, dann was schon
+  lange anhält, dann die neuesten. Jeder offene Alarm lässt sich einzeln
+  quittieren — jetzt auch auf dem Telefon —, „Alle quittieren" nennt vorher
+  die betroffenen Alarme und schickt je Alarm eine eigene Anfrage. Jede
+  Zeile verlinkt das Gerät und nennt die auslösende Regel.
+- **Updates-Seite neu aufgebaut.** Kennzahlen (Geräte mit offenen Updates,
+  Sicherheitsupdates, nicht geprüfte Geräte), Stand je System als Balken,
+  Filter für Zustand, System, Verbindung, Person und Suche in der Adresse
+  und eine sortierbare Tabelle, die auf schmalen Bildschirmen zu Karten
+  wird. Admins und Techniker wählen Geräte aus und starten „Jetzt prüfen"
+  oder „Sicherheitsupdates installieren" für die Auswahl; die Bestätigung
+  nennt jedes Zielgerät und die übersprungenen.
 - **Vorbereitung für MDM (iOS/iPadOS).** `infrastructure/docker-compose.yml`
   kennt jetzt einen NanoMDM-Container, der am Compose-Profil `mdm` hängt und
   im Normalbetrieb nicht startet — ohne APNs-Push-Zertifikat gäbe es nichts

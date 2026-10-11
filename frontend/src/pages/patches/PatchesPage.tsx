@@ -34,7 +34,9 @@ import { PAGE_PATH, devicePath } from '../../routes';
 import type { Device, Job, PatchSummary, Person } from '../../types';
 import { EmptyState, ErrorNote, Meter, PageHeader, Panel, Skeleton, SkeletonRows, StatusBadge } from '../../ui';
 import { notify, trackJobs } from '../../ui/toast';
-import { partition, reachable, runBulk, skippedText, type BulkOutcome } from '../devices/bulk';
+import { deviceLabel, duplicateHostnames } from '../../deviceLabel';
+import { names, partition, reachable, runBulk, skippedText, type BulkOutcome } from '../devices/bulk';
+import { DeviceNames } from '../devices/DeviceNames';
 import { useFleetLoad } from './fleetLoading';
 import { PatchBulkBar } from './PatchBulkBar';
 import {
@@ -56,7 +58,6 @@ import {
   matchesOs,
   matchesQuery,
   matchesState,
-  names,
   nextSort,
   neverScanned,
   onDevices,
@@ -228,6 +229,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
   const { loading, error: loadError } = useFleetLoad();
   const { ask, dialog: confirmDialog } = useConfirm();
   const [busy, setBusy] = useState(false);
+  const dups = useMemo(() => duplicateHostnames(devices), [devices]);
 
   // Filters and sort live in the URL: a reload keeps the view and a link can
   // point straight at "Sicherheitsupdates".
@@ -402,19 +404,20 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
     const targetIds = new Set(plan.targets.map((d) => d.id));
     const skippedDevices = list.filter((d) => !targetIds.has(d.id));
     const ok = await ask({
-      title: n === 1 ? `Sicherheitsupdates auf ${plan.targets[0]!.hostname} installieren?` : `Sicherheitsupdates auf ${fmt.format(n)} Geräten installieren?`,
+      title: n === 1 ? `Sicherheitsupdates auf ${deviceLabel(plan.targets[0]!, dups)} installieren?` : `Sicherheitsupdates auf ${fmt.format(n)} Geräten installieren?`,
       body: (
         <>
           <p>
-            {names(plan.targets)} — {fmt.format(updates)} {updates === 1 ? 'Sicherheitsupdate' : 'Sicherheitsupdates'} insgesamt.
+            {fmt.format(updates)} {updates === 1 ? 'Sicherheitsupdate' : 'Sicherheitsupdates'} insgesamt auf:
           </p>
+          <DeviceNames devices={plan.targets} dups={dups} />
           <p>
             Die Installation läuft auf den Geräten und kann dauern. Manche Updates erzwingen einen Neustart — wer gerade davor sitzt,
             verliert ungespeicherte Arbeit.
           </p>
           {plan.skipped.length > 0 && (
             <p className="muted">
-              Übersprungen: {skippedText(plan.skipped)} — {names(skippedDevices)}.
+              Übersprungen: {skippedText(plan.skipped)} — {names(skippedDevices, dups)}.
             </p>
           )}
         </>

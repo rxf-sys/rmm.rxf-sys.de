@@ -2,11 +2,11 @@ import { useQueryClient, type QueryKey, type QueryState } from '@tanstack/react-
 import { useCallback, useSyncExternalStore } from 'react';
 
 /**
- * The cache entry of a query this page reads but does not fetch. The fleet
- * hook loads the alerts and the shell hands them down as props, and props
- * cannot tell "nothing is open" from "nothing has arrived yet". The cache
- * can, without a request of its own. `undefined` while nothing has
- * registered the query.
+ * The cache entry of a query a page reads but does not fetch. The fleet
+ * hook loads devices, alerts and the patch summary and the shell hands them
+ * down as props, and props cannot tell "nothing there" from "nothing has
+ * arrived yet". The cache can, without a request of its own. `undefined`
+ * while nothing has registered the query.
  */
 export function useCachedQueryState<T>(key: QueryKey): QueryState<T> | undefined {
   const qc = useQueryClient();

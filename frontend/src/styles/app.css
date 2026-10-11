@@ -71,12 +71,6 @@
 .mono {
   font-family: var(--mono);
 }
-.tx2 {
-  color: var(--tx2);
-}
-.tx3 {
-  color: var(--tx3);
-}
 .muted {
   color: var(--tx3);
   font-weight: 500;
@@ -472,7 +466,6 @@ h1.page-title {
   }
 }
 @media (max-width: 760px) {
-  .grid-4,
   .grid-2 {
     grid-template-columns: 1fr;
   }
@@ -483,110 +476,3 @@ h1.page-title {
   border-color: var(--accent) !important;
   color: var(--accent) !important;
 }
-
-/* --- Alarm-Center (components/AlertsPage.tsx) ------------------------- */
-/* Eine Zeile je Alarm mit farbigem Streifen statt einer Karte je Alarm:
-   zehn offene Alarme waren vorher zehn schwebende Kästen. */
-.alarm {
-  display: grid;
-  grid-template-columns: 3px 1fr auto;
-  gap: 0 13px;
-  align-items: center;
-  border-bottom: 1px solid var(--line2);
-}
-.alarm:last-of-type {
-  border-bottom: none;
-}
-.alarm:hover {
-  background: var(--hover);
-}
-.alarm-rail {
-  align-self: stretch;
-}
-.alarm-body {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  padding: 11px 0;
-}
-.alarm-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  flex-wrap: wrap;
-}
-.alarm-msg {
-  font-weight: 700;
-  font-size: 13px;
-}
-/* Wie lange der Zustand schon anhält — die Angabe, die entscheidet, ob das
-   eine Meldung oder ein Zustand ist. */
-.alarm-since {
-  font: 700 11px var(--mono);
-  color: var(--tx2);
-  font-variant-numeric: tabular-nums;
-}
-.alarm-sub {
-  font-size: 11px;
-  color: var(--tx3);
-}
-.alarm-actions {
-  display: flex;
-  gap: 7px;
-  padding-right: 16px;
-  flex: none;
-}
-.alarm-resolved {
-  display: grid;
-  grid-template-columns: 8px 1fr auto auto;
-  gap: 11px;
-  align-items: center;
-  width: 100%;
-  padding: 9px 16px;
-  border: none;
-  border-bottom: 1px solid var(--line2);
-  background: none;
-  color: var(--tx2);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-}
-.alarm-resolved:last-of-type {
-  border-bottom: none;
-}
-.alarm-resolved:hover {
-  background: var(--hover);
-}
-.alarm-resolved-msg {
-  font-weight: 600;
-  color: var(--tx);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.alarm-resolved-when {
-  color: var(--tx3);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-@media (max-width: 720px) {
-  .alarm {
-    grid-template-columns: 3px 1fr;
-  }
-  .alarm-actions {
-    grid-column: 2;
-    padding: 0 16px 11px 0;
-  }
-  .alarm-resolved {
-    grid-template-columns: 8px 1fr;
-  }
-  .alarm-resolved-when,
-  .alarm-resolved .muted {
-    grid-column: 2;
-  }
-}
-
-
