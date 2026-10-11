@@ -1,8 +1,9 @@
 # golangci-lint v2 for the agent. CI pins the linter version next to the
 # action in .github/workflows/ci.yml; run it locally from agent/ with
-#   golangci-lint run ./...
-# The agent builds per OS, so a file with a build tag is only linted for its
-# own GOOS — CI runs the linter on Linux, go vet covers Windows and macOS.
+#   make lint
+# The agent builds per OS and a file with a build tag is only linted for its
+# own GOOS, so CI and `make lint` run the linter once per target OS: linux,
+# windows and darwin (GOOS=<os> golangci-lint run ./...).
 version: "2"
 
 linters:
