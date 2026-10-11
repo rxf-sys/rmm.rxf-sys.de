@@ -30,13 +30,19 @@ export function Meter({ label, value, level, detail, marks = [], title }: Props)
           <b>{has ? `${Math.round(pct)} %` : '—'}</b>
         </span>
       </div>
+      {/* Without a value the track is decoration: a meter needs
+          aria-valuenow, and the "—" in the head already says it. */}
       <div
         className="meter2-track"
-        role="meter"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={has ? Math.round(pct) : undefined}
-        aria-label={typeof label === 'string' ? label : undefined}
+        {...(has
+          ? {
+              role: 'meter',
+              'aria-valuemin': 0,
+              'aria-valuemax': 100,
+              'aria-valuenow': Math.round(pct),
+              'aria-label': typeof label === 'string' ? label : undefined,
+            }
+          : { 'aria-hidden': true })}
       >
         <span style={{ width: `${pct}%` }} />
         {marks.map((m) => (
