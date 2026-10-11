@@ -1,0 +1,208 @@
+/* Audit-Log (pages/audit). */
+
+/* ---- Toolbar ---- */
+.aud-toolbar,
+.aud-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+}
+.aud-search {
+  position: relative;
+  flex: 1 1 280px;
+  max-width: 420px;
+}
+.aud-search svg {
+  position: absolute;
+  top: 50%;
+  left: 11px;
+  color: var(--tx-3);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.aud-search .input {
+  width: 100%;
+  padding-left: 34px;
+}
+.aud-select {
+  /* A long actor name in one option must not widen the page. */
+  width: 200px;
+  min-width: 0;
+}
+.aud-select.is-set {
+  border-color: var(--accent-line);
+  color: var(--accent-tx);
+}
+.aud-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--hit);
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.aud-reset {
+  min-height: var(--hit);
+}
+.aud-note {
+  max-width: 80ch;
+  margin-top: calc(-1 * var(--sp-2));
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}
+
+/* ---- Entries ---- */
+.aud-pad {
+  padding: 0 var(--sp-4) var(--sp-4);
+}
+.aud-days {
+  transition: opacity var(--dur-2) var(--ease-out);
+}
+/* The previous page while the next one loads: still readable, clearly not
+   the answer yet. */
+.aud-days.is-stale {
+  opacity: 0.55;
+}
+.aud-day {
+  border-top: 1px solid var(--line);
+}
+.aud-day-label {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 1;
+  margin: 0;
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--tx-3);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.aud-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.aud-item {
+  /* Room for "23:59:59" in rem, so it grows with the touch type scale; the
+     lead is chevron, time and gaps, shared by the row and the lines below. */
+  --aud-time-w: 4.6rem;
+  --aud-lead: calc(16px + var(--aud-time-w) + 2 * var(--sp-2));
+  border-top: 1px solid var(--line);
+}
+.aud-item:first-child {
+  border-top: 0;
+}
+.aud-item.is-open {
+  background: var(--surface-2);
+}
+.aud-toggle {
+  display: grid;
+  grid-template-columns: 16px var(--aud-time-w) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: var(--hit);
+  padding: var(--sp-2) var(--sp-4) 2px;
+  border: 0;
+  background: none;
+  color: var(--tx);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.aud-toggle:focus-visible {
+  outline-offset: -2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .aud-item:not(.is-open):has(.aud-toggle:hover) {
+    background: var(--hover);
+  }
+}
+.aud-chev {
+  display: inline-grid;
+  align-self: center;
+  color: var(--tx-3);
+}
+.aud-time {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}
+.aud-text {
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.aud-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  padding: 0 var(--sp-4) var(--sp-2) calc(var(--sp-4) + var(--aud-lead));
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}
+.aud-actor {
+  color: var(--tx-2);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.aud-dev {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+a.aud-dev {
+  color: var(--accent-tx);
+  font-weight: 600;
+}
+.aud-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--tx-2);
+  font-weight: 600;
+}
+
+/* ---- Detail ---- */
+.aud-detail {
+  padding: var(--sp-2) var(--sp-4) var(--sp-4) calc(var(--sp-4) + var(--aud-lead));
+  font-size: var(--fs-sm);
+}
+.aud-detail code,
+.aud-id {
+  font-size: var(--fs-sm);
+}
+.aud-id {
+  color: var(--tx-3);
+  font-weight: 500;
+}
+.aud-val,
+.aud-code {
+  white-space: pre-wrap;
+}
+.aud-none {
+  margin-top: var(--sp-2);
+  color: var(--tx-3);
+}
+
+/* ---- Narrow screens ---- */
+@media (max-width: 720px) {
+  .aud-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .aud-select {
+    flex: 1 1 0;
+    width: auto;
+  }
+  /* The detail uses the full width: field values are long and the time
+     column above has nothing to say about them. */
+  .aud-detail {
+    padding-left: var(--sp-4);
+  }
+}
