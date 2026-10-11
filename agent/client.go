@@ -48,10 +48,22 @@ type message struct {
 	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
-// sender serializes all outbound writes through one channel. gorilla/websocket
-// forbids concurrent writes, and job execution streams output from its own
-// goroutine while heartbeats keep ticking — so every writer enqueues here and
-// a single drain (the main select loop) does the actual WriteJSON.
+// newMessage wraps payload for the wire. A payload that does not marshal is
+// a bug in the agent, not a problem of the connection, so the callers log it
+// and carry on.
+func newMessage(msgType string, payload any) (message, bool) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("marshal %s: %v", msgType, err)
+		return message{}, false
+	}
+	return message{Type: msgType, Payload: raw}, true
+}
+
+// sender queues what the goroutines running jobs, scans and updates report.
+// gorilla/websocket forbids concurrent writes, so they enqueue here and the
+// serve loop, the socket's only writer, drains the queue. The serve loop
+// itself never sends through here; see serve.
 type sender struct {
 	outbox chan message
 }
@@ -62,13 +74,12 @@ func newSender() *sender { return &sender{outbox: make(chan message, outboxSize)
 // which applies natural backpressure to a chatty job instead of dropping
 // output. ctx cancellation unblocks it during shutdown.
 func (s *sender) send(ctx context.Context, msgType string, payload any) {
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		log.Printf("marshal %s: %v", msgType, err)
+	m, ok := newMessage(msgType, payload)
+	if !ok {
 		return
 	}
 	select {
-	case s.outbox <- message{Type: msgType, Payload: raw}:
+	case s.outbox <- m:
 	case <-ctx.Done():
 	}
 }
@@ -166,43 +177,103 @@ func connectAndServe(ctx context.Context, cfg Config) error {
 	connCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	s := newSender()
-
 	frames := make(chan []byte)
 	readErr := make(chan error, 1)
 	go readFrames(connCtx, conn, frames, readErr)
-
-	// First heartbeat immediately — it flips the device to 'online' in the
-	// dashboard without waiting a full interval — followed by a full
-	// inventory so the device page is populated right after enrollment.
-	s.send(connCtx, "heartbeat", collectHeartbeat())
-	s.send(connCtx, "inventory", collectInventory())
 
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
 	inventoryTicker := time.NewTicker(inventoryInterval)
 	defer inventoryTicker.Stop()
+	return serve(connCtx, cfg, link{
+		conn:      conn,
+		out:       newSender(),
+		frames:    frames,
+		readErr:   readErr,
+		heartbeat: ticker.C,
+		inventory: inventoryTicker.C,
+	})
+}
+
+// frameWriter is the part of *websocket.Conn that the serve loop writes
+// with, narrowed like frameReader so the loop can run in tests.
+type frameWriter interface {
+	WriteJSON(v any) error
+	SetWriteDeadline(t time.Time) error
+	WriteControl(messageType int, data []byte, deadline time.Time) error
+}
+
+// link is one live connection as the serve loop sees it. Channels and a
+// narrowed writer instead of the socket and real tickers let the loop run in
+// tests without a network and without waiting for a tick.
+type link struct {
+	conn      frameWriter
+	out       *sender
+	frames    <-chan []byte
+	readErr   <-chan error
+	heartbeat <-chan time.Time
+	inventory <-chan time.Time
+}
+
+// serve runs one connection and is the only goroutine that writes to its
+// socket. It returns nil once ctx ends (the agent shuts down) and the error
+// that ended the connection otherwise. The caller cancels ctx after serve
+// returns, which releases every job still waiting on the outbox.
+//
+// What the loop produces itself (heartbeat, inventory, the answers to ping
+// and get_logs) it writes directly instead of queueing it. The loop is the
+// outbox's only reader: waiting there for room would mean waiting on itself,
+// and once running jobs had filled the outbox the agent would hang for good,
+// neither reading the socket nor noticing that it dropped. Skipping the queue
+// only lets these messages overtake queued job output, which none of them
+// depends on; job messages keep their order among themselves.
+func serve(ctx context.Context, cfg Config, l link) error {
+	write := func(m message) error {
+		_ = l.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+		return l.conn.WriteJSON(m)
+	}
+	writeNew := func(msgType string, payload any) error {
+		m, ok := newMessage(msgType, payload)
+		if !ok {
+			return nil
+		}
+		return write(m)
+	}
+
+	// First heartbeat immediately — it flips the device to 'online' in the
+	// dashboard without waiting a full interval — followed by a full
+	// inventory so the device page is populated right after enrollment.
+	if err := writeNew("heartbeat", collectHeartbeat()); err != nil {
+		return err
+	}
+	if err := writeNew("inventory", collectInventory()); err != nil {
+		return err
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
-			_ = conn.WriteControl(
+			_ = l.conn.WriteControl(
 				websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseNormalClosure, "shutdown"),
 				time.Now().Add(writeTimeout),
 			)
 			return nil
-		case err := <-readErr:
+		case err := <-l.readErr:
 			return err
-		case m := <-s.outbox:
-			_ = conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-			if err := conn.WriteJSON(m); err != nil {
+		case m := <-l.out.outbox:
+			if err := write(m); err != nil {
 				return err
 			}
-		case <-ticker.C:
-			s.send(connCtx, "heartbeat", collectHeartbeat())
-		case <-inventoryTicker.C:
-			s.send(connCtx, "inventory", collectInventory())
-		case raw := <-frames:
+		case <-l.heartbeat:
+			if err := writeNew("heartbeat", collectHeartbeat()); err != nil {
+				return err
+			}
+		case <-l.inventory:
+			if err := writeNew("inventory", collectInventory()); err != nil {
+				return err
+			}
+		case raw := <-l.frames:
 			cmd, err := decodeCommand(raw)
 			if err != nil {
 				// Dropped, not fatal: a newer server may send something this
@@ -211,7 +282,11 @@ func connectAndServe(ctx context.Context, cfg Config) error {
 				log.Printf("ignoring server message: %v", err)
 				continue
 			}
-			dispatch(connCtx, cfg, cmd, s)
+			if reply, ok := dispatch(ctx, cfg, cmd, l.out); ok {
+				if err := write(reply); err != nil {
+					return err
+				}
+			}
 		}
 	}
 }
@@ -304,11 +379,14 @@ func decodeCommand(raw []byte) (command, error) {
 
 // dispatch carries out a decoded command. Ping/pong keeps the pipeline
 // observable; anything that can take a while (jobs, scans, updates) runs in
-// its own goroutine so it never blocks heartbeats or later messages.
-func dispatch(ctx context.Context, cfg Config, cmd command, s *sender) {
+// its own goroutine so it never blocks heartbeats or later messages, and
+// reports through s. A command answered on the spot returns its reply for
+// the serve loop to write, because dispatch runs on the loop and must not
+// queue behind the outbox the loop drains.
+func dispatch(ctx context.Context, cfg Config, cmd command, s *sender) (reply message, ok bool) {
 	switch cmd.Kind {
 	case cmdPing:
-		s.send(ctx, "pong", map[string]any{"ts": time.Now().Unix()})
+		return newMessage("pong", map[string]any{"ts": time.Now().Unix()})
 	case cmdJob:
 		if cmd.Job.Kind == "patch_install" {
 			go runPatchInstall(ctx, s, cmd.Job)
@@ -322,7 +400,7 @@ func dispatch(ctx context.Context, cfg Config, cmd command, s *sender) {
 		}()
 	case cmdGetLogs:
 		// Remote diagnostics: ship the recent log ring to the dashboard.
-		s.send(ctx, "agent_logs", map[string]any{"lines": logRing.Snapshot()})
+		return newMessage("agent_logs", map[string]any{"lines": logRing.Snapshot()})
 	case cmdUpdate:
 		go func() {
 			if err := applyUpdate(ctx, cfg, cmd.Update); err != nil {
@@ -330,4 +408,5 @@ func dispatch(ctx context.Context, cfg Config, cmd command, s *sender) {
 			}
 		}()
 	}
+	return message{}, false
 }

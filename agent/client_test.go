@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -282,17 +284,32 @@ func nextSent(t *testing.T, s *sender) (string, map[string]any) {
 	}
 }
 
-func TestDispatchAnswersPingAndLogRequests(t *testing.T) {
-	ctx := context.Background()
+// dispatchReply runs dispatch and returns the reply it hands back to the
+// serve loop. Replies must not go through the outbox: the loop that would
+// have to drain it is the one waiting for the reply.
+func dispatchReply(t *testing.T, cmd command) (string, map[string]any) {
+	t.Helper()
 	s := newSender()
+	reply, ok := dispatch(context.Background(), Config{}, cmd, s)
+	if !ok {
+		t.Fatalf("no reply to %+v", cmd)
+	}
+	if len(s.outbox) != 0 {
+		t.Fatalf("reply to %+v was queued in the outbox as well", cmd)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(reply.Payload, &payload); err != nil {
+		t.Fatalf("%s payload: %v", reply.Type, err)
+	}
+	return reply.Type, payload
+}
 
-	dispatch(ctx, Config{}, command{Kind: cmdPing}, s)
-	if typ, payload := nextSent(t, s); typ != "pong" || payload["ts"] == nil {
+func TestDispatchAnswersPingAndLogRequests(t *testing.T) {
+	if typ, payload := dispatchReply(t, command{Kind: cmdPing}); typ != "pong" || payload["ts"] == nil {
 		t.Errorf("ping: got %s %v", typ, payload)
 	}
 
-	dispatch(ctx, Config{}, command{Kind: cmdGetLogs}, s)
-	if typ, payload := nextSent(t, s); typ != "agent_logs" {
+	if typ, payload := dispatchReply(t, command{Kind: cmdGetLogs}); typ != "agent_logs" {
 		t.Errorf("get_logs: got %s %v", typ, payload)
 	} else if _, ok := payload["lines"].([]any); !ok {
 		t.Errorf("get_logs: lines must be a list, got %v", payload["lines"])
@@ -303,7 +320,9 @@ func TestDispatchAnswersPingAndLogRequests(t *testing.T) {
 // anything is executed, which keeps this test free of side effects.
 func TestDispatchRunsAJobToItsResult(t *testing.T) {
 	s := newSender()
-	dispatch(context.Background(), Config{}, command{Kind: cmdJob, Job: jobSpec{JobID: 5, Shell: "fish"}}, s)
+	if reply, ok := dispatch(context.Background(), Config{}, command{Kind: cmdJob, Job: jobSpec{JobID: 5, Shell: "fish"}}, s); ok {
+		t.Fatalf("a job reports through the outbox, not as a reply, got %s", reply.Type)
+	}
 
 	for _, want := range []string{"job_started", "job_output", "job_result"} {
 		typ, payload := nextSent(t, s)
@@ -388,4 +407,144 @@ func FuzzDecodeCommand(f *testing.F) {
 			t.Fatalf("round trip: %+v became %+v", cmd, again)
 		}
 	})
+}
+
+// recordingConn stands in for the socket in serve-loop tests. It reports the
+// type of every message written to it, except the job output the tests
+// flood the outbox with, and "close" for the closing handshake.
+type recordingConn struct {
+	written chan string
+}
+
+func newRecordingConn() *recordingConn {
+	return &recordingConn{written: make(chan string, 256)}
+}
+
+func (c *recordingConn) WriteJSON(v any) error {
+	m, ok := v.(message)
+	if !ok {
+		return errors.New("serve wrote something other than a message")
+	}
+	if m.Type != "job_output" {
+		c.written <- m.Type
+	}
+	return nil
+}
+
+func (c *recordingConn) SetWriteDeadline(time.Time) error { return nil }
+
+func (c *recordingConn) WriteControl(messageType int, _ []byte, _ time.Time) error {
+	if messageType == websocket.CloseMessage {
+		c.written <- "close"
+	}
+	return nil
+}
+
+// expectWritten fails the test unless the serve loop writes want next.
+func expectWritten(t *testing.T, c *recordingConn, want string) {
+	t.Helper()
+	select {
+	case got := <-c.written:
+		if got != want {
+			t.Fatalf("serve wrote %q, want %q", got, want)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("serve never wrote %q — the loop is stuck", want)
+	}
+}
+
+// within fails the test when the serve loop does not take v from ch.
+func within[T any](t *testing.T, ch chan<- T, v T, what string) {
+	t.Helper()
+	select {
+	case ch <- v:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("serve no longer takes %s — the loop is stuck", what)
+	}
+}
+
+// The serve loop is the only reader of the outbox. Running jobs can fill it
+// faster than the socket drains it, and whatever the loop produces itself
+// must still go out — otherwise the loop waits on itself, and the agent
+// neither answers nor notices that its connection is gone.
+func TestServeKeepsServingWhileJobsFillTheOutbox(t *testing.T) {
+	cases := []struct {
+		name    string
+		end     func(cancel context.CancelFunc, readErr chan<- error)
+		wantErr error
+	}{
+		{"agent shuts down", func(cancel context.CancelFunc, _ chan<- error) { cancel() }, nil},
+		{"connection drops", func(_ context.CancelFunc, readErr chan<- error) { readErr <- io.ErrUnexpectedEOF }, io.ErrUnexpectedEOF},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			conn := newRecordingConn()
+			s := newSender()
+			frames := make(chan []byte)
+			readErr := make(chan error, 1)
+			heartbeat := make(chan time.Time)
+			inventory := make(chan time.Time)
+			served := make(chan error, 1)
+			go func() {
+				served <- serve(ctx, Config{}, link{
+					conn: conn, out: s, frames: frames, readErr: readErr,
+					heartbeat: heartbeat, inventory: inventory,
+				})
+			}()
+			expectWritten(t, conn, "heartbeat")
+			expectWritten(t, conn, "inventory")
+
+			// Several chatty jobs. Whenever the loop takes a message, one of
+			// the senders still waiting refills the slot at once, so the
+			// outbox stays full for as long as they run.
+			var jobs sync.WaitGroup
+			for range 8 {
+				jobs.Go(func() {
+					for ctx.Err() == nil {
+						s.send(ctx, "job_output", map[string]any{"job_id": 1, "chunk": "x"})
+					}
+				})
+			}
+			for len(s.outbox) < cap(s.outbox) {
+				runtime.Gosched()
+			}
+
+			for range 20 {
+				within(t, frames, []byte(`{"type":"ping"}`), "server messages")
+				expectWritten(t, conn, "pong")
+				within(t, frames, []byte(`{"type":"get_logs"}`), "server messages")
+				expectWritten(t, conn, "agent_logs")
+				within(t, heartbeat, time.Now(), "heartbeat ticks")
+				expectWritten(t, conn, "heartbeat")
+			}
+			within(t, inventory, time.Now(), "inventory ticks")
+			expectWritten(t, conn, "inventory")
+
+			c.end(cancel, readErr)
+			select {
+			case err := <-served:
+				if !errors.Is(err, c.wantErr) {
+					t.Fatalf("serve returned %v, want %v", err, c.wantErr)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("serve did not return")
+			}
+			if c.wantErr == nil {
+				expectWritten(t, conn, "close")
+			}
+
+			// connectAndServe cancels the connection's context once serve
+			// returns; that has to release every job still waiting to send.
+			cancel()
+			jobsDone := make(chan struct{})
+			go func() { jobs.Wait(); close(jobsDone) }()
+			select {
+			case <-jobsDone:
+			case <-time.After(5 * time.Second):
+				t.Fatal("jobs are still blocked on the outbox after the connection ended")
+			}
+		})
+	}
 }
