@@ -18,7 +18,7 @@ func defaultGateway() string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer closeQuietly(f)
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())

@@ -85,7 +85,7 @@ func rebootRequired() bool {
 	} {
 		k, err := registry.OpenKey(registry.LOCAL_MACHINE, path, registry.QUERY_VALUE)
 		if err == nil {
-			k.Close()
+			closeQuietly(k)
 			return true
 		}
 	}

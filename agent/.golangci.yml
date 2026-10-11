@@ -1,0 +1,76 @@
+# golangci-lint v2 for the agent. CI pins the linter version next to the
+# action in .github/workflows/ci.yml; run it locally from agent/ with
+#   golangci-lint run ./...
+# The agent builds per OS, so a file with a build tag is only linted for its
+# own GOOS — CI runs the linter on Linux, go vet covers Windows and macOS.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - gosec
+    - govet
+    - staticcheck
+    - unused
+
+  exclusions:
+    # Intended gosec findings. Each rule names one file and one check, so the
+    # same check anywhere else — or another check in the same file — still
+    # fails the build. Paths are relative to this file.
+    rules:
+      # G204: running the operator's command in the requested shell is what a
+      # job is. The command arrives over the authenticated agent socket and
+      # the server audits every job before sending it.
+      - path: ^jobs\.go$
+        linters: [gosec]
+        text: G204
+      # G204: the Windows Update install script is fixed; the patch ids
+      # spliced into it are single-quote escaped first.
+      - path: ^patches_windows\.go$
+        linters: [gosec]
+        text: G204
+      # G204: probe helpers (execOut, runWithTimeout, psLines) whose callers
+      # pass only literal programs and arguments.
+      - path: ^(hostinfo_unix|software_linux|netinfo_windows)\.go$
+        linters: [gosec]
+        text: G204
+      # G204: RustDesk is called from a fixed list of install locations.
+      - path: ^rustdesk\.go$
+        linters: [gosec]
+        text: G204
+      # G304: the paths are fixed /sys locations or globs over them.
+      - path: ^hostinfo_linux\.go$
+        linters: [gosec]
+        text: G304
+      # G304: readResolvConf is only called with the fixed resolv.conf paths.
+      - path: ^netinfo_unix\.go$
+        linters: [gosec]
+        text: G304
+      # G306: the new agent binary has to stay executable for the service
+      # manager. It is written only after its sha256 and ed25519 signature
+      # checked out (verifyPayload).
+      - path: ^update\.go$
+        linters: [gosec]
+        text: G306
+      # G404: math/rand only spreads reconnects over time (jitter). Nothing
+      # secret or security-relevant depends on the value.
+      - path: ^client\.go$
+        linters: [gosec]
+        text: G404
+      # G304, G703: the signing tool reads the release files its operator
+      # names on the command line; that the path comes from os.Args is the
+      # point, not a traversal.
+      - path: ^tools/sign/main\.go$
+        linters: [gosec]
+        text: G304|G703
+      # G306: manifest.json is public by design — the server hands it to
+      # every agent and to the download page.
+      - path: ^tools/sign/main\.go$
+        linters: [gosec]
+        text: G306
+
+issues:
+  # Report everything at once instead of the default sample per linter.
+  max-issues-per-linter: 0
+  max-same-issues: 0

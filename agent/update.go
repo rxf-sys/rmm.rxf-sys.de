@@ -114,7 +114,7 @@ func downloadUpdate(ctx context.Context, cfg Config, url string) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeQuietly(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("server answered %s", resp.Status)
 	}
