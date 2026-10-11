@@ -434,6 +434,15 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Warnung `job_secrets.discarded` im Server-Log nennt Job und Länge, nie den
   Inhalt. Ein Neustart verliert den Zustand weiterhin ohne Spur, er liegt
   nur im Speicher.
+- `POST /api/devices/{id}/patches/install` nahm beliebig viele und beliebig
+  lange Patch-IDs an. Der Server schickt sie in einer einzigen Nachricht an
+  den Agent, der höchstens 1 MiB pro Nachricht liest — eine zu große
+  Auswahl kostete ihn die Verbindung. Jetzt sind es höchstens 400 IDs à 128
+  Zeichen (auch im ungünstigsten Fall unter 1 MiB), und jede ID muss für
+  dieses Gerät ausstehen: eine erfundene oder die eines anderen Geräts
+  beantwortet der Server mit 422, statt sie an den Agent weiterzureichen.
+  Doppelte IDs gehen nur einmal hinaus. „Alles installieren" schickt wie
+  bisher keine IDs und ist davon nicht betroffen.
 
 ---
 
