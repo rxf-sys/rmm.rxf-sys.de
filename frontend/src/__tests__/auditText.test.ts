@@ -119,6 +119,21 @@ describe('describeAudit', () => {
     expect(describeAudit(bare)).toBe('Skript „Skript #7“ geändert');
   });
 
+  it('names the reporting device and the job it had no business with', () => {
+    const foreign = event({
+      event: 'agent.job_mismatch',
+      device_id: 2,
+      detail: { hostname: 'intruder-pc', job_id: 12, reason: 'foreign', owner_device_id: 1 },
+    });
+    expect(describeAudit(foreign)).toBe('Meldung von intruder-pc zu fremdem Job #12 abgewiesen');
+    const unknown = event({
+      event: 'agent.job_mismatch',
+      device_id: 2,
+      detail: { job_id: 99, reason: 'unknown' },
+    });
+    expect(describeAudit(unknown)).toBe('Meldung von Gerät 2 zu unbekanntem Job #99 abgewiesen');
+  });
+
   it('has a sentence for every event the server can write', () => {
     // Sonst steht im Feed der rohe Ereignisname — genau das, was hier weg soll.
     const events = [
@@ -134,6 +149,7 @@ describe('describeAudit', () => {
       'account.password_reset',
       'account.totp_reset',
       'agent.enrolled',
+      'agent.job_mismatch',
       'devices.token_created',
       'devices.token_deleted',
       'devices.updated',

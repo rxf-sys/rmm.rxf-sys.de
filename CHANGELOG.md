@@ -227,6 +227,18 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   mehr der Realität (SSH statt Self-hosted Runner).
 
 ### Sicherheit
+- **Ein Agent konnte über die Jobs anderer Geräte berichten.** Der Server
+  übernahm die `job_id` aus `job_started`, `job_output` und `job_result`
+  ungeprüft. Ein manipuliertes oder fehlerhaftes Gerät konnte damit den Job
+  eines anderen Geräts als laufend markieren, Ausgabe anhängen oder ihn
+  abschließen — und, weil die `##RMM-CRED##`-Erkennung ihre halb gelesene
+  Zeile pro Job festhält, sich in dessen Passwort-Zeile einschieben: das
+  Secret landete dann im Klartext im Job-Log. Jetzt prüft der Server vor jeder
+  dieser Meldungen, ob der Job zum Gerät des Sockets gehört, verwirft fremde
+  und unbekannte Job-IDs und schreibt `agent.job_mismatch` als
+  Sicherheitsereignis ins Audit-Log. Die Zuordnung kommt aus der Datenbank,
+  nicht aus der Verbindung — ein Job, der vor einem Reconnect verschickt
+  wurde, lässt sich danach weiterhin abschließen.
 - Go-Toolchain für den Agent von 1.25.0 auf 1.25.14 angehoben. `govulncheck`
   meldete 25 erreichbare Schwachstellen in der Standardbibliothek — betroffen
   waren TLS-Handshake, URL-Parsing und Cookie-Verarbeitung im WebSocket-Dialer,
