@@ -130,6 +130,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Konsolenblöcke mit Kopieren-Knopf, Hinweise als ruhige Kästen. Veraltete
   Bezeichnungen (Remote-Panel, Badge-Symbole) entsprechen wieder der
   Oberfläche.
+- **Befehlspalette neu (Strg K / ⌘ K).** Treffer nach Güte sortiert (exakt,
+  Wortanfang, enthalten) über Hostname, Tags, Besitzer und System, gruppiert
+  in Aktionen, Seiten und Geräte; ohne Eingabe die zuletzt geöffneten
+  Geräte. Für das beste Gerät gibt es Direktsprünge zu Terminal, Updates und
+  Aktivität. Voll per Tastatur bedienbar und für Screenreader als Combobox
+  ausgezeichnet.
 - **„Offen" bedeutet überall dasselbe.** Seitenleiste, Navigationsleiste,
   Glocke, Übersicht und Alarm-Center zählen als offen nur Alarme, die noch
   niemand quittiert hat; quittierte stehen jeweils daneben. Vorher zeigte
