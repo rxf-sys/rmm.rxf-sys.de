@@ -32,7 +32,10 @@ class FleetHub:
         # the hint silently disappears.
         self._tasks: set[asyncio.Task[None]] = set()
         self._pending: set[str] = set()
-        self._flush_scheduled = False
+        # The flush waiting out the coalescing window. Kept as the task, not
+        # as a flag: a flush that dies with its event loop or is cancelled
+        # never resets a flag, and the hub would then send nothing ever again.
+        self._flush_task: asyncio.Task[None] | None = None
         self.coalesce_s = 0.5
 
     async def subscribe(self, ws: WebSocket) -> None:
@@ -51,18 +54,25 @@ class FleetHub:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
-        self._pending.add(kind)
-        if self._flush_scheduled:
+        flush = self._flush_task
+        if flush is not None and not flush.done() and flush.get_loop() is loop:
+            self._pending.add(kind)
             return
-        self._flush_scheduled = True
+        if flush is not None:
+            # That flush never sent its kinds and never will. Hints only say
+            # "re-read now"; this one does that for them.
+            self._pending.clear()
+        self._pending.add(kind)
         task = loop.create_task(self._flush_later())
+        self._flush_task = task
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
     async def _flush_later(self) -> None:
         await asyncio.sleep(self.coalesce_s)
         kinds, self._pending = self._pending, set()
-        self._flush_scheduled = False
+        # Hints arriving while this one is sent start the next window.
+        self._flush_task = None
         # One kind keeps its name; a mixed burst only says "batch" — clients
         # refetch either way.
         await self._broadcast(next(iter(kinds)) if len(kinds) == 1 else "batch")
@@ -87,7 +97,7 @@ class FleetHub:
             task.cancel()
         self._tasks.clear()
         self._pending.clear()
-        self._flush_scheduled = False
+        self._flush_task = None
         self.coalesce_s = 0.5
 
 
