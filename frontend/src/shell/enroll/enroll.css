@@ -1,0 +1,274 @@
+/* Gerät hinzufügen (shell/enroll). */
+
+.en {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.en-h3 {
+  font-size: var(--fs-lg);
+  font-weight: 800;
+}
+.en-h3:focus {
+  outline: none;
+}
+.en-lead {
+  color: var(--tx-2);
+  line-height: var(--lh-body);
+}
+.en-muted {
+  color: var(--tx-3);
+}
+.en [aria-disabled='true'] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* ---- Path choice: a segmented control of two native radios ---- */
+.en-paths {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  margin: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: calc(var(--r-lg) + 3px);
+  background: var(--surface-2);
+}
+.en-path {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  min-height: var(--hit);
+  padding: var(--sp-3);
+  border-radius: var(--r-lg);
+  color: var(--tx-2);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-1) ease,
+    color var(--dur-1) ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .en-path:hover {
+    color: var(--tx);
+  }
+}
+.en-path:has(input:checked) {
+  background: var(--surface);
+  color: var(--tx);
+  box-shadow: var(--shadow-sm);
+}
+.en-path:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.en-path-ico {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+  color: var(--tx-2);
+}
+.en-path:has(input:checked) .en-path-ico {
+  background: var(--accent-soft);
+  color: var(--accent-tx);
+}
+.en-path-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.en-path-title {
+  font-weight: 700;
+}
+.en-path-sub {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}
+
+/* ---- Agent: form or result, open tokens beside ---- */
+.en-agent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: var(--sp-6);
+  align-items: start;
+}
+.en-agent-main {
+  min-width: 0;
+}
+.en-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.en-result-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.en-result-head .en-h3 {
+  overflow-wrap: anywhere;
+}
+
+/* The install command: the console look of job output, because it is a
+   command; the caption in the interface font, because it is a label. */
+.en-cmd .console-head {
+  padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-4);
+}
+.en-cmd-title {
+  color: var(--console-tx-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.en-cmd-body {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  color: var(--console-tx);
+  font: 400 var(--fs-sm) / 1.6 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.en-cmd .console-btn {
+  min-height: var(--hit-sm);
+}
+
+.en-extra {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+.en-extra-lead {
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+}
+.en-extra-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.en-once {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+}
+.en-once .status {
+  flex: none;
+}
+.en-note {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}
+
+/* ---- Open tokens ---- */
+.en-tokens {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding-left: var(--sp-6);
+  border-left: 1px solid var(--line);
+}
+.en-tokens-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.en-tokens-head .en-h3 {
+  font-size: var(--fs-md);
+}
+.en-tokens .skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.en-none {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}
+.en-token-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.en-token {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--line);
+}
+.en-token:first-child {
+  border-top: 0;
+}
+.en-token-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.en-token-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  font-weight: 650;
+}
+.en-token-label {
+  overflow-wrap: anywhere;
+}
+.en-token-sub {
+  color: var(--tx-3);
+  font-size: var(--fs-xs);
+}
+
+/* ---- Phone or tablet form ---- */
+.en-own-hint {
+  flex-basis: 100%;
+}
+.en-done {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+.en-done svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* Below the wide dialog's width the tokens move under the form, and the
+   path choice stacks so the descriptions keep a readable measure. */
+@media (max-width: 820px) {
+  .en-agent {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .en-tokens {
+    padding: var(--sp-5) 0 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+}
+@media (max-width: 560px) {
+  .en-paths {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .en-path {
+    padding: var(--sp-2) var(--sp-3);
+  }
+  .en-path-ico {
+    width: 28px;
+    height: 28px;
+  }
+}
