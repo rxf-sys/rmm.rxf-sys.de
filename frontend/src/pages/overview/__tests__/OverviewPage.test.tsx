@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
 import { OverviewPage } from '../OverviewPage';
-import type { Account, Device } from '../../../types';
+import type { Account, Alert, Device } from '../../../types';
 import type { Fleet } from '../../../hooks/useFleet';
 import type { PageId } from '../../../routes';
 
@@ -137,6 +137,24 @@ describe('OverviewPage', () => {
   it('draws every device as a cell that opens it', () => {
     renderPage({ devices: [device({ id: 3, hostname: 'küchen-tablet-ü' })] });
     expect(screen.getByRole('link', { name: 'küchen-tablet-ü, OK' })).toHaveAttribute('href', '/devices/3');
+  });
+
+  it('counts only unacknowledged alerts as open, like the Alarm-Center', () => {
+    const alert = (id: number, acked: boolean): Alert => ({
+      id,
+      device_id: 1,
+      rule: 'offline',
+      message: 'offline',
+      fired_at: 0,
+      resolved_at: null,
+      notified: true,
+      acked_at: acked ? 1 : null,
+      acked_by: acked ? 'robin' : '',
+    });
+    renderPage({ alerts: [alert(1, false), alert(2, true), alert(3, true), { ...alert(4, false), resolved_at: 5 }] });
+    const tile = screen.getByRole('link', { name: /Offene Alarme/ });
+    expect(tile).toHaveTextContent('Offene Alarme1');
+    expect(tile).toHaveTextContent('2 quittiert');
   });
 
   it('says plainly when there is nothing open', () => {

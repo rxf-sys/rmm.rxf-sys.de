@@ -674,6 +674,9 @@ h3.panel-title {
   font-size: var(--fs-xs);
   font-weight: 700;
 }
+.nc-section-sub {
+  font-weight: 400;
+}
 .nc-list {
   margin: 0;
   padding: 0 var(--sp-2) var(--sp-2);

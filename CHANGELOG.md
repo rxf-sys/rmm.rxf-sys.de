@@ -89,6 +89,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   wird. Admins und Techniker wählen Geräte aus und starten „Jetzt prüfen"
   oder „Sicherheitsupdates installieren" für die Auswahl; die Bestätigung
   nennt jedes Zielgerät und die übersprungenen.
+- **„Offen" bedeutet überall dasselbe.** Seitenleiste, Navigationsleiste,
+  Glocke, Übersicht und Alarm-Center zählen als offen nur Alarme, die noch
+  niemand quittiert hat; quittierte stehen jeweils daneben. Vorher zeigte
+  die Seitenleiste eine andere Zahl als die Glocke und der Reiter „Offen".
 - **Vorbereitung für MDM (iOS/iPadOS).** `infrastructure/docker-compose.yml`
   kennt jetzt einen NanoMDM-Container, der am Compose-Profil `mdm` hängt und
   im Normalbetrieb nicht startet — ohne APNs-Push-Zertifikat gäbe es nichts

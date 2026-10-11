@@ -234,7 +234,9 @@ export default function App() {
   };
 
   const page = pageForPath(location.pathname);
-  const openAlerts = fleet.alerts.filter((a) => a.resolved_at === null).length;
+  // "Open" means what the Alarm-Center's first tab shows: not resolved and
+  // not acknowledged yet. Acknowledged alerts are someone's already.
+  const openAlerts = fleet.alerts.filter((a) => a.resolved_at === null && a.acked_at === null).length;
   const openPatches = Object.values(fleet.patchSummary).reduce((a, s) => a + s.pending, 0);
 
   const detailMatch = /^\/devices\/(\d+)/.exec(location.pathname);

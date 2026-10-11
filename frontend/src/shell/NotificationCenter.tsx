@@ -22,6 +22,7 @@ function Body({ alerts, devices }: Props) {
   const qc = useQueryClient();
   const results = useJobResults();
   const open = alerts.filter((a) => a.resolved_at === null);
+  const acked = open.filter((a) => a.acked_at !== null).length;
   // Unacknowledged first, newest first within each group.
   const sorted = [...open].sort(
     (a, b) => Number(a.acked_at !== null) - Number(b.acked_at !== null) || b.fired_at - a.fired_at,
@@ -45,7 +46,8 @@ function Body({ alerts, devices }: Props) {
 
       <section aria-labelledby="nc-alerts">
         <h3 id="nc-alerts" className="nc-section">
-          Offene Alarme <span className="num">{open.length}</span>
+          Offene Alarme <span className="num">{open.length - acked}</span>
+          {acked > 0 && <span className="nc-section-sub">· {acked} quittiert</span>}
         </h3>
         {sorted.length === 0 ? (
           <p className="nc-empty">Keine offenen Alarme. Die Flotte ist ruhig.</p>

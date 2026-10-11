@@ -144,8 +144,9 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
   const security = summaries.reduce((a, s) => a + s.security, 0);
   const patchedDevices = summaries.filter((s) => s.pending > 0).length;
   const securityDevices = summaries.filter((s) => s.security > 0).length;
-  const openAlerts = alerts.filter((a) => a.resolved_at === null);
-  const ackedAlerts = openAlerts.filter((a) => a.acked_at !== null).length;
+  // Same split as the Alarm-Center tabs: open = nobody has acknowledged it.
+  const openAlerts = alerts.filter((a) => a.resolved_at === null && a.acked_at === null).length;
+  const ackedAlerts = alerts.filter((a) => a.resolved_at === null && a.acked_at !== null).length;
 
   const date = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
   const sub = [
@@ -255,9 +256,9 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
               to={PAGE_PATH.alerts}
               icon={<IconBell size={15} />}
               label="Offene Alarme"
-              value={fmt.format(openAlerts.length)}
-              context={openAlerts.length ? `${fmt.format(ackedAlerts)} quittiert` : 'alles ruhig'}
-              tone={openAlerts.length - ackedAlerts > 0 ? 'danger' : openAlerts.length ? 'warn' : 'ok'}
+              value={fmt.format(openAlerts)}
+              context={ackedAlerts ? `${fmt.format(ackedAlerts)} quittiert` : openAlerts ? 'noch nicht quittiert' : 'alles ruhig'}
+              tone={openAlerts ? 'danger' : ackedAlerts ? 'warn' : 'ok'}
             />
           </section>
 
