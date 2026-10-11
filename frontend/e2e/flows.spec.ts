@@ -52,3 +52,21 @@ test('signing in through the login screen lands on the overview', async ({ page 
   await page.getByRole('button', { name: /Anmelden/ }).click();
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Übersicht');
 });
+
+test('the enrollment dialog stays inside the screen', async ({ page }, info) => {
+  // A fixed dialog never widens the page, so the page-level scroll check in
+  // pages.spec cannot see one that runs off a phone. Measure the dialog.
+  await signIn(page);
+  await page.goto('/');
+  if (info.project.name === 'phone') {
+    await page.getByRole('button', { name: /Mehr/ }).click();
+  }
+  await page.getByRole('button', { name: 'Gerät hinzufügen' }).first().click();
+  const dialog = page.getByRole('dialog', { name: 'Gerät hinzufügen' });
+  await expect(dialog).toBeVisible();
+  const box = (await dialog.boundingBox())!;
+  const width = page.viewportSize()!.width;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(width);
+  await expect(dialog.getByRole('button', { name: 'Schließen' })).toBeInViewport();
+});
