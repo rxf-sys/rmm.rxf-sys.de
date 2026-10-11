@@ -881,6 +881,9 @@ select.input optgroup {
 
 .modal-wrap {
   display: grid;
+  /* A bounded track: an auto column grew with an 880 px wide dialog, so its
+     max-width never applied and the dialog ran off narrow screens. */
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   padding: var(--sp-4);
 }
