@@ -8,12 +8,16 @@ Live-Stream landen, das Secret muss verschlüsselt am Gerät liegen.
 from __future__ import annotations
 
 import asyncio
+import re
+import sys
 from itertools import pairwise
+from typing import Any
+from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 from app import (
@@ -241,6 +245,112 @@ def test_every_marker_line_is_captured_and_its_secret_never_streamed(
     for cred in expected:
         assert cred["secret"] not in out
     assert (out, found) == _filter(2, [text])
+
+
+# ---------------------------------------------------------------------------
+# Over-long marker lines: bounded memory, linear work
+# ---------------------------------------------------------------------------
+
+_TOO_LONG = "[⚠ RMM-CRED-Zeile ignoriert: zu lang]\n"
+
+
+def _overlong_marker() -> str:
+    # Far beyond any marker whose fields fit their limits.
+    return job_secrets.marker_line({"label": "L", "secret": "geheim-" + "x" * 100_000})
+
+
+def _in_chunks(text: str, size: int) -> list[str]:
+    return [text[i : i + size] for i in range(0, len(text), size)]
+
+
+@pytest.mark.parametrize("size", [None, 32 * 1024, 1000, 7])
+def test_overlong_marker_line_is_replaced_by_a_note(size: int | None):
+    later = job_secrets.marker_line({"label": "danach", "secret": "s2"})
+    text = "vorher\n" + _overlong_marker() + "nachher\n" + later
+    out, found = _filter(1, [text] if size is None else _in_chunks(text, size))
+    # Nothing of the held line comes out, not even its tail after the limit,
+    # and the lines after it are filtered as usual.
+    assert out == f"vorher\n{_TOO_LONG}nachher\n[✓ In Passwörtern gespeichert: danach]\n"
+    assert found == [{"label": "danach", "secret": "s2", "username": "", "notes": ""}]
+
+
+def test_overlong_marker_line_ending_in_split_crlf_or_at_job_end():
+    line = _overlong_marker().rstrip("\n")
+    head = _in_chunks(line, 32 * 1024)
+    # CR at the end of one chunk, its LF at the start of the next: no blank line.
+    assert _filter(1, [*head, "\r", "\nnext\n"]) == (f"{_TOO_LONG}next\n", [])
+    # A lone CR ends the line as well.
+    assert _filter(2, [*head, "\r", "next\n"]) == (f"{_TOO_LONG}next\n", [])
+    # Unterminated at job end.
+    assert _filter(3, head) == (_TOO_LONG, [])
+
+
+class _CountingPattern:
+    """Stands in for a compiled regex and adds up how much text it examined."""
+
+    def __init__(self, pattern: re.Pattern[str], work: list[int]) -> None:
+        self._pattern = pattern
+        self._work = work
+
+    def findall(self, string: str, pos: int = 0, endpos: int = sys.maxsize) -> list[Any]:
+        self._work[0] += min(len(string), endpos) - pos
+        return self._pattern.findall(string, pos, endpos)
+
+    def search(self, string: str, pos: int = 0, endpos: int = sys.maxsize) -> re.Match[str] | None:
+        found = self._pattern.search(string, pos, endpos)
+        self._work[0] += (found.end() if found else min(len(string), endpos)) - pos
+        return found
+
+    def match(self, string: str, pos: int = 0, endpos: int = sys.maxsize) -> re.Match[str] | None:
+        found = self._pattern.match(string, pos, endpos)
+        self._work[0] += found.end() - pos if found else 0
+        return found
+
+
+@pytest.mark.parametrize(
+    ("length", "size"),
+    [
+        (2 * 1024 * 1024, 32 * 1024),  # far past the limit, in the agent's chunk size
+        (60 * 1024, 512),  # below the limit, held until the line ends
+    ],
+)
+def test_held_line_costs_linear_work(monkeypatch: pytest.MonkeyPatch, length: int, size: int):
+    # Re-tokenising the held text with every chunk made a long line O(n²) and
+    # blocked the event loop (2 MiB: 1.6 s). Counts regex work, not time.
+    work = [0]
+    for name, value in list(vars(job_secrets).items()):
+        if isinstance(value, re.Pattern):
+            monkeypatch.setattr(job_secrets, name, _CountingPattern(value, work))
+    text = f"{job_secrets.MARKER} " + "x" * length + "\nnext\n"
+    out, _ = _filter(1, _in_chunks(text, size))
+    assert out.endswith("next\n")
+    assert work[0] <= 2 * len(text)
+
+
+@given(_chunked(_OUTPUT), st.integers(0, 40))
+# An over-long line ending on a CR whose LF came with the next chunk.
+@example(case=(" \r\n", [" \r", "\n"]), limit=0)
+def test_line_limit_does_not_depend_on_chunk_boundaries(case: tuple[str, list[str]], limit: int):
+    text, chunks = case
+    job_secrets.reset_for_tests()
+    # A tiny limit makes nearly every generated marker line over-long.
+    with mock.patch.object(job_secrets, "_MAX_LINE", limit):
+        assert _filter(1, chunks) == _filter(2, [text])
+
+
+@given(_job_with_secrets(), st.data())
+def test_overlong_marker_lines_never_stream_their_secret(
+    job: tuple[str, list[dict[str, str]]], data: st.DataObject
+):
+    text, expected = job
+    _, chunks = data.draw(_chunked(st.just(text)))
+    job_secrets.reset_for_tests()
+    with mock.patch.object(job_secrets, "_MAX_LINE", 16):
+        out, found = _filter(1, chunks)
+    assert found == []
+    for cred in expected:
+        assert cred["secret"] not in out
+    assert out.count(_TOO_LONG) >= len(expected)
 
 
 # ---------------------------------------------------------------------------

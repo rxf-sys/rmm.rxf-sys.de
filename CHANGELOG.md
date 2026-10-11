@@ -410,6 +410,16 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Ausgabe auf Leerzeichen oder `##`, hängte das Jobende einen Zeilenumbruch
   an; ein zurückgehaltenes Fragment konnte hinter später gelesene Zeilen
   rutschen. Das Ergebnis ist jetzt für jede Zerlegung dasselbe.
+- Eine `##RMM-CRED##`-Zeile ohne Zeilenende konnte den ganzen Server
+  ausbremsen: Der Filter hielt sie ohne Obergrenze zurück und zerlegte sie mit
+  jedem weiteren Chunk von vorn. 2 MiB Ausgabe ohne Umbruch kosteten 1,4 s
+  Rechenzeit, in denen die Event-Loop für alle Agents und das Dashboard
+  stand. Jetzt wird nur der neue Chunk nach dem Zeilenende durchsucht
+  (0,015 s), und eine Marker-Zeile darf höchstens 64 Ki Zeichen lang werden —
+  auch das längste gültige Credential bleibt darunter. Eine längere Zeile
+  ersetzt der Hinweis „[⚠ RMM-CRED-Zeile ignoriert: zu lang]"; von ihr selbst
+  landet nichts im Job-Log, auch nicht der Rest hinter der Grenze, und die
+  Zeilen danach laufen normal weiter.
 
 ---
 
