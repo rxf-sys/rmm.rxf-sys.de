@@ -65,3 +65,26 @@ async def test_dead_subscriber_is_dropped() -> None:
     await asyncio.sleep(0.05)
     assert len(alive.sent) == 2
     assert dead not in hub._subs
+
+
+def test_a_flush_lost_with_its_event_loop_does_not_block_later_hints() -> None:
+    """A flush waiting in a loop that ends never runs. It must not keep the
+    hub thinking a flush is on its way — or no hint goes out ever again
+    (seen when one TestClient session ended right after a broadcast)."""
+    hub = FleetHub()
+    hub.coalesce_s = 0.02
+
+    async def broadcast_and_leave() -> None:
+        hub.broadcast("alert")  # asyncio.run cancels the waiting flush
+
+    asyncio.run(broadcast_and_leave())
+
+    async def broadcast_and_listen() -> list[dict[str, Any]]:
+        ws = FakeSocket()
+        await hub.subscribe(ws)  # type: ignore[arg-type]
+        hub.broadcast("device_online")
+        await asyncio.sleep(0.1)
+        return ws.sent
+
+    # Only the new hint: the lost one was never sent to anyone listening now.
+    assert asyncio.run(broadcast_and_listen()) == [{"type": "refresh", "kind": "device_online"}]
