@@ -288,6 +288,18 @@ async def get_job(job_id: int) -> dict[str, Any] | None:
             return _row_to_job(row) if row else None
 
 
+async def device_of(job_id: int) -> int | None:
+    """Owning device of a job, or None for an unknown id. Cheaper than
+    get_job for the per-message ownership check on the agent socket, which
+    must not pull the whole output blob for every chunk."""
+    async with (
+        _connect() as db,
+        db.execute("SELECT device_id FROM jobs WHERE id = ?", (job_id,)) as cur,
+    ):
+        row = await cur.fetchone()
+    return int(row[0]) if row else None
+
+
 async def list_jobs(device_id: int | None = None, limit: int = 50) -> list[dict[str, Any]]:
     query = "SELECT * FROM jobs"
     params: tuple[Any, ...] = ()
