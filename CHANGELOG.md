@@ -223,6 +223,22 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Der ruff-Regelsatz ist explizit in `pyproject.toml` aufgeführt und die
   ruff-Version auf die 0.16er-Reihe gepinnt. Vorher hätte eine neue
   ruff-Version das Lint-Gate ohne Codeänderung rot gemacht.
+- **Das Backend wird mit mypy geprüft** (Normalmodus, `mypy==2.3.1` als
+  Dev-Abhängigkeit), im CI-Job und im Gate-Kommando
+  (`ruff check . && mypy app && pytest …`). Von den vier Befunden war einer
+  echt: `get_ntfy_config` war als `dict[str, str]` annotiert, liefert aber
+  das `has_token`-Bool, auf das sich das Dashboard verlässt.
+- ruff prüft zusätzlich `DTZ` (naive Datumswerte — so entstand der
+  Zeitumstellungsfehler im Update-Scan) und `TRY400`. Die zwei
+  `TRY400`-Stellen loggen jetzt mit Traceback: ein abgelehnter Bootstrap-Admin
+  und ein Tresor-Eintrag, der sich nicht entschlüsseln lässt — erst der
+  Traceback unterscheidet einen ausgetauschten `credentials.key` von einem
+  Secret, das kein UTF-8 ist.
+- **Property-Tests mit hypothesis** (`hypothesis==6.168.1`, Dev-Abhängigkeit,
+  200 Beispiele je Test, festgelegt in `tests/conftest.py`): Update-Scan-Slot
+  über Zeitumstellungen hinweg, Secret-Filter unabhängig von Chunk-Grenzen,
+  Versionsvergleich der Agent-Updates und MAC-Normalisierung für
+  Wake-on-LAN. Sie fanden den Secret-Fehler unter „Sicherheit".
 - README neu strukturiert; die Beschreibung der CD-Pipeline entsprach nicht
   mehr der Realität (SSH statt Self-hosted Runner).
 
@@ -240,6 +256,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   zurückfällt, wenn `TRUST_PROXY_HEADERS` aus ist.
 - Das Dashboard bietet keinen kopierbaren Download-Link mit Token in der URL
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
+- **Ein Secret aus einer `##RMM-CRED##`-Zeile konnte zum Teil im Job-Log
+  landen.** Der Filter zerlegte die Ausgabe mit `str.splitlines()`, das auch
+  an U+2028, NEL, Seitenvorschub und ähnlichen Zeichen trennt — JSON erlaubt
+  U+2028 und NEL aber roh in Strings. Stand eines davon im Secret, ging der
+  Rest der Zeile als normale Ausgabe in Job-Log und Live-Stream, und der
+  Eintrag wurde als „ungültiges Format" verworfen statt im Tresor abgelegt.
+  Zeilen enden jetzt nur noch an CR und LF.
 
 ### Geändert
 - Build und CI laufen auf **Node 24 (LTS)** statt 22 — und beide zusammen:
@@ -374,6 +397,19 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   „Text file busy"; der Windows-Installer machte das schon richtig.
 - `install.sh` bricht bei einer nicht unterstützten Architektur mit einer
   aussagekräftigen Meldung ab statt mit „no matching agent binary".
+- Der tägliche Update-Scan lieferte am Tag der Umstellung auf Sommerzeit einen
+  Slot in der Zukunft, wenn `PATCH_SCAN_HOUR=2` gesetzt war: 02:30 gibt es am
+  29.03.2026 in Berlin nicht, der Slot landete auf 03:30, und ein Gerät, das
+  um 03:10 gerade gescannt hatte, galt trotzdem als überfällig und wurde nach
+  Ablauf der Sperrfrist erneut aufgefordert. In der doppelten Stunde im
+  Herbst fiel der Slot nach dem ersten 02:30 auf den Vortag zurück. Die
+  Slots werden jetzt als Zeitpunkte verglichen, nicht als Uhrzeiten.
+- Der Secret-Filter für Job-Ausgaben hing an der Stelle, an der der Agent
+  seine Chunks schnitt: Kam das LF eines CRLF erst mit dem nächsten Chunk,
+  folgte dem Hinweis „In Passwörtern gespeichert" eine Leerzeile; endete die
+  Ausgabe auf Leerzeichen oder `##`, hängte das Jobende einen Zeilenumbruch
+  an; ein zurückgehaltenes Fragment konnte hinter später gelesene Zeilen
+  rutschen. Das Ergebnis ist jetzt für jede Zerlegung dasselbe.
 
 ---
 
