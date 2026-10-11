@@ -263,6 +263,14 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   konnte so jeden Agent der Flotte beliebig viel Speicher belegen lassen. Die
   größte legitime Nachricht, ein Skript mit 64.000 Zeichen, kommt JSON-kodiert
   auf höchstens 384.000 Byte.
+- **Der Agent prüft Patch-IDs, bevor er sie weitergibt.** Unter Windows
+  landeten sie in einem PowerShell-String in einfachen Anführungszeichen, und
+  maskiert wurde nur `'` — PowerShell beendet einen solchen String aber auch
+  an `‘`, `’`, `‚` und `‛`. Unter Linux gingen sie ohne `--` an apt, eine ID
+  wie `-o…` war also eine Option. Jetzt nimmt der Agent nur die Form an, die
+  sein eigener Scan meldet (Windows: GUID; Linux: Debian-Paketname, optional
+  mit `:arch`), und lehnt den Job sonst mit der abgelehnten ID in der Ausgabe
+  ab; vor den Paketnamen steht zusätzlich `--`.
 
 ### Geändert
 - Build und CI laufen auf **Node 24 (LTS)** statt 22 — und beide zusammen:

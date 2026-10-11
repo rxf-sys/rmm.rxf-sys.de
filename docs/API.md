@@ -267,6 +267,11 @@ Unbekannte Typen werden geloggt und ignoriert.
 | `update` | `version`, `url`, `sha256`, `sig` | Einmal pro Verbindung beim ersten Heartbeat, oder auf Anforderung |
 | `pong` | — | Antwort auf `ping` |
 
+`patch_ids` nimmt der Agent nur in der Form an, die sein eigener Scan meldet:
+unter Windows die UpdateID (GUID), unter Linux einen Debian-Paketnamen,
+optional mit Architektur (`libc6:i386`). Eine andere ID lässt den Job
+fehlschlagen, ohne dass etwas installiert wird; die Ausgabe nennt die ID.
+
 ## `/api/jobs/{job_id}/ws` — Server → Browser
 
 Auth über das Session-Cookie; `4401` unauthentifiziert, `4403` für Rollen

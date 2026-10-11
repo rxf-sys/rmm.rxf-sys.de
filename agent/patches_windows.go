@@ -80,12 +80,11 @@ if ($r.ResultCode -ne 2) { exit 1 }
 `
 
 func installPatchesOS(ctx context.Context, patchIDs []string, w io.Writer) error {
-	quoted := make([]string, len(patchIDs))
-	for i, id := range patchIDs {
-		// UpdateIDs are GUIDs; still guard against quote injection.
-		quoted[i] = "'" + strings.ReplaceAll(id, "'", "''") + "'"
+	ids, err := powerShellUpdateIDs(patchIDs)
+	if err != nil {
+		return err
 	}
-	script := fmt.Sprintf(installScript, strings.Join(quoted, ","))
+	script := fmt.Sprintf(installScript, ids)
 	cmd := powerShellCmd(ctx, script)
 	cmd.Stdout = w
 	cmd.Stderr = w

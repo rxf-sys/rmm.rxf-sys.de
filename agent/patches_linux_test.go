@@ -115,3 +115,32 @@ func FuzzParseAptSimulate(f *testing.F) {
 		}
 	})
 }
+
+func TestAptInstallArgs(t *testing.T) {
+	got, err := aptInstallArgs(nil)
+	if err != nil || !reflect.DeepEqual(got, []string{"dist-upgrade", "-y"}) {
+		t.Errorf("no ids: got %q, %v; want a full dist-upgrade", got, err)
+	}
+	// "--" ends apt's options, so a package name could never be read as one.
+	got, err = aptInstallArgs([]string{"curl", "libc6:i386"})
+	want := []string{"install", "-y", "--only-upgrade", "--", "curl", "libc6:i386"}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q, %v; want %q", got, err, want)
+	}
+	if got, err := aptInstallArgs([]string{"curl", "-oAPT::Get::AllowUnauthenticated=true"}); err == nil {
+		t.Errorf("an option disguised as a package was accepted: %q", got)
+	}
+}
+
+// --version is harmless should a regression let it through to apt-get, and
+// apt-get answers it with output and exit 0 — which this test would see.
+func TestInstallPatchesRejectsMalformedIDsBeforeRunningApt(t *testing.T) {
+	var out bytes.Buffer
+	err := installPatchesOS(t.Context(), []string{"curl", "--version"}, &out)
+	if err == nil || !strings.Contains(err.Error(), `"--version"`) {
+		t.Fatalf("got %v, want an error naming the rejected id", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("apt-get ran anyway: %q", out.String())
+	}
+}

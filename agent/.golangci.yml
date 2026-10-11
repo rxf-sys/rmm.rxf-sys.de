@@ -25,9 +25,14 @@ linters:
       - path: ^jobs\.go$
         linters: [gosec]
         text: G204
-      # G204: the Windows Update install script is fixed; the patch ids
-      # spliced into it are single-quote escaped first.
+      # G204: the Windows Update install script is fixed; only patch ids
+      # that are GUIDs are spliced into it (powerShellUpdateIDs).
       - path: ^patches_windows\.go$
+        linters: [gosec]
+        text: G204
+      # G204: apt-get gets only package names that passed isDebianPackage,
+      # and only after "--" (aptInstallArgs).
+      - path: ^patches_linux\.go$
         linters: [gosec]
         text: G204
       # G204: probe helpers (execOut, runWithTimeout, psLines) whose callers
