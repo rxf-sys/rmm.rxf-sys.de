@@ -113,6 +113,15 @@ export function describeAudit(e: AuditEvent, names: AuditNames = {}): string {
         : `Wartungsfenster für ${device()} beendet`;
     case 'device.agent_update':
       return `Agent-Update auf ${device()} angestoßen`;
+    case 'agent.update_offered': {
+      // Kein Klick dahinter: der Server bietet das Update beim ersten
+      // Heartbeat einer Verbindung von selbst an (Akteur "automation").
+      const to = str(d.version);
+      const from = str(d.from_version);
+      return `Agent-Update${to ? ` auf ${to}` : ''} automatisch an ${device()} angeboten${from ? ` (bisher ${from})` : ''}`;
+    }
+    case 'device.agent_logs':
+      return `Agent-Logs von ${device()} abgerufen`;
 
     // --- Jobs und Skripte ---
     case 'job.created':

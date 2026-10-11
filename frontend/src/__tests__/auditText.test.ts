@@ -119,6 +119,30 @@ describe('describeAudit', () => {
     expect(describeAudit(bare)).toBe('Skript „Skript #7“ geändert');
   });
 
+  it('says that the automatic update offer came from the server, with both versions', () => {
+    const offer = event({
+      event: 'agent.update_offered',
+      actor: 'automation',
+      device_id: 4,
+      detail: { hostname: 'oma-pc', version: '1.9.0', from_version: '1.8.2' },
+    });
+    expect(describeAudit(offer)).toBe(
+      'Agent-Update auf 1.9.0 automatisch an oma-pc angeboten (bisher 1.8.2)',
+    );
+    // An agent that reported no version leaves out the "bisher" part rather
+    // than printing an empty one.
+    expect(describeAudit({ ...offer, detail: { version: '1.9.0' } })).toBe(
+      'Agent-Update auf 1.9.0 automatisch an Gerät 4 angeboten',
+    );
+  });
+
+  it('names the device whose agent logs were fetched', () => {
+    const e = event({ event: 'device.agent_logs', actor: 'techie', device_id: 4, detail: {} });
+    expect(describeAudit(e, auditNamesFrom([{ id: 4, hostname: 'buero-pc' }]))).toBe(
+      'Agent-Logs von buero-pc abgerufen',
+    );
+  });
+
   it('has a sentence for every event the server can write', () => {
     // Sonst steht im Feed der rohe Ereignisname — genau das, was hier weg soll.
     const events = [
@@ -141,6 +165,8 @@ describe('describeAudit', () => {
       'device.wake',
       'device.maintenance',
       'device.agent_update',
+      'agent.update_offered',
+      'device.agent_logs',
       'job.created',
       'script.created',
       'script.updated',
