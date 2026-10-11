@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -24,6 +25,21 @@ const (
 	healthyConnMin = 30 * time.Second
 	writeTimeout   = 10 * time.Second
 	outboxSize     = 64
+
+	// maxServerMessage caps one inbound WebSocket message. gorilla/websocket
+	// assembles a whole message in memory and has no limit by default, so
+	// without a cap a broken server or anything sitting between it and the
+	// agent could make every agent in the fleet allocate without bound.
+	//
+	// The largest legitimate server message is a job carrying a script: the
+	// backend accepts up to 64,000 characters for a command or a saved script
+	// (max_length in backend/app/routers/jobs.py and scripts.py). Starlette's
+	// send_json writes non-ASCII as UTF-8 (at most 4 bytes per character) and
+	// escapes control characters as \u00XX (6 bytes), so the worst case is
+	// 64,000 × 6 = 384,000 bytes plus a small envelope. Patch installs carry
+	// package lists far below that. 1 MiB leaves more than twice that headroom
+	// and still bounds the memory one message can take.
+	maxServerMessage = 1 << 20
 )
 
 type message struct {
@@ -108,10 +124,11 @@ func wsEndpoint(serverURL string) (string, error) {
 	return u.String(), nil
 }
 
-func connectAndServe(ctx context.Context, cfg Config) error {
+// dialServer opens the agent socket with the limits every connection needs.
+func dialServer(ctx context.Context, cfg Config) (*websocket.Conn, error) {
 	endpoint, err := wsEndpoint(cfg.ServerURL)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	header := http.Header{}
 	header.Set("Authorization", fmt.Sprintf("Bearer %d:%s", cfg.DeviceID, cfg.DeviceSecret))
@@ -124,33 +141,36 @@ func connectAndServe(ctx context.Context, cfg Config) error {
 	conn, resp, err := dialer.DialContext(ctx, endpoint, header)
 	if err != nil {
 		if resp != nil {
-			return fmt.Errorf("dial %s: %s", endpoint, resp.Status)
+			return nil, fmt.Errorf("dial %s: %s", endpoint, resp.Status)
 		}
-		return fmt.Errorf("dial %s: %w", endpoint, err)
+		return nil, fmt.Errorf("dial %s: %w", endpoint, err)
 	}
-	defer conn.Close()
+	// Set before the first read: an oversized message then fails that read
+	// (and the reconnect loop takes over) instead of being buffered whole.
+	conn.SetReadLimit(maxServerMessage)
 	log.Printf("connected to %s", endpoint)
+	return conn, nil
+}
+
+func connectAndServe(ctx context.Context, cfg Config) error {
+	conn, err := dialServer(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer closeQuietly(conn)
 
 	// A per-connection context cancels in-flight jobs when the socket drops.
+	// It also releases the reader goroutine below: cancel runs before the
+	// close (defers unwind in reverse), and the close then unblocks a read
+	// that is still in progress.
 	connCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	s := newSender()
 
-	// Reader goroutine: surfaces incoming messages + read errors.
-	incoming := make(chan message)
+	frames := make(chan []byte)
 	readErr := make(chan error, 1)
-	go func() {
-		defer close(incoming)
-		for {
-			var msg message
-			if err := conn.ReadJSON(&msg); err != nil {
-				readErr <- err
-				return
-			}
-			incoming <- msg
-		}
-	}()
+	go readFrames(connCtx, conn, frames, readErr)
 
 	// First heartbeat immediately — it flips the device to 'online' in the
 	// dashboard without waiting a full interval — followed by a full
@@ -182,53 +202,132 @@ func connectAndServe(ctx context.Context, cfg Config) error {
 			s.send(connCtx, "heartbeat", collectHeartbeat())
 		case <-inventoryTicker.C:
 			s.send(connCtx, "inventory", collectInventory())
-		case msg, ok := <-incoming:
-			if !ok {
-				return <-readErr
+		case raw := <-frames:
+			cmd, err := decodeCommand(raw)
+			if err != nil {
+				// Dropped, not fatal: a newer server may send something this
+				// agent does not know yet, and reconnecting would not make the
+				// next message any more readable.
+				log.Printf("ignoring server message: %v", err)
+				continue
 			}
-			handleMessage(connCtx, cfg, msg, s)
+			dispatch(connCtx, cfg, cmd, s)
 		}
 	}
 }
 
-// handleMessage dispatches a server message. Ping/pong keeps the pipeline
-// observable; "job" hands off to a goroutine so long commands never block
-// heartbeats or other messages.
-func handleMessage(ctx context.Context, cfg Config, msg message, s *sender) {
+// frameReader is the part of *websocket.Conn that readFrames uses, narrowed
+// so the reader can be tested without a network.
+type frameReader interface {
+	ReadMessage() (messageType int, p []byte, err error)
+}
+
+// readFrames hands every inbound message to the serve loop and reports the
+// first read error. Both sends also watch ctx: once the serve loop has
+// returned nobody receives any more, and an unconditional send would park
+// this goroutine — together with the message it holds — for the rest of the
+// process, once per reconnect.
+func readFrames(ctx context.Context, r frameReader, frames chan<- []byte, readErr chan<- error) {
+	for {
+		_, data, err := r.ReadMessage()
+		if err != nil {
+			select {
+			case readErr <- err:
+			case <-ctx.Done():
+			}
+			return
+		}
+		select {
+		case frames <- data:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// commandKind names what the server asked for. The zero value is never the
+// result of a successful decode.
+type commandKind int
+
+const (
+	cmdPing commandKind = iota + 1
+	cmdJob
+	cmdPatchScan
+	cmdGetLogs
+	cmdUpdate
+)
+
+// command is one decoded server message. Job is set only for cmdJob and
+// Update only for cmdUpdate; the other kinds carry no payload.
+type command struct {
+	Kind   commandKind
+	Job    jobSpec
+	Update updateSpec
+}
+
+// errUnknownMessage marks a well-formed message of a type this agent does
+// not know.
+var errUnknownMessage = errors.New("unknown message type")
+
+// decodeCommand turns one raw server message into a typed command and does
+// nothing else — no logging, no goroutines, no I/O. Everything the network
+// can hand the agent passes through here first, so keeping it pure lets the
+// tests and the fuzzer cover it without running anything on the machine.
+func decodeCommand(raw []byte) (command, error) {
+	var msg message
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return command{}, fmt.Errorf("decode message: %w", err)
+	}
 	switch msg.Type {
 	case "ping":
-		s.send(ctx, "pong", map[string]any{"ts": time.Now().Unix()})
+		return command{Kind: cmdPing}, nil
+	case "patch_scan":
+		return command{Kind: cmdPatchScan}, nil
+	case "get_logs":
+		return command{Kind: cmdGetLogs}, nil
 	case "job":
 		var spec jobSpec
 		if err := json.Unmarshal(msg.Payload, &spec); err != nil {
-			log.Printf("bad job payload: %v", err)
-			return
+			return command{}, fmt.Errorf("bad job payload: %w", err)
 		}
-		if spec.Kind == "patch_install" {
-			go runPatchInstall(ctx, s, spec)
+		return command{Kind: cmdJob, Job: spec}, nil
+	case "update":
+		var spec updateSpec
+		if err := json.Unmarshal(msg.Payload, &spec); err != nil {
+			return command{}, fmt.Errorf("bad update payload: %w", err)
+		}
+		return command{Kind: cmdUpdate, Update: spec}, nil
+	default:
+		return command{}, fmt.Errorf("%w %q", errUnknownMessage, msg.Type)
+	}
+}
+
+// dispatch carries out a decoded command. Ping/pong keeps the pipeline
+// observable; anything that can take a while (jobs, scans, updates) runs in
+// its own goroutine so it never blocks heartbeats or later messages.
+func dispatch(ctx context.Context, cfg Config, cmd command, s *sender) {
+	switch cmd.Kind {
+	case cmdPing:
+		s.send(ctx, "pong", map[string]any{"ts": time.Now().Unix()})
+	case cmdJob:
+		if cmd.Job.Kind == "patch_install" {
+			go runPatchInstall(ctx, s, cmd.Job)
 		} else {
-			go runJob(ctx, s, spec)
+			go runJob(ctx, s, cmd.Job)
 		}
-	case "patch_scan":
+	case cmdPatchScan:
 		go func() {
 			report := scanPatches(ctx)
 			s.send(ctx, "patch_report", map[string]any{"patches": report})
 		}()
-	case "get_logs":
+	case cmdGetLogs:
 		// Remote diagnostics: ship the recent log ring to the dashboard.
 		s.send(ctx, "agent_logs", map[string]any{"lines": logRing.Snapshot()})
-	case "update":
-		var spec updateSpec
-		if err := json.Unmarshal(msg.Payload, &spec); err != nil {
-			log.Printf("bad update payload: %v", err)
-			return
-		}
+	case cmdUpdate:
 		go func() {
-			if err := applyUpdate(ctx, cfg, spec); err != nil {
+			if err := applyUpdate(ctx, cfg, cmd.Update); err != nil {
 				log.Printf("self-update failed: %v", err)
 			}
 		}()
-	default:
-		log.Printf("ignoring unknown message type %q", msg.Type)
 	}
 }
