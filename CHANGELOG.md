@@ -89,6 +89,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   wird. Admins und Techniker wählen Geräte aus und starten „Jetzt prüfen"
   oder „Sicherheitsupdates installieren" für die Auswahl; die Bestätigung
   nennt jedes Zielgerät und die übersprungenen.
+- **Audit-Log neu aufgebaut.** Eine Werkzeugleiste mit Suche, Akteur,
+  Kategorie, „Nur Sicherheit" und Zeitraum (24 h / 7 Tage / 30 Tage /
+  alles), alles in der Adresse. Einträge nach Tagen gruppiert mit Uhrzeit,
+  Akteur, Satz und Link zum Gerät; jeder Eintrag klappt zu allen
+  Detailfeldern auf. „CSV exportieren" liefert die aktuelle Seite mit
+  demselben Schutz gegen Tabellen-Formeln wie der Geräte-Export.
 - **„Offen" bedeutet überall dasselbe.** Seitenleiste, Navigationsleiste,
   Glocke, Übersicht und Alarm-Center zählen als offen nur Alarme, die noch
   niemand quittiert hat; quittierte stehen jeweils daneben. Vorher zeigte
