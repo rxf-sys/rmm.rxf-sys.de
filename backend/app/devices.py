@@ -81,8 +81,12 @@ INVENTORY_KINDS = ("hardware", "software")
 # A RustDesk ID is numeric, or a custom alias set on the client. Nothing else
 # is accepted: the value ends up in a rustdesk:// link that the operator's
 # machine hands to a protocol handler, and it arrives from an agent (or a
-# form) that the server does not get to trust.
-_RUSTDESK_ID = re.compile(r"[0-9]{6,12}|[A-Za-z0-9_-]{6,16}")
+# form) that the server does not get to trust. The alias starts with a
+# letter; otherwise every 13-16 digit string (or "--1234") would slip through
+# that branch and the 12-digit limit on generated IDs would mean nothing.
+# Same pattern as the dashboard's (frontend/src/remoteDesk.ts). fullmatch
+# does the anchoring: re's "$" alone would also accept a trailing newline.
+_RUSTDESK_ID = re.compile(r"^(?:[0-9]{6,12}|[A-Za-z][A-Za-z0-9_-]{5,15})$")
 
 
 def valid_rustdesk_id(value: str) -> bool:

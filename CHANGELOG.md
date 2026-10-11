@@ -264,8 +264,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   schicken. Beide Ereignisse zählen zur Kategorie „Geräte", und das Dashboard
   beschreibt sie in ganzen Sätzen.
 - **RustDesk-IDs werden geprüft.** Angenommen werden nur numerische IDs
-  (6–12 Ziffern) und eigene Aliasse (6–16 Zeichen aus Buchstaben, Ziffern,
-  `-` und `_`). Die ID landet in einem `rustdesk://`-Link, den der Rechner
+  (6–12 Ziffern) und eigene Aliasse (6–16 Zeichen, beginnend mit einem
+  Buchstaben, aus Buchstaben, Ziffern, `_` und `-`) — dieselbe Regel wie im
+  Dashboard. Ohne den Buchstaben am Anfang wäre jede 13- bis 16-stellige
+  Ziffernfolge als Alias durchgegangen. Die ID landet in einem `rustdesk://`-Link, den der Rechner
   des Technikers an einen Protokoll-Handler übergibt, und sie kommt vom Agent
   oder aus einem Formular. Ein Heartbeat mit ungültigem Wert behält die
   gespeicherte ID, `PATCH /api/devices/{id}` antwortet mit 422 (leer löscht

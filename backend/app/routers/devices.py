@@ -251,8 +251,8 @@ class UpdateDeviceRequest(BaseModel):
         if not devices.valid_rustdesk_id(v.strip()):
             raise PydanticCustomError(
                 "rustdesk_id",
-                "Keine gültige RustDesk-ID: 6–12 Ziffern oder 6–16 Zeichen aus"
-                " Buchstaben, Ziffern, - und _",
+                "Keine gültige RustDesk-ID: 6–12 Ziffern oder 6–16 Zeichen, beginnend"
+                " mit einem Buchstaben, aus A–Z, 0–9, _ und -",
             )
         return v.strip()
 

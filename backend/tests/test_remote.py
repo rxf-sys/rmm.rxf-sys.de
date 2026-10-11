@@ -93,6 +93,12 @@ _INVALID_IDS = [
     "abcde",
     "abcdefghijklmnopq",  # 17 characters
     "12345678901234567",  # 17 digits
+    # Generated IDs have at most 12 digits; a longer run of digits must not
+    # pass as a custom ID, and a custom ID starts with a letter.
+    "1234567890123",
+    "--1234",
+    "_abcdef",
+    "123456\n",  # fullmatch, not match: no trailing newline
     "123 456 789",
     "123456789?x=1",
     "123456789/../x",
@@ -127,13 +133,17 @@ async def test_heartbeat_never_stores_an_invalid_first_id(client: AsyncClient):
     assert d["rustdesk_id"] == ""
 
 
-@pytest.mark.parametrize("rid", ["12345", "123456789?x=1", "ümlaut-pc"])
+@pytest.mark.parametrize("rid", ["12345", "123456789?x=1", "ümlaut-pc", "1234567890123"])
 async def test_patch_rejects_an_invalid_id(admin_client: AsyncClient, rid: str):
     dev = await _make_device()
     await devices.update_device(dev, rustdesk_id="555000555")
     r = await admin_client.patch(f"/api/devices/{dev}", json={"rustdesk_id": rid})
     assert r.status_code == 422
-    assert "RustDesk-ID" in r.json()["detail"][0]["msg"]
+    # The dashboard shows the message as-is, so it states the rule in full.
+    assert r.json()["detail"][0]["msg"] == (
+        "Keine gültige RustDesk-ID: 6–12 Ziffern oder 6–16 Zeichen, beginnend mit"
+        " einem Buchstaben, aus A–Z, 0–9, _ und -"
+    )
     d = await devices.get_device(dev, offline_after_s=999)
     assert d["rustdesk_id"] == "555000555"
 
