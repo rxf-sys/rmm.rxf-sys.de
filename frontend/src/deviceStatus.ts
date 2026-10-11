@@ -34,17 +34,6 @@ export function hasProblem(d: Device): boolean {
   return s === 'warn' || s === 'crit';
 }
 
-/** CSS color var for a device state dot. */
-export function stateColor(s: DeviceState): string {
-  return s === 'off'
-    ? 'var(--tx3)'
-    : s === 'crit'
-      ? 'var(--dangerS)'
-      : s === 'warn'
-        ? 'var(--warn)'
-        : 'var(--ok)';
-}
-
 /** The three load metrics shown as bars. */
 export type LoadKind = 'cpu' | 'ram' | 'disk';
 
@@ -67,13 +56,6 @@ export function loadLevel(pct: number, kind: LoadKind): 'ok' | 'warn' | 'crit' {
   if (pct >= t.crit) return 'crit';
   if (pct >= t.warn) return 'warn';
   return 'ok';
-}
-
-/** Bar colour for a load percentage: green while fine, yellow on warning,
- *  red once critical. */
-export function loadColor(pct: number, kind: LoadKind): string {
-  const level = loadLevel(pct, kind);
-  return level === 'crit' ? 'var(--dangerS)' : level === 'warn' ? 'var(--warn)' : 'var(--ok)';
 }
 
 const OS_SHORT: Record<string, string> = {
