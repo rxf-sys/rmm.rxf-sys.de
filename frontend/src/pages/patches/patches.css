@@ -1,0 +1,529 @@
+/* Patches (pages/patches). */
+
+/* ---- Summary: figures beside the state per system ---- */
+.pt-top {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--sp-4);
+  align-items: stretch;
+}
+.pt-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  overflow: hidden;
+}
+.pt-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--sp-4);
+}
+.pt-stat + .pt-stat {
+  border-left: 1px solid var(--line);
+}
+.pt-stat dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.pt-stat.warn dt {
+  color: var(--warn-tx);
+}
+.pt-stat.danger dt {
+  color: var(--danger-tx);
+}
+.pt-stat dd {
+  margin: 0;
+}
+.pt-stat-value {
+  font-size: var(--fs-3xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: var(--lh-tight);
+}
+.pt-stat-value small {
+  color: var(--tx-3);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+.pt-stat-context {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}
+.pt-sys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: var(--sp-4) var(--sp-6);
+}
+
+/* ---- Toolbar and filters ---- */
+.pt-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+}
+.pt-search {
+  position: relative;
+  flex: 1 1 280px;
+  max-width: 420px;
+}
+.pt-search svg {
+  position: absolute;
+  top: 50%;
+  left: 11px;
+  color: var(--tx-3);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.pt-search .input {
+  width: 100%;
+  padding-left: 34px;
+}
+.pt-select {
+  /* A long name in one option must not widen the page. */
+  width: 200px;
+  min-width: 0;
+}
+.pt-select.is-set {
+  border-color: var(--accent-line);
+  color: var(--accent-tx);
+}
+.pt-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  min-width: 0;
+}
+.pt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  margin-top: calc(-1 * var(--sp-2));
+}
+.pt-count {
+  margin: 0;
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.pt-selectall {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+}
+
+/* ---- List surface ---- */
+.pt-list {
+  /* clip, not hidden: a hidden overflow would be a scroll container and
+     stop the sticky table header from sticking to the page. */
+  overflow: clip;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.pt-list > .empty {
+  border: 0;
+}
+.pt-list > .skeleton-rows {
+  padding: var(--sp-4);
+}
+.pt-cap {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--line);
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}
+.pt-none {
+  color: var(--tx-disabled);
+}
+.pt-quiet {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.pt-pending {
+  color: var(--tx);
+  font-weight: 700;
+}
+.pt-check {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+}
+
+/* ---- Table: shared .dt styles in components.css; here the columns. The
+   name takes what is left. ---- */
+.pt-table .pt-c-check {
+  width: 44px;
+  padding-right: 0;
+  text-align: center;
+}
+.pt-table th.pt-c-check {
+  padding: 0 0 0 12px;
+}
+.pt-table td.pt-c-check {
+  padding-left: 12px;
+}
+.pt-table .pt-c-person {
+  width: 160px;
+}
+.pt-table .pt-c-pending {
+  width: 112px;
+}
+.pt-table .pt-c-sec {
+  width: 112px;
+}
+.pt-table .pt-c-scan {
+  width: 144px;
+}
+.pt-table .pt-c-conn {
+  width: 124px;
+}
+.pt-table .pt-c-act {
+  width: 52px;
+  padding: 0 var(--sp-2) 0 0;
+  text-align: right;
+}
+.pt-table td.pt-c-person {
+  overflow: hidden;
+  color: var(--tx-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pt-table td.pt-c-scan .status,
+.pt-table td.pt-c-conn .status {
+  font-weight: 600;
+}
+@media (hover: hover) and (pointer: fine) {
+  .pt-table tbody tr:hover .pt-link {
+    color: var(--accent-tx);
+  }
+}
+/* Fewer columns as the table narrows, least important first. */
+@container (max-width: 860px) {
+  .pt-table .pt-c-person {
+    display: none;
+  }
+}
+/* Just above the card breakpoint the rail leaves about 700 px; the figures
+   move closer so the hostname keeps room to be read. */
+@container (max-width: 760px) {
+  .pt-table .pt-c-pending {
+    width: 104px;
+  }
+  .pt-table .pt-c-sec {
+    width: 100px;
+  }
+  .pt-table .pt-c-scan {
+    width: 132px;
+  }
+  .pt-table .pt-c-conn {
+    width: 112px;
+  }
+}
+
+.pt-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--tx-2);
+}
+.pt-link {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tx);
+  font-weight: 650;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pt-link:hover {
+  text-decoration: underline;
+}
+.pt-sub {
+  display: block;
+  min-width: 0;
+  margin-top: 2px;
+  padding-left: 22px;
+  overflow: hidden;
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Cards (narrow screens) ---- */
+.pt-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pt-card {
+  position: relative;
+  display: flex;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+.pt-card.is-selected {
+  background: var(--accent-soft);
+}
+/* The whole card opens the device; checkbox and button sit above the link. */
+.pt-card .pt-check,
+.pt-card .pt-scan {
+  position: relative;
+  z-index: 1;
+}
+.pt-card .pt-check {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+}
+.pt-card .pt-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.pt-card .pt-link:focus-visible {
+  outline: none;
+}
+.pt-card:has(.pt-link:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.pt-card-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.pt-card-top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  color: var(--tx-2);
+}
+.pt-card-top .pt-link {
+  flex: 1;
+  font-size: var(--fs-lg);
+}
+.pt-card .pt-sub {
+  padding-left: 0;
+}
+.pt-card-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0 0;
+}
+.pt-card-facts dt {
+  color: var(--tx-3);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.pt-card-facts dd {
+  margin: 2px 0 0;
+  min-width: 0;
+}
+.pt-card-facts .status {
+  white-space: normal;
+}
+.pt-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: var(--hit-sm);
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}
+.pt-card-owner {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (min-width: 721px) {
+  .pt-cards {
+    gap: 0 1px;
+    background: var(--line);
+  }
+  .pt-card {
+    background: var(--surface);
+  }
+  .pt-card.is-selected {
+    background: color-mix(in srgb, var(--accent-soft) 100%, var(--surface));
+  }
+}
+
+/* ---- Bulk bar: docked over the bottom of the content ---- */
+.pt.has-bulk {
+  padding-bottom: 76px;
+}
+.pt-bulk {
+  position: fixed;
+  bottom: var(--sp-5);
+  left: calc(50vw + var(--rail-w) / 2);
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: calc(100vw - var(--rail-w) - 2 * var(--sp-6));
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);
+  border: 1px solid var(--shell-line);
+  border-radius: var(--r-lg);
+  background: var(--shell);
+  box-shadow: var(--shadow-lg);
+  color: var(--shell-tx);
+  transform: translateX(-50%);
+  animation: pt-bulk-in var(--dur-2) var(--ease-out);
+}
+@keyframes pt-bulk-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+.pt-bulk-count {
+  margin: 0 var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.pt-bulk-muted {
+  color: var(--shell-tx-2);
+}
+.pt-bulk-actions {
+  display: flex;
+  gap: var(--sp-1);
+}
+.pt-bulk-n {
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--shell-active);
+  font-size: var(--fs-xs);
+}
+.pt-bulk .btn:not(.btn-primary) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--shell-tx);
+}
+.pt-bulk .btn:not(.btn-primary):hover:not(:disabled) {
+  background: var(--shell-active);
+}
+.pt-bulk :focus-visible {
+  outline-color: var(--shell-focus);
+}
+.pt-bulk-menu {
+  display: none;
+}
+
+/* ---- Narrow screens ---- */
+@media (max-width: 1100px) {
+  .pt-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* Two labelled buttons need the room of a wide screen; below that one menu. */
+@media (max-width: 900px) {
+  .pt-bulk-actions {
+    display: none;
+  }
+  .pt-bulk-menu {
+    display: block;
+  }
+}
+@media (max-width: 720px) {
+  .pt-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Label left, figure right: three short rows instead of three cramped
+     columns. */
+  .pt-stat {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'label value'
+      'context value';
+    align-items: center;
+    gap: 0 var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+  }
+  .pt-stat dt {
+    grid-area: label;
+  }
+  .pt-stat-value {
+    grid-area: value;
+    font-size: var(--fs-2xl);
+  }
+  .pt-stat-context {
+    grid-area: context;
+  }
+  .pt-stat + .pt-stat {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+  .pt-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .pt-select {
+    flex: 1 1 0;
+    width: auto;
+  }
+  .pt-filters {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    margin: 0 calc(-1 * var(--sp-4));
+    padding: 0 var(--sp-4);
+  }
+  .pt-filters .segmented {
+    align-self: flex-start;
+  }
+  .pt-list {
+    margin: 0 calc(-1 * var(--sp-4));
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+  .pt-bulk {
+    right: var(--sp-3);
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    left: var(--sp-3);
+    max-width: none;
+    transform: none;
+    animation-name: pt-bulk-in-phone;
+  }
+  .pt-bulk-count {
+    flex: 1;
+  }
+}
+@keyframes pt-bulk-in-phone {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pt-bulk {
+    animation: none;
+  }
+}
