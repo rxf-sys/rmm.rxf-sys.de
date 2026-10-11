@@ -120,6 +120,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   (Einmal-Token, Installationsbefehl je Betriebssystem mit Kopieren-Knopf,
   offene Tokens mit Widerrufen) oder Telefon/Tablet ohne Agent. Auf dem
   Telefon steht der Eintrag jetzt auch im Menü „Mehr".
+- **Dokumentation neu gesetzt.** Mitlaufendes Inhaltsverzeichnis auf breiten
+  Bildschirmen, aufklappbares „Inhalt" auf dem Telefon, Befehle als
+  Konsolenblöcke mit Kopieren-Knopf, Hinweise als ruhige Kästen. Veraltete
+  Bezeichnungen (Remote-Panel, Badge-Symbole) entsprechen wieder der
+  Oberfläche.
 - **„Offen" bedeutet überall dasselbe.** Seitenleiste, Navigationsleiste,
   Glocke, Übersicht und Alarm-Center zählen als offen nur Alarme, die noch
   niemand quittiert hat; quittierte stehen jeweils daneben. Vorher zeigte

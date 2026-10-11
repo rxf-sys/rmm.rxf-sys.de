@@ -36,7 +36,7 @@ const AdminPage = lazy(() => import('./pages/admin/AdminPage').then((m) => ({ de
 const AuditPage = lazy(() => import('./pages/audit/AuditPage').then((m) => ({ default: m.AuditPage })));
 const AutomationPage = lazy(() => import('./pages/automation/AutomationPage').then((m) => ({ default: m.AutomationPage })));
 const DevicePage = lazy(() => import('./pages/device/DevicePage').then((m) => ({ default: m.DevicePage })));
-const DocsPage = lazy(() => import('./components/DocsPage').then((m) => ({ default: m.DocsPage })));
+const DocsPage = lazy(() => import('./pages/docs/DocsPage').then((m) => ({ default: m.DocsPage })));
 const PatchesPage = lazy(() => import('./pages/patches/PatchesPage').then((m) => ({ default: m.PatchesPage })));
 const PersonsPage = lazy(() => import('./pages/persons/PersonsPage').then((m) => ({ default: m.PersonsPage })));
 const ScriptsPage = lazy(() => import('./pages/scripts/ScriptsPage').then((m) => ({ default: m.ScriptsPage })));

@@ -76,11 +76,6 @@
   font-weight: 500;
   font-size: 12px;
 }
-h1.page-title {
-  margin: 0;
-  font-weight: 800;
-  font-size: 19px;
-}
 
 /* Page wrapper of the screens; the shell provides the outer padding. */
 .screen {
@@ -88,18 +83,6 @@ h1.page-title {
   flex-direction: column;
   gap: var(--sp-5);
   min-width: 0;
-}
-
-.page-head {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-.page-head.center {
-  align-items: center;
-}
-.page-head .grow {
-  margin-left: auto;
 }
 
 .activity {

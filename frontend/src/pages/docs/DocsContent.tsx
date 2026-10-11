@@ -11,7 +11,8 @@ function WindowsAgent({ server }: { server: string }) {
   return (
     <>
       <p>
-        Im Dashboard oben rechts auf <b>„Gerät hinzufügen“</b> klicken, ein Einmal-Token erzeugen und die Plattform{' '}
+        Im Dashboard oben rechts auf <b>„Gerät hinzufügen“</b> klicken (auf dem Telefon im Menü <b>„Mehr“</b>), ein
+        Einmal-Token erzeugen und die Plattform{' '}
         <b>Windows</b> wählen. Der angezeigte Befehl lädt den Agenten, meldet das Gerät an und installiert den Dienst in einem
         Rutsch:
       </p>
