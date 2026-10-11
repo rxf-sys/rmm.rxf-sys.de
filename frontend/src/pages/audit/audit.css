@@ -157,6 +157,9 @@
   overflow-wrap: anywhere;
 }
 a.aud-dev {
+  /* A tap target of its own right under the row toggle: 24 px high
+     (WCAG 2.5.8). */
+  min-height: 24px;
   color: var(--accent-tx);
   font-weight: 600;
 }
