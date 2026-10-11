@@ -276,6 +276,19 @@ def flush(job_id: int) -> tuple[str, list[dict[str, str]]]:
     return "".join(out), found
 
 
+def discard(job_id: int) -> None:
+    """Forget a job's parser state without processing it.
+
+    For jobs that end without a job_result: timed out by the sweep, or deleted
+    with their device. A held fragment can be the start of a marker line, so
+    it is neither written to the job nor logged — but losing it silently
+    would hide why a credential never reached the vault, hence the warning.
+    """
+    state = _states.pop(job_id, None)
+    if state is not None and state.pending:
+        log.warning("job_secrets.discarded", job_id=job_id, held_chars=len(state.pending))
+
+
 async def store(device_id: int, job_id: int, creds: list[dict[str, str]]) -> None:
     """Persist extracted credentials (encrypted, upsert by label) + audit."""
     for cred in creds:

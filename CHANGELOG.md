@@ -427,6 +427,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   ersetzt der Hinweis „[⚠ RMM-CRED-Zeile ignoriert: zu lang]"; von ihr selbst
   landet nichts im Job-Log, auch nicht der Rest hinter der Grenze, und die
   Zeilen danach laufen normal weiter.
+- Endete ein Job ohne Ergebnis — vom Timeout-Sweep beendet oder mit seinem
+  Gerät gelöscht —, verschwand ein noch zurückgehaltenes Stück einer
+  `##RMM-CRED##`-Zeile spurlos, und sein Filterzustand blieb bis zum
+  Neustart im Speicher. Beides räumt jetzt `job_secrets.discard()` ab; eine
+  Warnung `job_secrets.discarded` im Server-Log nennt Job und Länge, nie den
+  Inhalt. Ein Neustart verliert den Zustand weiterhin ohne Spur, er liegt
+  nur im Speicher.
 
 ---
 

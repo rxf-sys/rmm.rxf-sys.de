@@ -10,15 +10,18 @@ from __future__ import annotations
 import asyncio
 import re
 import sys
+import time
 from itertools import pairwise
 from typing import Any
 from unittest import mock
 
+import aiosqlite
 import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from hypothesis import example, given
 from hypothesis import strategies as st
+from structlog.testing import capture_logs
 
 from app import (
     accounts,
@@ -380,6 +383,76 @@ def test_overlong_marker_lines_never_stream_their_secret(
     for cred in expected:
         assert cred["secret"] not in out
     assert out.count(_TOO_LONG) >= len(expected)
+
+
+# ---------------------------------------------------------------------------
+# Jobs that end without job_result: held fragments are discarded, and said so
+# ---------------------------------------------------------------------------
+
+_HELD = job_secrets.marker_line({"label": "L", "secret": "s3cret"})[:30]
+# What flush() makes of it while it is still there: a cut-off marker line.
+_HELD_FLUSHED = "[⚠ RMM-CRED-Zeile ignoriert: ungültiges Format]\n"
+
+
+def test_discard_drops_the_held_fragment_and_logs_only_its_size():
+    assert job_secrets.extract(9, _HELD) == ("", [])
+    with capture_logs() as logs:
+        job_secrets.discard(9)
+    # The warning names the job and the size, never the held text.
+    assert logs == [
+        {"event": "job_secrets.discarded", "log_level": "warning", "job_id": 9, "held_chars": 30}
+    ]
+    assert job_secrets.flush(9) == ("", [])
+    # Nothing held, nothing to report.
+    job_secrets.extract(10, "plain\n")
+    with capture_logs() as logs:
+        job_secrets.discard(10)
+        job_secrets.discard(11)
+    assert logs == []
+
+
+async def _backdate(settings: Settings, job_id: int, seconds: int) -> None:
+    async with aiosqlite.connect(settings.storage_db_path) as db:
+        await db.execute(
+            "UPDATE jobs SET created_at = ? WHERE id = ?", (int(time.time()) - seconds, job_id)
+        )
+        await db.commit()
+
+
+async def test_sweep_stale_discards_what_timed_out_jobs_held(client: AsyncClient, settings: Settings):
+    raw, _ = await devices.create_enrollment_token("t", 1)
+    device_id = int((await devices.enroll_device(token=raw, hostname="pc", os="linux"))["device_id"])
+    stale = await jobs.create_job(device_id, kind="shell", command="x", created_by="boss")
+    fresh = await jobs.create_job(device_id, kind="shell", command="y", created_by="boss")
+    for job in (stale, fresh):
+        await jobs.mark_running(job["id"])
+        job_secrets.extract(job["id"], _HELD)
+    await _backdate(settings, stale["id"], 10_000)
+
+    with capture_logs() as logs:
+        assert await jobs.sweep_stale(timeout_s=900) == 1
+    assert [e["job_id"] for e in logs if e["event"] == "job_secrets.discarded"] == [stale["id"]]
+    assert job_secrets.flush(stale["id"]) == ("", [])
+    # The job that is still running keeps its fragment.
+    assert job_secrets.flush(fresh["id"]) == (_HELD_FLUSHED, [])
+
+
+async def test_device_deletion_discards_what_its_jobs_held(admin_client: AsyncClient):
+    held = {}
+    for name in ("weg", "bleibt"):
+        raw, _ = await devices.create_enrollment_token("t", 1)
+        device_id = int((await devices.enroll_device(token=raw, hostname=name, os="linux"))["device_id"])
+        job = await jobs.create_job(device_id, kind="shell", command="x", created_by="boss")
+        await jobs.mark_running(job["id"])
+        job_secrets.extract(job["id"], _HELD)
+        held[name] = (device_id, job["id"])
+
+    with capture_logs() as logs:
+        r = await admin_client.delete(f"/api/devices/{held['weg'][0]}")
+    assert r.status_code == 200, r.text
+    assert [e["job_id"] for e in logs if e["event"] == "job_secrets.discarded"] == [held["weg"][1]]
+    assert job_secrets.flush(held["weg"][1]) == ("", [])
+    assert job_secrets.flush(held["bleibt"][1]) == (_HELD_FLUSHED, [])
 
 
 # ---------------------------------------------------------------------------
