@@ -2,11 +2,17 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -90,4 +96,55 @@ func FuzzVerifyPayload(f *testing.F) {
 			}
 		}
 	})
+}
+
+func TestDownloadUpdateAuthenticatesAndChecksTheStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer 3:s3cret" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte("binary"))
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+
+	got, err := downloadUpdate(ctx, Config{ServerURL: srv.URL, DeviceID: 3, DeviceSecret: "s3cret"}, "/dl")
+	if err != nil || string(got) != "binary" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if _, err := downloadUpdate(ctx, Config{ServerURL: srv.URL, DeviceID: 3, DeviceSecret: "wrong"}, "/dl"); err == nil ||
+		!strings.Contains(err.Error(), "401") {
+		t.Fatalf("want the server's 401 as an error, got %v", err)
+	}
+}
+
+// A download that fails verification must never reach the disk.
+func TestApplyUpdateRejectsATamperedDownload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("tampered"))
+	}))
+	defer srv.Close()
+	sum := sha256.Sum256([]byte("genuine"))
+	spec := updateSpec{Version: version + "-next", URL: "/dl", SHA256: hex.EncodeToString(sum[:])}
+
+	err := applyUpdate(context.Background(), Config{ServerURL: srv.URL}, spec)
+	if err == nil || !strings.HasPrefix(err.Error(), "verify:") {
+		t.Fatalf("want a verify error, got %v", err)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(exe + ".new"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("rejected update was written to disk: %v", err)
+	}
+}
+
+func TestApplyUpdateSkipsTheRunningVersion(t *testing.T) {
+	// No server at all: an update to the version already running must not
+	// even try to download.
+	if err := applyUpdate(context.Background(), Config{ServerURL: "http://127.0.0.1:1"}, updateSpec{Version: version}); err != nil {
+		t.Fatalf("got %v", err)
+	}
 }
