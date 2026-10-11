@@ -5,7 +5,9 @@
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   gap: var(--sp-4);
-  align-items: stretch;
+  /* The figures keep their own height; stretched to the system panel they
+     ended in an empty band. */
+  align-items: start;
 }
 .pt-stats {
   display: grid;
