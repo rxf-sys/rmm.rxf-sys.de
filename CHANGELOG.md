@@ -8,6 +8,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **Breite Dialoge liefen über schmale Bildschirme hinaus.** Der Dialog
+  „Gerät hinzufügen" und die Skript-Vorlagen ragten auf Telefonen und
+  Tablets unter 880 px rechts aus dem Bild, das Schließen-Kreuz war nicht
+  erreichbar.
 - **Endlos-Abruf nach dem Login.** Jeder angemeldete Tab rief
   `/api/devices`, `/api/alerts`, `/api/patches/summary` und `/api/persons`
   ununterbrochen ab — gemessen 569-mal je Endpunkt in zehn Sekunden
@@ -107,6 +111,15 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Mail-/Telefon-Link, Konto und Aktivität. Anlegen und Bearbeiten im Dialog;
   Löschen nennt vorher die Geräte, die ohne Person zurückbleiben, und was mit
   dem Konto geschieht. Geräte lassen sich direkt zuweisen und lösen.
+- **Anmeldung neu gestaltet.** Markenspalte und Formular in beiden Themes;
+  verständliche Meldungen für falsche Zugangsdaten, falschen Code, zu viele
+  Versuche und einen nicht erreichbaren Server; beim zweiten Faktor lässt
+  sich auf einen Backup-Code umschalten; Hinweis bei aktivierter
+  Feststelltaste.
+- **„Gerät hinzufügen" als ein Dialog mit zwei Wegen.** Rechner mit Agent
+  (Einmal-Token, Installationsbefehl je Betriebssystem mit Kopieren-Knopf,
+  offene Tokens mit Widerrufen) oder Telefon/Tablet ohne Agent. Auf dem
+  Telefon steht der Eintrag jetzt auch im Menü „Mehr".
 - **„Offen" bedeutet überall dasselbe.** Seitenleiste, Navigationsleiste,
   Glocke, Übersicht und Alarm-Center zählen als offen nur Alarme, die noch
   niemand quittiert hat; quittierte stehen jeweils daneben. Vorher zeigte
