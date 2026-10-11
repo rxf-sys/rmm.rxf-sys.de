@@ -12,6 +12,8 @@ describe('RustDesk IDs', () => {
     expect(isRustdeskId('123456789@relay.evil.example')).toBe(false);
     expect(isRustdeskId('123/../x')).toBe(false);
     expect(isRustdeskId('12345')).toBe(false);
+    expect(isRustdeskId('1234567890123')).toBe(false);
+    expect(isRustdeskId('--1234')).toBe(false);
     expect(safeDeepLink('rustdesk://123456789')).toBe('rustdesk://123456789');
     expect(safeDeepLink('rustdesk://123?password=x')).toBeNull();
     expect(safeDeepLink('javascript:alert(1)')).toBeNull();

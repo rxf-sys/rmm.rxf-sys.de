@@ -4,7 +4,9 @@
  * rustdesk:// link the browser hands to the local client, and it can come
  * from the agent — so anything else is not passed on.
  */
-const RUSTDESK_ID = /^(?:[0-9]{6,12}|[A-Za-z0-9_-]{6,16})$/;
+// Generated IDs are 6–12 digits; custom ones start with a letter. Without
+// that, every 13–16 digit string slipped through the custom branch.
+const RUSTDESK_ID = /^(?:[0-9]{6,12}|[A-Za-z][A-Za-z0-9_-]{5,15})$/;
 
 /** Normalise what someone types: RustDesk shows IDs in groups of three. */
 export function cleanRustdeskId(raw: string): string {
