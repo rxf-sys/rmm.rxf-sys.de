@@ -280,21 +280,24 @@ async def world(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> dict[st
     }
 
 
-async def _sign_in(client: AsyncClient, world: dict[str, Any], role: str) -> dict[str, Any]:
-    """Log in as a fresh account of `role`; returns `world` plus the prefix
-    of a second session of that account (for DELETE /api/auth/sessions)."""
-    username = f"{role}-matrix"
-    user = await accounts.create_user(
-        username,
-        "matrix-passwort-1",
-        role=role,
-        # A viewer sees the world's device through its person.
-        person_id=world["person_id"] if role == "viewer" else None,
-    )
+async def _log_in(
+    client: AsyncClient, username: str, role: str, person_id: int | None
+) -> dict[str, Any]:
+    """Create an account and log the client in as it; returns the account."""
+    user = await accounts.create_user(username, "matrix-passwort-1", role=role, person_id=person_id)
     r = await client.post(
         "/api/auth/login", json={"username": username, "password": "matrix-passwort-1"}
     )
     assert r.status_code == 200, r.text
+    return user
+
+
+async def _sign_in(client: AsyncClient, world: dict[str, Any], role: str) -> dict[str, Any]:
+    """Log in as a fresh account of `role`; returns `world` plus the prefix
+    of a second session of that account (for DELETE /api/auth/sessions)."""
+    # A viewer sees the world's device through its person.
+    person_id = world["person_id"] if role == "viewer" else None
+    user = await _log_in(client, f"{role}-matrix", role, person_id)
     spare = await accounts.create_session(user["id"], ttl_hours=1)
     return {**world, "token_prefix": spare[:8]}
 
@@ -359,14 +362,6 @@ async def _household(name: str, hostname: str) -> tuple[int, int]:
     device_id = int(enrolled["device_id"])
     await devices.update_device(device_id, person_id=person["id"])
     return person["id"], device_id
-
-
-async def _log_in(client: AsyncClient, username: str, role: str, person_id: int | None) -> None:
-    await accounts.create_user(username, "scope-passwort-1", role=role, person_id=person_id)
-    r = await client.post(
-        "/api/auth/login", json={"username": username, "password": "scope-passwort-1"}
-    )
-    assert r.status_code == 200, r.text
 
 
 async def test_viewer_fleet_metrics_cover_only_own_devices(
