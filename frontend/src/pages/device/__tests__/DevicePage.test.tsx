@@ -7,9 +7,10 @@ import { ApiError } from '../../../api/client';
 import type { Device, DeviceDetail, Job } from '../../../types';
 import { DevicePage } from '../DevicePage';
 
-const { deviceMock, jobsMock } = vi.hoisted(() => ({
+const { deviceMock, jobsMock, updateDeviceMock } = vi.hoisted(() => ({
   deviceMock: vi.fn<() => Promise<DeviceDetail>>(),
   jobsMock: vi.fn<() => Promise<{ jobs: Job[] }>>(),
+  updateDeviceMock: vi.fn<(id: number, body: { rustdesk_id?: string }) => Promise<unknown>>(),
 }));
 
 vi.mock('../../../api/client', async () => {
@@ -22,6 +23,9 @@ vi.mock('../../../api/client', async () => {
       deviceJobs: () => jobsMock(),
       deviceAlerts: () => Promise.resolve({ alerts: [], stats: { total: 0, open: 0, by_rule: {} } }),
       audit: () => Promise.resolve({ events: [], total: 0 }),
+      scripts: () => Promise.resolve({ scripts: [] }),
+      remoteConfig: () => Promise.resolve({ enabled: true, relay_host: 'rd.example', has_key: true, deploy_commands: { linux: 'rustdesk --config x' } }),
+      updateDevice: (id: number, body: { rustdesk_id?: string }) => updateDeviceMock(id, body),
     },
     // The console streams over a socket; here it stays quiet.
     openJobSocket: () => ({ close() {} }),
@@ -98,6 +102,34 @@ describe('DevicePage', () => {
     expect(names).not.toContain('Fernzugriff');
     expect(screen.queryByRole('button', { name: /Fernsteuerung/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Neu starten/ })).not.toBeInTheDocument();
+  });
+
+  it('asks for a new RustDesk ID instead of offering a session the server would refuse', async () => {
+    // An old manual entry with spaces: the backend no longer builds a link from it.
+    deviceMock.mockResolvedValue({ device: device({ rustdesk_id: '123 456 789' }), inventory: {} });
+    updateDeviceMock.mockResolvedValue({});
+    show('/devices/7?tab=remote', admin);
+    expect(await screen.findByText(/ist keine gültige RustDesk-ID/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Sitzung öffnen/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Fernsteuerung/ })).not.toBeInTheDocument();
+    const field = await screen.findByRole('textbox', { name: 'Oder ID von Hand eintragen' });
+    expect(field).toHaveValue('123456789');
+    await userEvent.click(screen.getByRole('button', { name: 'Speichern' }));
+    expect(updateDeviceMock).toHaveBeenCalledWith(7, { rustdesk_id: '123456789' });
+  });
+
+  it('lets an operator replace a stored RustDesk ID', async () => {
+    deviceMock.mockResolvedValue({ device: device({ rustdesk_id: '123456789' }), inventory: {} });
+    updateDeviceMock.mockResolvedValue({});
+    show('/devices/7?tab=remote', admin);
+    await userEvent.click(await screen.findByRole('button', { name: 'ID ändern' }));
+    const field = screen.getByRole('textbox', { name: 'Neue RustDesk-ID' });
+    // Unchanged is not worth a request.
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled();
+    await userEvent.clear(field);
+    await userEvent.type(field, '987 654 321');
+    await userEvent.click(screen.getByRole('button', { name: 'Speichern' }));
+    expect(updateDeviceMock).toHaveBeenCalledWith(7, { rustdesk_id: '987654321' });
   });
 
   it('ties the selected tab to its panel', async () => {

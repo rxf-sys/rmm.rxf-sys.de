@@ -17,6 +17,7 @@ import {
 } from '../../icons';
 import type { Device } from '../../types';
 import { Menu, StatusBadge, type MenuEntry } from '../../ui';
+import { isRustdeskId } from '../../remoteDesk';
 
 interface Props {
   device: Device;
@@ -122,7 +123,7 @@ export function DeviceHeader(p: Props) {
           <button type="button" className="btn btn-primary" onClick={p.onWake}>
             <IconPower size={14} /> Aufwecken
           </button>
-        ) : agent && p.isOperator && d.rustdesk_id ? (
+        ) : agent && p.isOperator && isRustdeskId(d.rustdesk_id) ? (
           <button type="button" className="btn btn-primary" onClick={p.onSession}>
             <IconExternal size={14} /> Fernsteuerung
           </button>

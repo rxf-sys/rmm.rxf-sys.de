@@ -9,6 +9,7 @@ import { useNow } from '../../../hooks/useNow';
 import type { DeviceDetail } from '../../../types';
 import { KeyValue, Meter, Panel, StatusBadge } from '../../../ui';
 import type { TabId } from '../deviceTabs';
+import { isRustdeskId } from '../../../remoteDesk';
 
 interface NicInfo {
   name: string;
@@ -217,7 +218,7 @@ export function OverviewTab({ detail, isOperator, onGoTab }: { detail: DeviceDet
             ],
             [
               'RustDesk',
-              d.rustdesk_id ? (
+              isRustdeskId(d.rustdesk_id) ? (
                 <span className="num">{d.rustdesk_id}</span>
               ) : isOperator ? (
                 <GoLink onClick={() => onGoTab('remote')}>Einrichten</GoLink>

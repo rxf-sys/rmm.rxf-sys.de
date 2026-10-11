@@ -13,12 +13,47 @@ import { cleanRustdeskId, isRustdeskId } from '../../../remoteDesk';
 import { notify, trackJob } from '../../../ui/toast';
 import { JobConsole } from '../JobConsole';
 
-function RemoteSetup({ device }: { device: Device }) {
+/** Typing the ID in by hand: for devices whose agent cannot read it (RustDesk
+ *  outside the usual paths on macOS, for one) and to replace a stale one. */
+function ManualIdForm({ device, label, initial = '', onDone }: { device: Device; label: string; initial?: string; onDone?: () => void }) {
   const qc = useQueryClient();
+  const [value, setValue] = useState(initial);
+  const field = useId();
+  const id = cleanRustdeskId(value);
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.updateDevice(device.id, { rustdesk_id: id });
+      notify.success('RustDesk-ID gespeichert');
+      void qc.invalidateQueries({ queryKey: qk.device(device.id) });
+      onDone?.();
+    } catch (err) {
+      notify.error('ID nicht gespeichert', err);
+    }
+  };
+  return (
+    <form className="dv-inline-form" onSubmit={(e) => void save(e)}>
+      <label htmlFor={field} className="field-label">
+        {label}
+      </label>
+      <div className="dv-inline-row">
+        <input id={field} className="input" value={value} onChange={(e) => setValue(e.target.value)} inputMode="numeric" placeholder="z. B. 123 456 789" />
+        <button type="submit" className="btn" disabled={!isRustdeskId(id) || id === device.rustdesk_id}>
+          Speichern
+        </button>
+        {onDone && (
+          <button type="button" className="btn btn-ghost" onClick={onDone}>
+            Abbrechen
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+function RemoteSetup({ device }: { device: Device }) {
   const config = useQuery({ queryKey: ['remote-config'], queryFn: ({ signal }) => api.remoteConfig(signal), staleTime: 5 * 60_000 });
-  const [manualId, setManualId] = useState('');
   const [copied, setCopied] = useState(false);
-  const idField = useId();
 
   if (config.isPending) return null;
   if (config.error) return <ErrorNote error={config.error} onRetry={() => void config.refetch()} />;
@@ -26,16 +61,6 @@ function RemoteSetup({ device }: { device: Device }) {
     return <p className="dv-note">Fernsteuerung ist auf dem Server nicht eingerichtet (RUSTDESK_RELAY_HOST und RUSTDESK_KEY in der .env).</p>;
 
   const cmd = config.data.deploy_commands[device.os as 'windows' | 'linux' | 'darwin'] ?? '';
-  const save = async (e: FormEvent) => {
-    e.preventDefault();
-    try {
-      await api.updateDevice(device.id, { rustdesk_id: cleanRustdeskId(manualId) });
-      notify.success('RustDesk-ID gespeichert');
-      void qc.invalidateQueries({ queryKey: qk.device(device.id) });
-    } catch (err) {
-      notify.error('ID nicht gespeichert', err);
-    }
-  };
   return (
     <div className="dv-stack-sm">
       <p className="dv-note">
@@ -59,17 +84,7 @@ function RemoteSetup({ device }: { device: Device }) {
           </button>
         </div>
       )}
-      <form className="dv-inline-form" onSubmit={(e) => void save(e)}>
-        <label htmlFor={idField} className="field-label">
-          Oder ID von Hand eintragen
-        </label>
-        <div className="dv-inline-row">
-          <input id={idField} className="input" value={manualId} onChange={(e) => setManualId(e.target.value)} inputMode="numeric" placeholder="z. B. 123 456 789" />
-          <button type="submit" className="btn" disabled={!isRustdeskId(cleanRustdeskId(manualId))}>
-            Speichern
-          </button>
-        </div>
-      </form>
+      <ManualIdForm device={device} label="Oder ID von Hand eintragen" initial={cleanRustdeskId(device.rustdesk_id)} />
     </div>
   );
 }
@@ -143,6 +158,10 @@ export function RemoteTab({ device, isOperator, onSession }: { device: Device; i
   const [active, setActive] = useState<{ id: number; label: string } | null>(null);
   const [running, setRunning] = useState(false);
   const [scriptId, setScriptId] = useState<number | ''>('');
+  const [changingId, setChangingId] = useState(false);
+  // An ID the backend would refuse to build a link from (an old manual entry
+  // with spaces, say) gets the setup form, not a button that only errors.
+  const usableId = isRustdeskId(device.rustdesk_id);
   const cmdId = useId();
   const scripts = useQuery({ queryKey: qk.scripts, queryFn: ({ signal }) => api.scripts(signal).then((r) => r.scripts), enabled: isOperator });
 
@@ -218,9 +237,19 @@ export function RemoteTab({ device, isOperator, onSession }: { device: Device; i
       {confirmDialog}
       <Panel
         title="Fernsteuerung"
-        meta={device.rustdesk_id ? <>RustDesk-ID <span className="num">{device.rustdesk_id}</span></> : 'noch nicht eingerichtet'}
+        meta={
+          usableId ? (
+            <>
+              RustDesk-ID <span className="num">{device.rustdesk_id}</span>
+            </>
+          ) : device.rustdesk_id ? (
+            'hinterlegte ID ungültig'
+          ) : (
+            'noch nicht eingerichtet'
+          )
+        }
         actions={
-          device.rustdesk_id && (
+          usableId && (
             <button type="button" className="btn btn-sm btn-primary" onClick={onSession}>
               <IconExternal size={14} /> Sitzung öffnen
             </button>
@@ -228,7 +257,28 @@ export function RemoteTab({ device, isOperator, onSession }: { device: Device; i
         }
         className="dv-span"
       >
-        {device.rustdesk_id ? <p className="dv-note">Öffnet den installierten RustDesk-Client mit dieser Verbindung.</p> : <RemoteSetup device={device} />}
+        {usableId ? (
+          changingId ? (
+            <ManualIdForm device={device} label="Neue RustDesk-ID" initial={device.rustdesk_id} onDone={() => setChangingId(false)} />
+          ) : (
+            <p className="dv-note">
+              Öffnet den installierten RustDesk-Client mit dieser Verbindung.{' '}
+              <button type="button" className="link-btn" onClick={() => setChangingId(true)}>
+                ID ändern
+              </button>
+            </p>
+          )
+        ) : (
+          <>
+            {device.rustdesk_id && (
+              <p className="dv-note" role="status">
+                Die hinterlegte ID <span className="num">{device.rustdesk_id}</span> ist keine gültige RustDesk-ID, eine Sitzung lässt sich
+                damit nicht öffnen. Bitte neu eintragen — meldet der Agent eine gültige, ersetzt er sie auch selbst.
+              </p>
+            )}
+            <RemoteSetup device={device} />
+          </>
+        )}
       </Panel>
 
       <Panel title="Terminal" meta="volle Systemrechte · jeder Befehl steht im Audit-Log" className="dv-span">

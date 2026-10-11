@@ -8,6 +8,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **RustDesk-ID ließ sich nicht korrigieren.** Das Eingabefeld erschien nur,
+  solange gar keine ID hinterlegt war. Der Reiter „Fernzugriff" bietet jetzt
+  „ID ändern" an; eine ungültige hinterlegte ID (etwa eine alte Eingabe mit
+  Leerzeichen) wird benannt und vorbefüllt zum Neu-Speichern angeboten, statt
+  einen Sitzungs-Knopf zu zeigen, der nur einen Fehler bringt.
 - **Breite Dialoge liefen über schmale Bildschirme hinaus.** Der Dialog
   „Gerät hinzufügen" und die Skript-Vorlagen ragten auf Telefonen und
   Tablets unter 880 px rechts aus dem Bild, das Schließen-Kreuz war nicht
