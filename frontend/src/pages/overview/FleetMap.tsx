@@ -18,8 +18,11 @@ const GROUPS: { kind: GroupKind; label: string; filter?: string }[] = [
 const CELL_LIMIT = 240;
 const fmt = new Intl.NumberFormat('de-DE');
 
+/** Up to 60 devices each cell is a comfortable touch target: 20 px plus the
+ *  4 px gap gives the 24 px spacing WCAG 2.5.8 asks for. Denser maps trade
+ *  that for overview; the group label links to the same devices as a list. */
 function cellSize(total: number): number {
-  if (total <= 60) return 18;
+  if (total <= 60) return 20;
   if (total <= 300) return 12;
   return 8;
 }

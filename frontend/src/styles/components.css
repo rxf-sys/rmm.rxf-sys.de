@@ -1490,7 +1490,7 @@ kbd,
 @media (max-width: 720px) {
   .bulkbar {
     right: var(--sp-3);
-    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px));
     left: var(--sp-3);
     max-width: none;
     transform: none;

@@ -3,6 +3,12 @@
    navigation on phones, popovers that belong to the shell.
    ============================================================ */
 
+/* Focus moved by keyboard or by an anchor must land clear of the sticky
+   bars, not underneath them (WCAG 2.4.11). */
+html {
+  scroll-padding-top: var(--topbar-h);
+}
+
 .shell {
   display: grid;
   grid-template-columns: var(--rail-w) minmax(0, 1fr);
@@ -851,10 +857,22 @@ html [data-sonner-toast] [data-button] {
     background: none;
     color: var(--tx-2);
   }
-  .search-trigger-text,
+  /* The icon alone is the button on a phone; the words stay for screen
+     readers, or the button would have no name at all. */
+  .search-trigger-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   .search-trigger kbd,
   .topbar-add {
     display: none;
+  }
+  html {
+    scroll-padding-bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px));
   }
   .shell-content {
     gap: var(--sp-4);

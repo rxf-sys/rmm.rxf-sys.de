@@ -75,6 +75,8 @@
   /* --- Layout --- */
   --rail-w: 240px;
   --topbar-h: 56px;
+  /* Phone navigation bar at the bottom edge (shell.css .bottomnav). */
+  --bottomnav-h: 68px;
   --content-max: 1520px;
 
   /* --- Colour: neutrals --- */

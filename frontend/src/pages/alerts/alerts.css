@@ -191,7 +191,12 @@
   font-size: var(--fs-sm);
 }
 .al-card-meta .al-dev-link {
+  /* A tap target of its own, not a link inside a sentence: 24 px high.
+     inline-block keeps the ellipsis working. */
+  display: inline-block;
   max-width: 100%;
+  line-height: 24px;
+  vertical-align: bottom;
 }
 .al-card-actions {
   display: flex;
