@@ -21,7 +21,7 @@ import {
 import { devicePath } from '../../routes';
 import type { AuditEvent, Device } from '../../types';
 import { EmptyState, ErrorNote, KeyValue, PageHeader, Panel, SkeletonRows, Switch } from '../../ui';
-import { downloadCsv } from '../devices/deviceList';
+import { downloadCsv } from '../../csv';
 import {
   CATEGORY_IDS,
   DEFAULT_RANGE,

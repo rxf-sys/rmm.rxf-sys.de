@@ -5,6 +5,7 @@
  */
 import { AUDIT_CATEGORY, auditCategoryLabel, auditDayLabel, describeAudit, type AuditNames } from '../../auditText';
 import type { AuditCategory, AuditEvent } from '../../types';
+import { toCsvDocument, type CsvValue } from '../../csv';
 
 // ---- Filters ----------------------------------------------------------------
 
@@ -189,18 +190,6 @@ export function detailRows(e: AuditEvent): DetailRow[] {
 
 // ---- Export -----------------------------------------------------------------
 
-/** Spreadsheets run a cell that starts with one of these as a formula. Detail
- *  fields carry hostnames and commands from the devices, so no cell is trusted
- *  not to be one. */
-const FORMULA_START = /^[=+\-@\t\r]/;
-
-function csvCell(v: string | number | null): string {
-  if (v === null) return '';
-  let s = String(v);
-  if (FORMULA_START.test(s)) s = `'${s}`;
-  return /[";\n\r]/.test(s) || s !== s.trim() ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
 /** TT.MM.JJJJ HH:MM:SS — the form German spreadsheets read as a date. */
 export function csvDateTime(ts: number): string {
   const t = new Date(ts * 1000);
@@ -219,14 +208,10 @@ const CSV_HEADER = [
   'Details',
 ];
 
-/**
- * Semicolon-separated with a byte-order mark: what Excel in a German locale
- * opens correctly by double-click, and what every other tool imports. The
- * detail blob goes along as JSON, so nothing the screen shows is lost.
- */
+/** The page as a CSV document. The detail blob goes along as JSON, so
+ *  nothing the screen shows is lost. */
 export function toCsv(events: AuditEvent[], names: AuditNames): string {
-  const lines = events.map((e) =>
-    [
+  const rows = events.map((e): CsvValue[] => [
       csvDateTime(e.ts),
       actorLabel(e),
       auditCategoryLabel(e.category),
@@ -236,11 +221,8 @@ export function toCsv(events: AuditEvent[], names: AuditNames): string {
       e.device_id,
       e.security ? 'ja' : 'nein',
       Object.keys(e.detail).length > 0 ? JSON.stringify(e.detail) : '',
-    ]
-      .map(csvCell)
-      .join(';'),
-  );
-  return `\ufeff${[CSV_HEADER.join(';'), ...lines].join('\r\n')}\r\n`;
+  ]);
+  return toCsvDocument(CSV_HEADER, rows);
 }
 
 /** Today's date, and the page when it is not the first — two exports of the

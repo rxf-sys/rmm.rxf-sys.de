@@ -28,7 +28,6 @@ import {
   FILTERS,
   csvFileName,
   diskPct,
-  downloadCsv,
   formatSort,
   isFilter,
   lastSeen,
@@ -47,6 +46,7 @@ import {
 import { useSavedViews, viewQuery } from './savedViews';
 import { SoftwareSearch } from './SoftwareSearch';
 import { ViewsPopover } from './ViewsPopover';
+import { downloadCsv } from '../../csv';
 
 interface Props {
   devices: Device[];

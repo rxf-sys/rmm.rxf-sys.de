@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, api } from '../../api/client';
-import { AUDIT_CATEGORY, auditNamesFrom, describeAudit } from '../../auditText';
+import { auditCategoryLabel, auditNamesFrom, describeAudit } from '../../auditText';
 import { isAgent } from '../../deviceClass';
 import { niceCeiling } from '../../fleetChart';
 import { formatRelative } from '../../format';
@@ -338,7 +338,7 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
                           <time dateTime={new Date(ev.ts * 1000).toISOString()} title={formatRelative(ev.ts)}>
                             {hhmm(ev.ts)}
                           </time>
-                          <span className="badge">{AUDIT_CATEGORY[ev.category]?.label ?? ev.category}</span>
+                          <span className="badge">{auditCategoryLabel(ev.category)}</span>
                           <span className="ov-act-text">{describeAudit(ev, names)}</span>
                         </li>
                       ))}

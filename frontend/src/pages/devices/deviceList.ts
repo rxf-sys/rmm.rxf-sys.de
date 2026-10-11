@@ -8,6 +8,7 @@ import { deviceStatusKind, deviceStatusLabel, hasProblem } from '../../deviceSta
 import { osLabel } from '../../format';
 import { compareVersions } from '../../version';
 import type { Device, PatchSummary } from '../../types';
+import { toCsvDocument, type CsvValue } from '../../csv';
 
 // ---- Filters ----------------------------------------------------------------
 
@@ -202,17 +203,6 @@ export function sortDevices(devices: Device[], sort: Sort, ctx: ListContext): De
 
 // ---- Export -----------------------------------------------------------------
 
-/** Spreadsheets run a cell that starts with one of these as a formula. A
- *  hostname is whatever the agent reports, so it is never trusted to be one. */
-const FORMULA_START = /^[=+\-@\t\r]/;
-
-function csvCell(v: string | number | null): string {
-  if (v === null) return '';
-  let s = String(v);
-  if (FORMULA_START.test(s)) s = `'${s}`;
-  return /[";\n\r]/.test(s) || s !== s.trim() ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /** TT.MM.JJJJ HH:MM — the form German spreadsheets read as a date. */
@@ -240,12 +230,9 @@ const CSV_HEADER = [
 
 const round = (v: number | null) => (v === null ? null : Math.round(v));
 
-/**
- * Semicolon-separated with a byte-order mark: what Excel in a German locale
- * opens correctly by double-click, and what every other tool imports.
- */
+/** The list as a CSV document, one row per device. */
 export function toCsv(devices: Device[], ctx: ListContext): string {
-  const lines = devices.map((d) => {
+  const rows = devices.map((d): CsvValue[] => {
     const p = ctx.patchSummary[String(d.id)];
     return [
       d.hostname,
@@ -261,27 +248,11 @@ export function toCsv(devices: Device[], ctx: ListContext): string {
       p ? p.security : null,
       isAgent(d) ? d.agent_version : '',
       csvDate(lastSeen(d)),
-    ]
-      .map(csvCell)
-      .join(';');
+    ];
   });
-  return `\ufeff${[CSV_HEADER.join(';'), ...lines].join('\r\n')}\r\n`;
+  return toCsvDocument(CSV_HEADER, rows);
 }
 
 export function csvFileName(now = new Date()): string {
   return `vulpexa-devices-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.csv`;
-}
-
-/** Hand a CSV to the browser as a download. */
-export function downloadCsv(csv: string, name: string): void {
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Revoked on the next task: some browsers start the download only after
-  // the click handler has returned.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

@@ -404,11 +404,18 @@ async def main(db_path: str, many: int) -> None:
             await jobs.append_output(j["id"], out)
         if status != "running":
             await jobs.finish_job(j["id"], status, code)
-        await audit.record("job.created", user="admin", device_id=did, job_id=j["id"], script_id=sc["id"])
+        # The same fields routers/jobs.py records, so the log reads as it
+        # would in production.
+        await audit.record(
+            "job.created",
+            user="admin",
+            device_id=did,
+            kind="script",
+            script=sc["name"],
+        )
 
     await audit.record("auth.login", user="admin", ip="192.168.2.10")
-    await audit.record("auth.login_failed", user="root", ip="203.0.113.77")
-    await audit.record("device.updated", user="admin", device_id=ids[2], fields=["tags"])
+    await audit.record("devices.updated", user="admin", device_id=ids[2])
     print(f"seeded {len(ids)} agent devices into {db_path}")
 
 
