@@ -511,7 +511,7 @@ async def run_script_schedules(settings: Settings, now: float | None = None) -> 
                 device_id=d["id"],
                 script_id=script["id"],
                 script=script["name"],
-                content_sha256=scripts.content_sha256(script["content"]),
+                content_hmac=await scripts.content_hmac(script["content"]),
                 actor="automation",
             )
             created.append(job["id"])

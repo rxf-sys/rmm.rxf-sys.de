@@ -204,7 +204,7 @@ async def test_schedule_dispatch(client: AsyncClient, settings: Settings, monkey
     run = next(e for e in await audit.recent() if e["event"] == "script.scheduled_run")
     assert run["actor"] == "automation" and run["device_id"] == dev
     assert run["detail"]["script_id"] == script["id"]
-    assert run["detail"]["content_sha256"] == scripts.content_sha256("echo hi")
+    assert run["detail"]["content_hmac"] == await scripts.content_hmac("echo hi")
     # Same hour again → last_run guard blocks.
     assert await automation.run_script_schedules(settings, now=now + 60) == []
 

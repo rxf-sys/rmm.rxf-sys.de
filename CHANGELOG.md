@@ -220,12 +220,18 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Fernsteuerung geht — und alles Übrige nur mit Namen; Notizen,
   Seriennummern und IMEIs gehören nicht ins Log. Skript-Einträge
   (`job.created` für Skripte, `script.scheduled_run`, `script.created`,
-  `script.updated`) tragen den SHA-256 des Skriptinhalts, `script.updated`
-  zusätzlich den vorherigen Hash, die `destruktiv`-Markierung vorher und
-  nachher und bei einer Umbenennung den alten Namen (`script_from`) — ältere
-  Einträge nennen das Skript noch so, und der Feed sagt „umbenannt von …". Die Bibliothek ist änderbar; erst der Hash verbindet einen Lauf mit
-  der Fassung, die tatsächlich lief, ohne einen Skriptinhalt, der Zugangsdaten
-  enthalten kann, ins Log zu kopieren.
+  `script.updated`) tragen einen Fingerabdruck des Skriptinhalts
+  (`content_hmac`), `script.updated` zusätzlich den vorherigen, die
+  `destruktiv`-Markierung vorher und nachher und bei einer Umbenennung den
+  alten Namen (`script_from`) — ältere Einträge nennen das Skript noch so,
+  und der Feed sagt „umbenannt von …". Die Bibliothek ist änderbar; erst der
+  Fingerabdruck verbindet einen Lauf mit der Fassung, die tatsächlich lief,
+  ohne den Inhalt ins Log zu kopieren. Er ist ein HMAC-SHA256 mit einem
+  zufälligen Schlüssel dieser Installation (in `app_settings`, von keinem
+  Endpunkt ausgeliefert), kein bloßer SHA-256: Skripte folgen bekannten
+  Vorlagen, und ein kurzes Passwort darin ließe sich aus einem ungesalzenen
+  Hash im Log in Minuten durchprobieren — auch noch, nachdem es längst aus
+  dem Skript entfernt ist.
 - **Rollen-Matrix als Test** (`backend/tests/test_role_matrix.py`). Jeder
   schreibende `/api`-Endpunkt wird mit eingeschalteter Auth ohne Sitzung, als
   Viewer und als Techniker aufgerufen: Admin-Endpunkte antworten beiden mit

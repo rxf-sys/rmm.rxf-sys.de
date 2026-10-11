@@ -49,7 +49,7 @@ async def create_script(body: ScriptBody, user: dict = Depends(require_operator)
         script_id=script["id"],
         script=script["name"],
         danger=script["danger"],
-        content_sha256=scripts.content_sha256(script["content"]),
+        content_hmac=await scripts.content_hmac(script["content"]),
     )
     return {"script": script}
 
@@ -88,8 +88,8 @@ async def update_script(
         script_id=script_id,
         script=script["name"],
         **renamed,
-        content_sha256=scripts.content_sha256(script["content"]),
-        content_sha256_from=scripts.content_sha256(previous["content"]),
+        content_hmac=await scripts.content_hmac(script["content"]),
+        content_hmac_from=await scripts.content_hmac(previous["content"]),
         danger_from=previous["danger"],
         danger_to=script["danger"],
     )
