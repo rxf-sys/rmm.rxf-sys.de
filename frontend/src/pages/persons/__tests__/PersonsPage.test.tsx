@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -41,6 +41,8 @@ const tablet = device({ id: 14, hostname: 'tablet-mama', online: true });
 const nas = device({ id: 12, hostname: 'nas-bernd', person_id: 3, online: true });
 
 /** The query string the page wrote. */
+// React Router 7 writes search params in a transition, so the address can
+// trail a click by a render; assertions on it wait.
 function Where() {
   return <output data-testid="where">{useLocation().search}</output>;
 }
@@ -96,7 +98,7 @@ describe('PersonsPage', () => {
   it('keeps the selection in the URL', async () => {
     show();
     await userEvent.click(within(list()).getByRole('button', { name: /Martina Fuchs/ }));
-    expect(screen.getByTestId('where')).toHaveTextContent('?person=2');
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('?person=2'));
     expect(detailName()).toHaveTextContent('Martina Fuchs');
   });
 
@@ -171,7 +173,7 @@ describe('PersonsPage', () => {
     const creds = await screen.findByRole('dialog', { name: 'Betrachter-Konto angelegt' });
     expect(within(creds).getByText('oma.erna')).toBeInTheDocument();
     expect(within(creds).getByText('x7-Geheim')).toBeInTheDocument();
-    expect(screen.getByTestId('where')).toHaveTextContent('?person=9');
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('?person=9'));
     expect(onRefresh).toHaveBeenCalled();
   });
 
@@ -212,7 +214,7 @@ describe('PersonsPage', () => {
 
     expect(deleteMock).toHaveBeenCalledWith(2);
     expect(onRefresh).toHaveBeenCalled();
-    expect(screen.getByTestId('where')).toHaveTextContent('');
+    await waitFor(() => expect(screen.getByTestId('where')).toBeEmptyDOMElement());
   });
 
   it('deletes nothing when the confirmation is cancelled', async () => {

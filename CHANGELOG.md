@@ -95,6 +95,18 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Akteur, Satz und Link zum Gerät; jeder Eintrag klappt zu allen
   Detailfeldern auf. „CSV exportieren" liefert die aktuelle Seite mit
   demselben Schutz gegen Tabellen-Formeln wie der Geräte-Export.
+- **Administration neu aufgebaut.** Konten als sortierbare Tabelle (auf dem
+  Telefon als Karten) mit benannten Rollen-Auswahlfeldern, Aktionen im Menü
+  und Bestätigungen, die das Konto nennen; Löschen verlangt die Eingabe des
+  Namens. Das eigene Konto lässt sich nicht herabstufen, deaktivieren oder
+  löschen, und die Seite sagt warum. Zwei-Faktor, eigene Sitzungen und die
+  ntfy-Einstellungen sind eigene Bereiche.
+- **Personen als Liste und Detail.** Links die durchsuchbare Liste mit
+  Filtern („Mit Befund", „Ohne Gerät"), rechts die gewählte Person mit
+  Zustand ihrer Geräte, offenen Alarmen, Updates, Kontakt als
+  Mail-/Telefon-Link, Konto und Aktivität. Anlegen und Bearbeiten im Dialog;
+  Löschen nennt vorher die Geräte, die ohne Person zurückbleiben, und was mit
+  dem Konto geschieht. Geräte lassen sich direkt zuweisen und lösen.
 - **„Offen" bedeutet überall dasselbe.** Seitenleiste, Navigationsleiste,
   Glocke, Übersicht und Alarm-Center zählen als offen nur Alarme, die noch
   niemand quittiert hat; quittierte stehen jeweils daneben. Vorher zeigte

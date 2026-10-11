@@ -91,6 +91,12 @@ samp {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
+/* Code moves focus to a heading, section or form (tabindex=-1) so screen
+   readers announce where the user landed. Those are not controls, and a ring
+   on them reads as one. Menu items also use tabindex=-1 and keep theirs. */
+:is(h1, h2, h3, section, form)[tabindex='-1']:focus {
+  outline: none;
+}
 
 /* Thin, theme-aware scrollbars where the platform allows it. */
 * {
