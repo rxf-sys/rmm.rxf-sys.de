@@ -276,7 +276,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   wird die bereinigte Form. Ein Heartbeat mit ungültigem Wert behält die
   gespeicherte ID, `PATCH /api/devices/{id}` antwortet mit 422 (leer löscht
   die ID weiterhin), und aus einer schon gespeicherten ungültigen ID entsteht
-  kein Link mehr (409, ohne Audit-Eintrag).
+  kein Link mehr (409, ohne Audit-Eintrag). Die Meldung sagt, wie es
+  weitergeht — per `PATCH /api/devices/{id}` neu eintragen oder leeren —,
+  denn das Dashboard hat für eine schon gespeicherte ID kein Feld;
+  `docs/TROUBLESHOOTING.md` zeigt den Aufruf.
 
 - Go-Toolchain für den Agent von 1.25.0 auf 1.25.14 angehoben. `govulncheck`
   meldete 25 erreichbare Schwachstellen in der Standardbibliothek — betroffen

@@ -218,7 +218,7 @@ pflegen.
 | Methode | Pfad | Auth | Zweck |
 |---|---|---|---|
 | GET | `/api/remote/config` | Session | Relay-Host und Public Key, oder "nicht konfiguriert" |
-| GET | `/api/remote/devices/{device_id}/session` | Operator | `rustdesk://`-Deep-Link für das Gerät. 409, wenn Remote-Desktop nicht konfiguriert ist, keine RustDesk-ID vorliegt oder die gespeicherte ID nicht dem Format oben entspricht |
+| GET | `/api/remote/devices/{device_id}/session` | Operator | `rustdesk://`-Deep-Link für das Gerät. 409, wenn Remote-Desktop nicht konfiguriert ist, keine RustDesk-ID vorliegt oder die gespeicherte ID auch ohne Leerzeichen nicht dem Format oben entspricht; die Meldung nennt dann `PATCH /api/devices/{id}` mit `rustdesk_id` zum Neueintragen oder Leeren |
 | GET | `/api/settings/ntfy` | Admin | ntfy-Konfiguration (Token maskiert) |
 | PUT | `/api/settings/ntfy` | Admin | ntfy zur Laufzeit umkonfigurieren |
 | POST | `/api/settings/ntfy/test` | Admin | Testnachricht senden |
