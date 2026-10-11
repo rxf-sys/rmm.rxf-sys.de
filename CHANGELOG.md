@@ -238,9 +238,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   403, Operator-Endpunkte dem Viewer, und ein abgewiesener Aufruf hinterlässt
   keinen Audit-Eintrag. Die zugelassene Rolle bekommt den Status, den der
   Handler wirklich liefert, nicht bloß „nicht 403" — ein Eintrag, dessen Pfad
-  ins Leere geht, fällt so auf. Ein Wächtertest liest `app.routes` und schlägt
-  fehl, sobald ein schreibender Endpunkt ohne Eintrag dazukommt; ausgenommen
-  sind mit Begründung nur Login, Logout und das Agent-Enrollment. Dazu
+  ins Leere geht, fällt so auf. Erwartet ein Eintrag einen Fehlerstatus, muss
+  die Antwort eine Meldung des Handlers sein und nicht FastAPIs Fehlerliste
+  aus der Eingabeprüfung, die ebenfalls mit 422 antwortet. Ein Wächtertest
+  liest `app.routes` und schlägt fehl, sobald ein schreibender Endpunkt ohne
+  Eintrag dazukommt; ausgenommen sind mit Begründung nur Login, Logout und
+  das Agent-Enrollment. Dazu
   kommen Tests für das Viewer-Scoping von `/api/fleet/metrics` und
   `/api/inventory/search`, für `4403` am Job-Socket (auch für den Viewer, dem
   das Gerät gehört) und für den Fleet-Socket, der ohne Sitzung `4401` sendet

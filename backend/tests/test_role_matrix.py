@@ -34,7 +34,7 @@ import pyotp
 import pytest
 import pytest_asyncio
 from argon2 import PasswordHasher
-from httpx import AsyncClient
+from httpx import AsyncClient, Response
 
 from app import (
     accounts,
@@ -339,13 +339,45 @@ async def test_forbidden_role_gets_403_and_changes_nothing(
     assert await _audit_total() == before
 
 
+def _assert_handler_answered(r: Response, ep: Endpoint) -> None:
+    assert r.status_code == ep.ok, r.text
+    if ep.ok >= 400:
+        # FastAPI answers a malformed body or path with 422 as well, and
+        # before the handler runs. Its detail is a list of field errors; a
+        # handler's HTTPException carries a sentence. Without this, an entry
+        # expecting the handler's 422 passes on a request that never got
+        # past validation.
+        detail = r.json().get("detail")
+        assert isinstance(detail, str), f"{ep} stopped at request validation: {r.text}"
+
+
 @pytest.mark.parametrize(("ep", "role"), _cases(_PERMITTED))
 async def test_permitted_role_reaches_the_handler(
     client: AsyncClient, world: dict[str, Any], ep: Endpoint, role: str
 ):
     ids = await _sign_in(client, world, role)
     r = await _call(client, ep, ids)
-    assert r.status_code == ep.ok, r.text
+    _assert_handler_answered(r, ep)
+
+
+async def test_a_validation_error_does_not_pass_as_the_handlers_answer(
+    client: AsyncClient, world: dict[str, Any]
+):
+    """The check above, against the mistake it exists for: the install entry
+    with a body the model rejects gets the same 422 as with nothing to
+    install, but from FastAPI rather than the handler."""
+    ids = await _sign_in(client, world, "techniker")
+    broken = Endpoint(
+        "POST",
+        "/api/devices/{device_id}/patches/install",
+        OPERATOR,
+        422,
+        _const({"patch_ids": "kein-array"}),
+    )
+    r = await _call(client, broken, ids)
+    assert r.status_code == broken.ok  # the status alone would have passed
+    with pytest.raises(AssertionError, match="stopped at request validation"):
+        _assert_handler_answered(r, broken)
 
 
 # --- Viewer scoping on fleet-wide reads -----------------------------------
