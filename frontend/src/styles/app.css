@@ -102,13 +102,6 @@ h1.page-title {
   margin-left: auto;
 }
 
-.grid-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  align-items: start;
-}
-
 .activity {
   display: flex;
   flex-direction: column;
@@ -126,30 +119,4 @@ h1.page-title {
   display: flex;
   align-items: center;
   gap: 9px;
-}
-
-/* Login */
-.login-page {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: var(--bg);
-}
-.login-card {
-  width: min(360px, 100%);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 26px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  box-shadow: var(--shadow);
-}
-
-@media (max-width: 760px) {
-  .grid-2 {
-    grid-template-columns: 1fr;
-  }
 }

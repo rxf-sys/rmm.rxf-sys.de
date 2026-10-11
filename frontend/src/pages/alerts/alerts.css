@@ -31,10 +31,6 @@
 .al-pad {
   padding: var(--sp-4);
 }
-.al-pad .skeleton-rows {
-  display: grid;
-  gap: var(--sp-2);
-}
 .al-none {
   color: var(--tx-disabled);
 }
