@@ -16,11 +16,13 @@ from app import (
     metrics,
     patch_scan,
     patches,
+    persons,
     releases,
     scripts,
 )
 from app.agents_ws import manager
 from app.config import Settings, get_settings
+from app.fleet_ws import hub as fleet_hub
 from app.main import app
 
 WS_PATH = "/api/agent/ws"
@@ -41,6 +43,7 @@ def ws_client(settings: Settings):
     asyncio.run(jobs.ensure_schema(settings))
     asyncio.run(scripts.ensure_schema(settings))
     asyncio.run(patches.ensure_schema(settings))
+    asyncio.run(persons.ensure_schema(settings))
     manager.reset_for_tests()
     jobs.hub.reset_for_tests()
     releases.reset_for_tests(None, "")
@@ -367,6 +370,76 @@ def test_job_ws_requires_auth(ws_client: TestClient):
         with pytest.raises(WebSocketDisconnect) as exc:
             ws.receive_json()
         assert exc.value.code == 4401
+
+
+def _login_as(ws_client: TestClient, username: str, role: str, person_id: int | None = None) -> None:
+    asyncio.run(accounts.create_user(username, "ws-passwort-1", role=role, person_id=person_id))
+    r = ws_client.post("/api/auth/login", json={"username": username, "password": "ws-passwort-1"})
+    assert r.status_code == 200, r.text
+
+
+def test_job_ws_refuses_a_viewer_with_4403(ws_client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    # The socket reads the settings itself, outside the dependency override;
+    # pin auth on so a local AUTH_ENABLED=false cannot turn this into a pass.
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    creds = _enroll("oma-pc")
+    person = asyncio.run(persons.create_person("Oma"))
+    asyncio.run(devices.update_device(creds["device_id"], person_id=person["id"]))
+    job = asyncio.run(
+        jobs.create_job(creds["device_id"], kind="shell", command="echo x", created_by="boss")
+    )
+    asyncio.run(jobs.finish_job(job["id"], "done", 0))
+
+    # Even the viewer whose device ran the job: output can hold secrets, so
+    # the socket goes by role, not by who may see the device.
+    _login_as(ws_client, "oma", "viewer", person["id"])
+    with ws_client.websocket_connect(f"/api/jobs/{job['id']}/ws") as ws:
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_json()
+        assert exc.value.code == 4403
+
+    # Same job, operator session: the refusal above came from the role.
+    _login_as(ws_client, "technik", "techniker")
+    with ws_client.websocket_connect(f"/api/jobs/{job['id']}/ws") as ws:
+        assert ws.receive_json()["type"] == "snapshot"
+        assert ws.receive_json()["type"] == "done"
+
+
+def test_fleet_ws_requires_a_session(ws_client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    before = set(fleet_hub._subs)
+    with ws_client.websocket_connect("/api/fleet/ws") as ws:
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_json()
+        assert exc.value.code == 4401
+    assert set(fleet_hub._subs) == before
+
+
+def _wait_for_new_fleet_subscriber(before: set) -> None:
+    """The fleet socket is accepted before the session check and the
+    subscription, so websocket_connect returns while the hub does not know it
+    yet; a hint broadcast in that gap would never arrive."""
+    deadline = time.monotonic() + 5
+    while not set(fleet_hub._subs) - before:
+        assert time.monotonic() < deadline, "fleet socket never subscribed"
+        time.sleep(0.01)
+
+
+def test_fleet_ws_sends_hints_without_data(ws_client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    """Every session gets every hint, whatever it may see. That is only safe
+    while a hint carries nothing: the client re-reads REST, which filters."""
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    # A viewer without a person: no device of the fleet is visible to it.
+    _login_as(ws_client, "zuschauer", "viewer")
+    creds = _enroll("geheim-pc")
+    before = set(fleet_hub._subs)
+    with ws_client.websocket_connect("/api/fleet/ws") as fleet:
+        _wait_for_new_fleet_subscriber(before)
+        with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as agent_ws:
+            _sync(agent_ws)
+            hint = fleet.receive_json()
+    # The whole frame, not just its type: no device id, no hostname.
+    assert hint == {"type": "refresh", "kind": "device_online"}
 
 
 def test_job_ws_finished_job_sends_snapshot_then_done(ws_client: TestClient):
