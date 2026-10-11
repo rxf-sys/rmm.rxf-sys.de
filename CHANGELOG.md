@@ -213,6 +213,32 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   jemand nachgesehen hatte.
 
 ### Geändert
+- **Audit-Einträge sagen jetzt, was sich geändert hat.** `devices.updated`
+  nennt in `changed` die Felder, die sich tatsächlich geändert haben: die
+  Person mit vorher/nachher samt Namen, hinzugefügte und entfernte Tags, die
+  RustDesk-ID mit vorher/nachher — sie entscheidet, wohin eine
+  Fernsteuerung geht — und alles Übrige nur mit Namen; Notizen,
+  Seriennummern und IMEIs gehören nicht ins Log. Skript-Einträge
+  (`job.created` für Skripte, `script.scheduled_run`, `script.created`,
+  `script.updated`) tragen den SHA-256 des Skriptinhalts, `script.updated`
+  zusätzlich den vorherigen Hash und die `destruktiv`-Markierung vorher und
+  nachher. Die Bibliothek ist änderbar; erst der Hash verbindet einen Lauf mit
+  der Fassung, die tatsächlich lief, ohne einen Skriptinhalt, der Zugangsdaten
+  enthalten kann, ins Log zu kopieren.
+- **Rollen-Matrix als Test** (`backend/tests/test_role_matrix.py`). Jeder
+  schreibende `/api`-Endpunkt wird mit eingeschalteter Auth ohne Sitzung, als
+  Viewer und als Techniker aufgerufen: Admin-Endpunkte antworten beiden mit
+  403, Operator-Endpunkte dem Viewer, und ein abgewiesener Aufruf hinterlässt
+  keinen Audit-Eintrag. Die zugelassene Rolle bekommt den Status, den der
+  Handler wirklich liefert, nicht bloß „nicht 403" — ein Eintrag, dessen Pfad
+  ins Leere geht, fällt so auf. Ein Wächtertest liest `app.routes` und schlägt
+  fehl, sobald ein schreibender Endpunkt ohne Eintrag dazukommt; ausgenommen
+  sind mit Begründung nur Login, Logout und das Agent-Enrollment. Dazu
+  kommen Tests für das Viewer-Scoping von `/api/fleet/metrics` und
+  `/api/inventory/search`, für `4403` am Job-Socket (auch für den Viewer, dem
+  das Gerät gehört) und für den Fleet-Socket, der ohne Sitzung `4401` sendet
+  und auch angemeldet nur Hinweise ohne Nutzdaten.
+
 - Alle Module öffnen die Datenbank über einen gemeinsamen Helfer
   (`app/db.py`), der Fremdschlüssel einschaltet. Vorher taten das zwei von
   zwölf, wodurch `ON DELETE CASCADE` davon abhing, welches Modul das DELETE
@@ -227,6 +253,25 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   mehr der Realität (SSH statt Self-hosted Runner).
 
 ### Sicherheit
+- **Zwei Befehle an Geräte liefen am Audit-Log vorbei.** Das Agent-Update,
+  das der Server beim ersten Heartbeat einer Verbindung von selbst anbietet,
+  steht jetzt als `agent.update_offered` mit dem Akteur `automation`, der
+  angebotenen und der vom Agent gemeldeten Version im Log; das Abrufen der
+  Agent-Logs als `device.agent_logs` mit dem anfragenden Benutzer. Den
+  Eintrag für `get_logs` schreibt `ConnectionManager.request_logs` selbst,
+  sobald der Befehl den Server verlassen hat — eine Zeitüberschreitung bleibt
+  so belegt, und kein späterer Aufrufer kann den Befehl ohne Eintrag
+  schicken. Beide Ereignisse zählen zur Kategorie „Geräte", und das Dashboard
+  beschreibt sie in ganzen Sätzen.
+- **RustDesk-IDs werden geprüft.** Angenommen werden nur numerische IDs
+  (6–12 Ziffern) und eigene Aliasse (6–16 Zeichen aus Buchstaben, Ziffern,
+  `-` und `_`). Die ID landet in einem `rustdesk://`-Link, den der Rechner
+  des Technikers an einen Protokoll-Handler übergibt, und sie kommt vom Agent
+  oder aus einem Formular. Ein Heartbeat mit ungültigem Wert behält die
+  gespeicherte ID, `PATCH /api/devices/{id}` antwortet mit 422 (leer löscht
+  die ID weiterhin), und aus einer schon gespeicherten ungültigen ID entsteht
+  kein Link mehr (409, ohne Audit-Eintrag).
+
 - Go-Toolchain für den Agent von 1.25.0 auf 1.25.14 angehoben. `govulncheck`
   meldete 25 erreichbare Schwachstellen in der Standardbibliothek — betroffen
   waren TLS-Handshake, URL-Parsing und Cookie-Verarbeitung im WebSocket-Dialer,
@@ -260,6 +305,15 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
 
 ### Behoben
+- Eine abgelehnte Eingabe (422 mit FastAPIs Fehlerliste) brachte die
+  Geräteseite zum Absturz: `apiErrorMessage` reichte die Liste als Meldung
+  weiter, und das RustDesk-Formular rendert die Meldung als Text. Die Liste
+  wird jetzt zu einem Satz zusammengesetzt.
+- `test_outdated_agent_is_offered_an_update` hing von der Testreihenfolge ab:
+  bei einem nie gescannten Gerät geht zuerst die tägliche Scan-Aufforderung
+  hinaus, und der Test lief nur grün, wenn ein früherer Test Gerät 1 schon als
+  gefragt markiert hatte.
+
 - **Ein destruktives Skript lief im Remote-Reiter mit einem einzigen Klick.**
   In der Bibliothek verlangt es seinen Namen, hier stand es als Knopf in einer
   Reihe gleich aussehender Knöpfe. Jetzt gilt dieselbe Hürde. Außerdem bot der

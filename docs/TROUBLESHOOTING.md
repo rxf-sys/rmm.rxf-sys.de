@@ -136,6 +136,12 @@ docker exec rxf-rmm-hbbs cat /root/id_ed25519.pub
 Als Notlösung lässt sich die ID im Dashboard von Hand eintragen
 (Gerät → Remote → ID setzen).
 
+Meldet das Panel „Die hinterlegte RustDesk-ID ist ungültig", stammt die
+gespeicherte ID aus der Zeit vor der Formatprüfung (6–12 Ziffern oder 6–16
+Zeichen aus Buchstaben, Ziffern, `-` und `_`) — von Hand neu eintragen. Eine
+ID aus dem Heartbeat, die das Format verfehlt, verwirft der Server und
+schreibt `devices.rustdesk_id_rejected` ins Backend-Log.
+
 Prüfen, ob das Gerät das Relay erreicht:
 
 ```bash
