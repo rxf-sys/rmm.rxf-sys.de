@@ -418,6 +418,7 @@ export default function App() {
           onTheme={setTheme}
           onLogout={() => void logout()}
           onClose={() => setMoreOpen(false)}
+          onOpenEnroll={isOperator ? () => setEnrollOpen(true) : undefined}
         />
       )}
       {helpOpen && <ShortcutsDialog go={goShortcuts} onClose={() => setHelpOpen(false)} />}
