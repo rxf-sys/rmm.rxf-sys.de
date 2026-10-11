@@ -225,6 +225,22 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   ruff-Version das Lint-Gate ohne Codeänderung rot gemacht.
 - README neu strukturiert; die Beschreibung der CD-Pipeline entsprach nicht
   mehr der Realität (SSH statt Self-hosted Runner).
+- **Agent-CI prüft alle drei Zielsysteme.** `go vet` läuft zusätzlich mit
+  `GOOS=windows` und `GOOS=darwin` — Dateien hinter einem Build-Tag wurden
+  vorher nur für Linux geprüft. Neu ist golangci-lint 2.14.0 (errcheck, gosec,
+  govet, staticcheck, unused) über die offizielle Action, ebenfalls je
+  Zielsystem, denn der Windows-Code hatte Befunde, die ein Linux-Lauf nie
+  zeigt. Die Version ist gepinnt wie bei ruff. Gewollte gosec-Treffer
+  (Shell-Jobs, die signierte Binary mit 0755, feste `/sys`-Pfade) sind in
+  `agent/.golangci.yml` einzeln je Datei und Prüfung ausgenommen und
+  begründet. Die Tests laufen mit `-race`.
+- Der Agent trennt das Lesen einer Servernachricht (`decodeCommand`, ohne
+  Seiteneffekte) von ihrer Ausführung (`dispatch`). Eine Nachricht, die er
+  nicht lesen kann, wird protokolliert und übersprungen, statt die Verbindung
+  abzubauen — neu verbinden macht die nächste nicht lesbarer. Decoder, die
+  Parser für apt, dpkg/rpm und `resolv.conf` sowie die Signaturprüfung für
+  Agent-Updates haben jetzt Fuzz-Tests; die Testabdeckung des Agents steigt
+  von 11,7 % auf 26,0 %.
 
 ### Sicherheit
 - Go-Toolchain für den Agent von 1.25.0 auf 1.25.14 angehoben. `govulncheck`
@@ -240,6 +256,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   zurückfällt, wenn `TRUST_PROXY_HEADERS` aus ist.
 - Das Dashboard bietet keinen kopierbaren Download-Link mit Token in der URL
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
+- **Der Agent nimmt vom Server höchstens 1 MiB pro Nachricht an.**
+  gorilla/websocket hält eine Nachricht vollständig im Speicher und setzt ab
+  Werk keine Grenze; ein defekter Server oder etwas zwischen Server und Gerät
+  konnte so jeden Agent der Flotte beliebig viel Speicher belegen lassen. Die
+  größte legitime Nachricht, ein Skript mit 64.000 Zeichen, kommt JSON-kodiert
+  auf höchstens 384.000 Byte.
 
 ### Geändert
 - Build und CI laufen auf **Node 24 (LTS)** statt 22 — und beide zusammen:
@@ -260,6 +282,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
 
 ### Behoben
+- Der Agent konnte bei jedem Verbindungsabbruch eine Goroutine samt
+  Nachricht zurücklassen: Der Leser des Sockets blieb an einem ungepufferten
+  Kanal hängen, sobald die Hauptschleife schon beendet war. Er gibt jetzt auf,
+  sobald die Verbindung vorbei ist.
+- Der Agent meldete aus einer Zeile wie `nameservers 10.0.0.2` in der
+  `resolv.conf` einen DNS-Server. Das Schlüsselwort muss jetzt für sich
+  stehen, wie es auch der Resolver verlangt.
 - **Ein destruktives Skript lief im Remote-Reiter mit einem einzigen Klick.**
   In der Bibliothek verlangt es seinen Namen, hier stand es als Knopf in einer
   Reihe gleich aussehender Knöpfe. Jetzt gilt dieselbe Hürde. Außerdem bot der
