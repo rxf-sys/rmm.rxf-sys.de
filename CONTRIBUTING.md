@@ -105,8 +105,8 @@ Dinge, die hier schon einmal Zeit gekostet haben:
   geändert hätte. Neue Regeln bewusst aufnehmen, nicht per Zufall erben.
 - **`sqlite3.Row.__contains__` testet Werte, nicht Spaltennamen.** Für
   „Spalte vorhanden?" ist `"col" in row.keys()` korrekt. Ruffs SIM118-Autofix
-  will das umschreiben und liegt hier falsch — deshalb stehen an vier Stellen
-  begründete `# noqa: SIM118`.
+  will das umschreiben und liegt hier falsch — deshalb stehen an sechs Stellen
+  (`devices.py`, `persons.py`) begründete `# noqa: SIM118`.
 - **Der Coverage-Lauf ignoriert `app/main.py`** (`pyproject.toml`), weil der
   ASGI-Einstiegspunkt ohne Lifespan nicht sinnvoll unittestbar ist. Neue
   Logik gehört deshalb nicht nach `main.py`.
