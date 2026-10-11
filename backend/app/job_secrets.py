@@ -23,6 +23,7 @@ ohne Zeilenumbruch) streamt weiterhin sofort durch.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,6 +40,12 @@ _MAX_LABEL = 120
 _MAX_USERNAME = 120
 _MAX_NOTES = 500
 _MAX_SECRET = 4096
+
+# A line ends at LF, CRLF or a lone CR, and nowhere else. str.splitlines()
+# would also break at form feed, vertical tab, U+2028 and friends; those lines
+# then never counted as complete, which reordered output and made the result
+# depend on where a chunk happened to end.
+_LINE = re.compile(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+")
 
 
 @dataclass
@@ -104,13 +111,21 @@ def extract(job_id: int, chunk: str) -> tuple[str, list[dict[str, str]]]:
     state.pending = ""
     out: list[str] = []
     found: list[dict[str, str]] = []
-    for line in data.splitlines(keepends=True):
+    lines = _LINE.findall(data)
+    for i, line in enumerate(lines):
         complete = line.endswith(("\n", "\r"))
+        # A marker line that ends the data on a lone CR may be the first half
+        # of a CRLF whose LF comes with the next chunk. Processed now, that LF
+        # would follow the replacement note as an extra blank line — so hold
+        # the line like any other fragment until it is known how it ends.
+        cr_in_flight = (
+            i == len(lines) - 1 and line.endswith("\r") and line.lstrip().startswith(MARKER)
+        )
         if state.passthrough:
             out.append(line)
             if complete:
                 state.passthrough = False
-        elif complete:
+        elif complete and not cr_in_flight:
             _process_complete_line(line, out, found)
         elif _could_become_marker(line):
             state.pending = line
@@ -128,7 +143,10 @@ def flush(job_id: int) -> tuple[str, list[dict[str, str]]]:
         return "", []
     out: list[str] = []
     found: list[dict[str, str]] = []
-    _process_complete_line(state.pending + "\n", out, found)
+    # No newline appended: a held fragment that turns out to be plain output
+    # (trailing spaces, "##") goes out exactly as the script printed it. A
+    # marker's replacement note brings its own line break.
+    _process_complete_line(state.pending, out, found)
     return "".join(out), found
 
 

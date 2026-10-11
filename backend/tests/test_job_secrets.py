@@ -8,10 +8,13 @@ Live-Stream landen, das Secret muss verschlüsselt am Gerät liegen.
 from __future__ import annotations
 
 import asyncio
+from itertools import pairwise
 
 import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
+from hypothesis import given
+from hypothesis import strategies as st
 
 from app import (
     accounts,
@@ -104,6 +107,140 @@ def test_field_limits_are_enforced():
     assert len(found[0]["label"]) == 120
     assert len(found[0]["secret"]) == 4096
     assert clean  # replacement note still emitted
+
+
+@pytest.mark.parametrize("separator", ["\u2028", "\x85"])
+def test_unicode_line_separator_inside_secret_neither_splits_nor_leaks(separator: str):
+    # JSON allows U+2028 and NEL raw inside strings, and str.splitlines() broke
+    # the line there: the tail of the secret went out as plain output and the
+    # rest of the marker was rejected as malformed.
+    line = f'{job_secrets.MARKER} {{"label":"L","secret":"top{separator}secret"}}\n'
+    clean, found = job_secrets.extract(1, line + "next\n")
+    assert found == [{"label": "L", "secret": f"top{separator}secret", "username": "", "notes": ""}]
+    assert "secret" not in clean
+    assert clean == "[✓ In Passwörtern gespeichert: L]\nnext\n"
+
+
+def test_crlf_split_after_cr_adds_no_blank_line():
+    line = job_secrets.marker_line({"label": "L", "secret": "v"}).rstrip("\n")
+    clean1, found1 = job_secrets.extract(1, line + "\r")
+    clean2, found2 = job_secrets.extract(1, "\nnext\n")
+    assert clean1 + clean2 == "[✓ In Passwörtern gespeichert: L]\nnext\n"
+    assert len(found1 + found2) == 1
+
+
+def test_held_fragments_keep_their_order_and_text():
+    # "  \x0c" could still become a marker and was held while the rest of the
+    # chunk streamed past it; flush() then added a newline nobody printed.
+    clean, _ = job_secrets.extract(1, "  \x0c##\x0cx")
+    tail, _ = job_secrets.flush(1)
+    assert clean + tail == "  \x0c##\x0cx"
+    clean, _ = job_secrets.extract(2, "out\n##")
+    tail, _ = job_secrets.flush(2)
+    assert clean + tail == "out\n##"
+
+
+# ---------------------------------------------------------------------------
+# Properties: where the agent cut its chunks must not matter
+# ---------------------------------------------------------------------------
+
+_ENDINGS = st.sampled_from(["\n", "\r\n", "\r"])
+_LABEL = st.text(st.characters(categories=["L", "N"]), min_size=1, max_size=12)
+# A shape nothing else in the generated output can produce by accident.
+_SECRET = st.uuids().map(lambda u: f"secret-{u}")
+
+
+def _marker(label: str, secret: str) -> str:
+    return job_secrets.marker_line({"label": label, "secret": secret}).rstrip("\n")
+
+
+# Weighted towards what breaks line handling: CR/LF, whitespace, the other
+# characters str.splitlines() counts as line breaks, and pieces of the marker.
+_TRICKY = st.sampled_from(
+    [
+        *("\n", "\r\n", "\r", " ", "\t", "\x0b", "\x0c", "\x1c", "\x85", "\u2028", "#", "{", "ä"),
+        *("##RMM", "-CRED##", job_secrets.MARKER),
+    ]
+)
+_ANY_CHAR = st.characters(exclude_categories=["Cs"])
+_OUTPUT = st.lists(
+    _TRICKY | _ANY_CHAR | st.builds(_marker, _LABEL | st.text(max_size=4), _SECRET),
+    max_size=40,
+).map("".join)
+_PLAIN_OUTPUT = (
+    st.lists(_TRICKY | _ANY_CHAR, max_size=40)
+    .map("".join)
+    .filter(lambda text: job_secrets.MARKER not in text)
+)
+
+
+@st.composite
+def _chunked(draw: st.DrawFn, texts: st.SearchStrategy[str]) -> tuple[str, list[str]]:
+    text = draw(texts)
+    positions = st.integers(0, len(text))
+    # A cut right after a CR is the boundary that needs care: the LF that would
+    # make it a CRLF only arrives with the next chunk.
+    after_cr = [i + 1 for i, c in enumerate(text) if c == "\r"]
+    if after_cr:
+        positions |= st.sampled_from(after_cr)
+    cuts = sorted(draw(st.sets(positions, max_size=8)))
+    bounds = [0, *cuts, len(text)]
+    return text, [text[a:b] for a, b in pairwise(bounds)]
+
+
+def _filter(job_id: int, chunks: list[str]) -> tuple[str, list[dict[str, str]]]:
+    """Run a whole job through the filter, as the agent socket does."""
+    out: list[str] = []
+    found: list[dict[str, str]] = []
+    for chunk in [*chunks, None]:
+        clean, creds = job_secrets.extract(job_id, chunk) if chunk is not None else job_secrets.flush(job_id)
+        out.append(clean)
+        found += creds
+    return "".join(out), found
+
+
+@given(_chunked(_OUTPUT))
+def test_filter_does_not_depend_on_chunk_boundaries(case: tuple[str, list[str]]):
+    text, chunks = case
+    job_secrets.reset_for_tests()
+    assert _filter(1, chunks) == _filter(2, [text])
+
+
+@given(_chunked(_PLAIN_OUTPUT))
+def test_output_without_marker_lines_passes_through_unchanged(case: tuple[str, list[str]]):
+    text, chunks = case
+    job_secrets.reset_for_tests()
+    assert _filter(1, chunks) == (text, [])
+
+
+@st.composite
+def _job_with_secrets(draw: st.DrawFn) -> tuple[str, list[dict[str, str]]]:
+    """Plain lines and well-formed marker lines, each on a line of its own."""
+    parts: list[str] = []
+    expected: list[dict[str, str]] = []
+    for _ in range(draw(st.integers(0, 6))):
+        if draw(st.booleans()):
+            label, secret = draw(_LABEL), draw(_SECRET)
+            parts.append(draw(st.sampled_from(["", "  ", "\t"])) + _marker(label, secret))
+            expected.append({"label": label, "secret": secret, "username": "", "notes": ""})
+        else:
+            parts.append(draw(st.text(_ANY_CHAR.filter(lambda c: c not in "\r\n"), max_size=20)))
+        parts.append(draw(_ENDINGS))
+    return "".join(parts), expected
+
+
+@given(_job_with_secrets(), st.data())
+def test_every_marker_line_is_captured_and_its_secret_never_streamed(
+    job: tuple[str, list[dict[str, str]]], data: st.DataObject
+):
+    text, expected = job
+    _, chunks = data.draw(_chunked(st.just(text)))
+    job_secrets.reset_for_tests()
+    out, found = _filter(1, chunks)
+    assert found == expected
+    for cred in expected:
+        assert cred["secret"] not in out
+    assert (out, found) == _filter(2, [text])
 
 
 # ---------------------------------------------------------------------------
