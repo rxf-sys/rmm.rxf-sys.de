@@ -36,7 +36,17 @@ import pytest_asyncio
 from argon2 import PasswordHasher
 from httpx import AsyncClient
 
-from app import accounts, alerts, audit, automation, credentials, devices, persons, scripts
+from app import (
+    accounts,
+    alerts,
+    audit,
+    automation,
+    credentials,
+    devices,
+    metrics,
+    persons,
+    scripts,
+)
 from app.main import app
 
 try:
@@ -333,6 +343,86 @@ async def test_permitted_role_reaches_the_handler(
     ids = await _sign_in(client, world, role)
     r = await _call(client, ep, ids)
     assert r.status_code == ep.ok, r.text
+
+
+# --- Viewer scoping on fleet-wide reads -----------------------------------
+#
+# These routes take any session, so the role guard says nothing about them:
+# what a viewer may see is decided by filtering inside the handler.
+
+
+async def _household(name: str, hostname: str) -> tuple[int, int]:
+    """A person with one enrolled device; returns (person_id, device_id)."""
+    person = await persons.create_person(name)
+    raw, _ = await devices.create_enrollment_token(hostname, 1)
+    enrolled = await devices.enroll_device(token=raw, hostname=hostname, os="linux", arch="amd64")
+    device_id = int(enrolled["device_id"])
+    await devices.update_device(device_id, person_id=person["id"])
+    return person["id"], device_id
+
+
+async def _log_in(client: AsyncClient, username: str, role: str, person_id: int | None) -> None:
+    await accounts.create_user(username, "scope-passwort-1", role=role, person_id=person_id)
+    r = await client.post(
+        "/api/auth/login", json={"username": username, "password": "scope-passwort-1"}
+    )
+    assert r.status_code == 200, r.text
+
+
+async def test_viewer_fleet_metrics_cover_only_own_devices(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(accounts, "_ph", _FAST_HASHER)
+    oma, own = await _household("Oma", "oma-pc")
+    _, other = await _household("Opa", "opa-pc")
+    await metrics.record(own, cpu_pct=10.0, mem_pct=20.0, disk_max_pct=30.0)
+    await metrics.record(other, cpu_pct=90.0, mem_pct=80.0, disk_max_pct=70.0)
+
+    # The full fleet first, so the viewer's narrower answer is not just an
+    # empty table.
+    await _log_in(client, "technik", "techniker", None)
+    fleet = (await client.get("/api/fleet/metrics")).json()["samples"]
+    assert sum(s["samples"] for s in fleet) == 2
+
+    await _log_in(client, "oma", "viewer", oma)
+    r = await client.get("/api/fleet/metrics")
+    assert r.status_code == 200, r.text
+    samples = r.json()["samples"]
+    assert sum(s["samples"] for s in samples) == 1
+    assert all(s["devices"] == 1 for s in samples)
+    # Opa's 90 % would show in any average or maximum that included it.
+    assert {(s["cpu_avg"], s["mem_avg"], s["disk_max"]) for s in samples} == {(10.0, 20.0, 30.0)}
+
+    # A viewer without a person sees no device, so no fleet either.
+    await _log_in(client, "niemand", "viewer", None)
+    assert (await client.get("/api/fleet/metrics")).json()["samples"] == []
+
+
+async def test_viewer_inventory_search_finds_only_own_devices(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr(accounts, "_ph", _FAST_HASHER)
+    oma, own = await _household("Oma", "oma-pc")
+    _, other = await _household("Opa", "opa-pc")
+    for device_id in (own, other):
+        await devices.set_inventory(
+            device_id, "software", [{"name": "OpenJDK Java 17", "version": "17"}]
+        )
+
+    await _log_in(client, "technik", "techniker", None)
+    fleet = (await client.get("/api/inventory/search", params={"q": "java"})).json()["results"]
+    assert {r["device_id"] for r in fleet} == {own, other}
+
+    await _log_in(client, "oma", "viewer", oma)
+    r = await client.get("/api/inventory/search", params={"q": "java"})
+    assert r.status_code == 200, r.text
+    assert [(h["device_id"], h["hostname"]) for h in r.json()["results"]] == [(own, "oma-pc")]
+
+    await _log_in(client, "niemand", "viewer", None)
+    assert (await client.get("/api/inventory/search", params={"q": "java"})).json()["results"] == []
+
+
+# --- Completeness ------------------------------------------------------------
 
 
 def _app_routes() -> tuple[set[tuple[str, str]], set[str]]:
