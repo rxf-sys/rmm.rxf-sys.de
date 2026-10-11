@@ -318,3 +318,74 @@ func TestDispatchRunsAJobToItsResult(t *testing.T) {
 		}
 	}
 }
+
+// commandType is the wire name of each command kind.
+var commandType = map[commandKind]string{
+	cmdPing:      "ping",
+	cmdJob:       "job",
+	cmdPatchScan: "patch_scan",
+	cmdGetLogs:   "get_logs",
+	cmdUpdate:    "update",
+}
+
+// encodeCommand writes cmd the way the server would send it.
+func encodeCommand(t *testing.T, cmd command) []byte {
+	t.Helper()
+	msg := message{Type: commandType[cmd.Kind]}
+	var err error
+	switch cmd.Kind {
+	case cmdJob:
+		msg.Payload, err = json.Marshal(cmd.Job)
+	case cmdUpdate:
+		msg.Payload, err = json.Marshal(cmd.Update)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+// Invariants: no panic; a rejected message carries no command; an accepted
+// one has a known kind and survives encoding and decoding unchanged.
+func FuzzDecodeCommand(f *testing.F) {
+	f.Add([]byte(`{"type":"ping"}`))
+	f.Add([]byte(`{"type":"patch_scan","id":"1"}`))
+	f.Add([]byte(`{"type":"get_logs","payload":null}`))
+	f.Add([]byte(`{"type":"job","payload":{"job_id":42,"kind":"shell","command":"uptime","shell":"bash","timeout_s":600}}`))
+	f.Add([]byte(`{"type":"job","payload":{"job_id":9,"kind":"patch_install","command":"[\"curl\"]","patch_ids":["curl","libssl3"]}}`))
+	f.Add([]byte(`{"type":"job","payload":{"command":"echo ä 😀 \u0001","patch_ids":[]}}`))
+	f.Add([]byte(`{"type":"update","payload":{"version":"0.3.0","url":"/api/agent/download/linux-amd64","sha256":"ab","sig":"cd"}}`))
+	f.Add([]byte(`{"type":"job","payload":"rm -rf /"}`))
+	f.Add([]byte(`{"type":"job","payload":{"timeout_s":1e30}}`))
+	f.Add([]byte(`{"TYPE":"job","Payload":{"JOB_ID":1},"type":"update"}`))
+	f.Add([]byte("{\"type\":\"job\",\"payload\":{\"command\":\"\xff\xfe\"}}"))
+	f.Add([]byte(`null`))
+	f.Add([]byte(``))
+	f.Fuzz(func(t *testing.T, raw []byte) {
+		cmd, err := decodeCommand(raw)
+		if err != nil {
+			if !reflect.DeepEqual(cmd, command{}) {
+				t.Fatalf("rejected message carries %+v", cmd)
+			}
+			return
+		}
+		if _, ok := commandType[cmd.Kind]; !ok {
+			t.Fatalf("accepted with unknown kind %d", cmd.Kind)
+		}
+		if (cmd.Kind != cmdJob && !reflect.DeepEqual(cmd.Job, jobSpec{})) ||
+			(cmd.Kind != cmdUpdate && !reflect.DeepEqual(cmd.Update, updateSpec{})) {
+			t.Fatalf("payload set for the wrong kind: %+v", cmd)
+		}
+		again, err := decodeCommand(encodeCommand(t, cmd))
+		if err != nil {
+			t.Fatalf("re-encoded %+v no longer decodes: %v", cmd, err)
+		}
+		if !reflect.DeepEqual(again, cmd) {
+			t.Fatalf("round trip: %+v became %+v", cmd, again)
+		}
+	})
+}

@@ -41,9 +41,9 @@ func defaultGateway() string {
 // (127.0.0.53) is the only entry, the resolved copy carries the real
 // upstream servers.
 func dnsServers() []string {
-	servers := parseResolvConf("/etc/resolv.conf")
+	servers := readResolvConf("/etc/resolv.conf")
 	if len(servers) == 1 && strings.HasPrefix(servers[0], "127.0.0.53") {
-		if real := parseResolvConf("/run/systemd/resolve/resolv.conf"); len(real) > 0 {
+		if real := readResolvConf("/run/systemd/resolve/resolv.conf"); len(real) > 0 {
 			return real
 		}
 	}
