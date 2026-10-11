@@ -233,7 +233,8 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   zeigt. Die Version ist gepinnt wie bei ruff. Gewollte gosec-Treffer
   (Shell-Jobs, die signierte Binary mit 0755, feste `/sys`-Pfade) sind in
   `agent/.golangci.yml` einzeln je Datei und Prüfung ausgenommen und
-  begründet. Die Tests laufen mit `-race`.
+  begründet. Die Tests laufen mit `-race`. Lokal prüfen `make vet` und das
+  neue `make lint` alle drei Systeme.
 - Der Agent trennt das Lesen einer Servernachricht (`decodeCommand`, ohne
   Seiteneffekte) von ihrer Ausführung (`dispatch`). Eine Nachricht, die er
   nicht lesen kann, wird protokolliert und übersprungen, statt die Verbindung
