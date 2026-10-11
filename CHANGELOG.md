@@ -263,6 +263,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Rest der Zeile als normale Ausgabe in Job-Log und Live-Stream, und der
   Eintrag wurde als „ungültiges Format" verworfen statt im Tresor abgelegt.
   Zeilen enden jetzt nur noch an CR und LF.
+- **Eine `##RMM-CRED##`-Zeile hinter einem unsichtbaren Zeichen landete
+  vollständig im Job-Log, Secret inklusive.** Vor dem Marker galt nur
+  Leerraum als erlaubt; ein BOM (U+FEFF), ein Zero-Width-Space (U+200B), ein
+  Word Joiner (U+2060) oder ein NUL machten aus der Marker-Zeile normale
+  Ausgabe. Vor dem Marker dürfen jetzt außer Leerraum auch Steuerzeichen und
+  unsichtbare Formatzeichen stehen — an allen Stellen, die nach dem Marker
+  suchen, nach derselben Regel.
 
 ### Geändert
 - Build und CI laufen auf **Node 24 (LTS)** statt 22 — und beide zusammen:

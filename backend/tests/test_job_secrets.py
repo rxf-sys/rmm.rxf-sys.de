@@ -133,6 +133,28 @@ def test_crlf_split_after_cr_adds_no_blank_line():
     assert len(found1 + found2) == 1
 
 
+@pytest.mark.parametrize(
+    "prefix",
+    ["﻿", "​", "⁠", "\x00", " ﻿\t​\x00⁠ "],
+    ids=["BOM", "ZWSP", "WJ", "NUL", "mixed"],
+)
+def test_marker_behind_invisible_characters_is_captured(prefix: str):
+    # Only str.isspace() counted as lead: a marker behind a BOM, a zero-width
+    # space, a word joiner or a NUL went to the job log, secret included.
+    line = prefix + job_secrets.marker_line({"label": "L", "secret": "s3cret"})
+    cred = {"label": "L", "secret": "s3cret", "username": "", "notes": ""}
+    captured = ("[✓ In Passwörtern gespeichert: L]\n", [cred])
+    assert _filter(1, [line]) == captured
+    # The prefix alone is held back like leading spaces, not streamed.
+    assert job_secrets.extract(2, prefix) == ("", [])
+    assert _filter(2, [line[len(prefix) :]]) == captured
+    cut = len(prefix) + 4
+    assert _filter(3, [line[:cut], line[cut:]]) == captured
+    # Unterminated at job end, and a CRLF whose LF comes with the next chunk.
+    assert _filter(4, [line.rstrip("\n")]) == captured
+    assert _filter(5, [line.rstrip("\n") + "\r", "\n"]) == captured
+
+
 def test_held_fragments_keep_their_order_and_text():
     # "  \x0c" could still become a marker and was held while the rest of the
     # chunk streamed past it; flush() then added a newline nobody printed.
@@ -217,6 +239,13 @@ def test_output_without_marker_lines_passes_through_unchanged(case: tuple[str, l
     assert _filter(1, chunks) == (text, [])
 
 
+# What may stand in front of a marker: whitespace, and the invisible characters
+# that come with BOM-writing encodings, copy-paste and padding tools.
+_MARKER_LEAD = st.lists(
+    st.sampled_from([" ", "\t", "\ufeff", "\u200b", "\u2060", "\x00"]), max_size=3
+).map("".join)
+
+
 @st.composite
 def _job_with_secrets(draw: st.DrawFn) -> tuple[str, list[dict[str, str]]]:
     """Plain lines and well-formed marker lines, each on a line of its own."""
@@ -225,7 +254,7 @@ def _job_with_secrets(draw: st.DrawFn) -> tuple[str, list[dict[str, str]]]:
     for _ in range(draw(st.integers(0, 6))):
         if draw(st.booleans()):
             label, secret = draw(_LABEL), draw(_SECRET)
-            parts.append(draw(st.sampled_from(["", "  ", "\t"])) + _marker(label, secret))
+            parts.append(draw(_MARKER_LEAD) + _marker(label, secret))
             expected.append({"label": label, "secret": secret, "username": "", "notes": ""})
         else:
             parts.append(draw(st.text(_ANY_CHAR.filter(lambda c: c not in "\r\n"), max_size=20)))

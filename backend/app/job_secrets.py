@@ -63,8 +63,15 @@ _NOTE_TOO_LONG = "[⚠ RMM-CRED-Zeile ignoriert: zu lang]\n"
 _LINE = re.compile(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+")
 # The first line break in a chunk, with a CRLF taken as one.
 _BREAK = re.compile(r"\r\n?|\n")
-# What may stand in front of the marker on its line.
-_LEAD = re.compile(r"\s*")
+# What may stand in front of the marker on its line: whitespace, the C0 and C1
+# control characters (NUL among them) and the invisible format characters —
+# soft hyphen, zero-width space/joiners, direction marks and embeddings, word
+# joiner and friends, BOM. Scripts emit these without anyone seeing them: a BOM
+# where the output encoding writes one, zero-width characters pasted from a
+# browser or chat, NULs from tools that pad their output. Counting only
+# whitespace sent a marker behind any of them to the job log, secret included.
+# Every check for the marker goes through this one definition.
+_LEAD = re.compile(r"[\s\x00-\x1f\x7f-\x9f­؜᠎​-‏‪-‮⁠-⁯﻿]*")
 
 
 @dataclass
