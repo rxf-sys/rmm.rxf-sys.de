@@ -267,9 +267,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   (6–12 Ziffern) und eigene Aliasse (6–16 Zeichen, beginnend mit einem
   Buchstaben, aus Buchstaben, Ziffern, `_` und `-`) — dieselbe Regel wie im
   Dashboard. Ohne den Buchstaben am Anfang wäre jede 13- bis 16-stellige
-  Ziffernfolge als Alias durchgegangen. Die ID landet in einem `rustdesk://`-Link, den der Rechner
-  des Technikers an einen Protokoll-Handler übergibt, und sie kommt vom Agent
-  oder aus einem Formular. Ein Heartbeat mit ungültigem Wert behält die
+  Ziffernfolge als Alias durchgegangen. Die ID landet in einem
+  `rustdesk://`-Link, den der Rechner des Technikers an einen
+  Protokoll-Handler übergibt, und sie kommt vom Agent oder aus einem
+  Formular. Leerzeichen entfernt der Server vor der Prüfung — RustDesk zeigt
+  IDs in Dreiergruppen (`123 456 789`), und so werden sie kopiert —, im
+  Formular, im Heartbeat und bei einer schon gespeicherten ID; gespeichert
+  wird die bereinigte Form. Ein Heartbeat mit ungültigem Wert behält die
   gespeicherte ID, `PATCH /api/devices/{id}` antwortet mit 422 (leer löscht
   die ID weiterhin), und aus einer schon gespeicherten ungültigen ID entsteht
   kein Link mehr (409, ohne Audit-Eintrag).

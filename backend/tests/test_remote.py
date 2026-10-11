@@ -99,7 +99,7 @@ _INVALID_IDS = [
     "--1234",
     "_abcdef",
     "123456\n",  # fullmatch, not match: no trailing newline
-    "123 456 789",
+    "123 456 789",  # the strict check; callers clean whitespace first (below)
     "123456789?x=1",
     "123456789/../x",
     "123456789@evil.example",
@@ -156,6 +156,51 @@ async def test_patch_trims_a_valid_id_and_empty_clears_it(admin_client: AsyncCli
     r = await admin_client.patch(f"/api/devices/{dev}", json={"rustdesk_id": ""})
     assert r.status_code == 200
     assert r.json()["device"]["rustdesk_id"] == ""
+
+
+# RustDesk shows a generated ID in groups of three ("123 456 789"), so that is
+# what gets copied. Whitespace is never part of an ID; it is removed wherever
+# an ID enters or is used, and only the cleaned value is checked and stored.
+
+
+async def test_patch_accepts_an_id_in_rustdesk_groups(admin_client: AsyncClient):
+    dev = await _make_device()
+    r = await admin_client.patch(f"/api/devices/{dev}", json={"rustdesk_id": "123 456 789"})
+    assert r.status_code == 200, r.text
+    assert r.json()["device"]["rustdesk_id"] == "123456789"
+    # Tabs and no-break spaces from a copied table cell go the same way.
+    r = await admin_client.patch(
+        f"/api/devices/{dev}", json={"rustdesk_id": " 987\u00a0654\t321 "}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["device"]["rustdesk_id"] == "987654321"
+    # Blank after cleaning still clears, as an empty string does.
+    r = await admin_client.patch(f"/api/devices/{dev}", json={"rustdesk_id": " \t "})
+    assert r.status_code == 200, r.text
+    assert r.json()["device"]["rustdesk_id"] == ""
+
+
+async def test_patch_still_rejects_what_is_invalid_without_spaces(admin_client: AsyncClient):
+    dev = await _make_device()
+    r = await admin_client.patch(f"/api/devices/{dev}", json={"rustdesk_id": "123 456 789 0123"})
+    assert r.status_code == 422
+
+
+async def test_heartbeat_stores_an_id_in_groups_without_the_spaces(client: AsyncClient):
+    dev = await _make_device()
+    await devices.record_heartbeat(dev, {"cpu_pct": 1, "rustdesk_id": "123 456 789"})
+    d = await devices.get_device(dev, offline_after_s=999)
+    assert d["rustdesk_id"] == "123456789"
+
+
+async def test_session_cleans_a_stored_id_with_spaces(rd_settings: AsyncClient):
+    """A row stored before the check may hold the grouped form; the link is
+    built from the cleaned ID instead of refusing a perfectly good one."""
+    dev = await _make_device()
+    await devices.update_device(dev, rustdesk_id="123 456 789")
+    r = await rd_settings.get(f"/api/remote/devices/{dev}/session")
+    assert r.status_code == 200, r.text
+    assert r.json() == {"rustdesk_id": "123456789", "deep_link": "rustdesk://123456789"}
 
 
 async def test_session_refuses_a_stored_invalid_id(rd_settings: AsyncClient):

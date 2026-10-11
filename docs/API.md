@@ -67,7 +67,7 @@ Aufklärungsfläche hinter einem öffentlichen Tunnel.
 | GET | `/api/devices/{device_id}/history` | Session | Metrik-Historie (Roh + Stunden-Rollup) |
 | GET | `/api/devices/{device_id}/alerts` | Session | Alarm-Historie des Geräts |
 | POST | `/api/devices` | Operator | Gerät **ohne Agent** anlegen (Telefon/Tablet). 201 mit der neuen Zeile; es entsteht kein Zugang |
-| PATCH | `/api/devices/{device_id}` | Operator | Label, Tags, Person, RustDesk-ID ändern. Bei Geräten ohne Agent zusätzlich Bezeichnung, OS-Version, Modell, Seriennummer, IMEI, Notiz und Besitzverhältnis — bei Geräten mit Agent sind diese Felder 409. Die RustDesk-ID ist entweder numerisch (6–12 Ziffern) oder ein eigener Alias (6–16 Zeichen, beginnend mit einem Buchstaben, aus `A–Z`, `a–z`, `0–9`, `_`, `-`), sonst 422; leer löscht sie. Der Audit-Eintrag `devices.updated` nennt die geänderten Felder (`changed`), für Person und RustDesk-ID mit altem und neuem Wert, für Tags die hinzugefügten und entfernten |
+| PATCH | `/api/devices/{device_id}` | Operator | Label, Tags, Person, RustDesk-ID ändern. Bei Geräten ohne Agent zusätzlich Bezeichnung, OS-Version, Modell, Seriennummer, IMEI, Notiz und Besitzverhältnis — bei Geräten mit Agent sind diese Felder 409. Die RustDesk-ID ist entweder numerisch (6–12 Ziffern) oder ein eigener Alias (6–16 Zeichen, beginnend mit einem Buchstaben, aus `A–Z`, `a–z`, `0–9`, `_`, `-`), sonst 422; leer löscht sie. Leerzeichen entfernt der Server vor der Prüfung (RustDesk zeigt IDs in Dreiergruppen, `123 456 789`) und speichert die bereinigte ID. Der Audit-Eintrag `devices.updated` nennt die geänderten Felder (`changed`), für Person und RustDesk-ID mit altem und neuem Wert, für Tags die hinzugefügten und entfernten |
 | DELETE | `/api/devices/{device_id}` | Operator | Gerät entfernen; der Agent verliert damit den Zugang |
 | GET | `/api/devices/{device_id}/agent-logs` | Operator | Holt die letzten Log-Zeilen live vom Agent. 409 ohne offene Verbindung, 504 wenn der Agent nicht innerhalb von 5 s antwortet. Jede gesendete Anfrage landet als `device.agent_logs` im Audit-Log, auch eine unbeantwortete |
 | POST | `/api/devices/{device_id}/wake` | Operator | Wake-on-LAN an alle bekannten MACs. 422, wenn keine MAC bekannt ist |
@@ -245,7 +245,7 @@ ist, wird der alte mit `1000` abgelöst.
 
 | `type` | Payload | Wirkung |
 |---|---|---|
-| `heartbeat` | `cpu_pct`, `mem_pct`, `disks[]`, `agent_version`, `rustdesk_id`, Netz/Temperatur/Akku/Benutzer | Aktualisiert das Gerät, schreibt ein Metrik-Sample. Eine `rustdesk_id`, die nicht dem Format bei `PATCH /api/devices/{id}` entspricht, wird verworfen; die gespeicherte bleibt. Beim ersten Heartbeat einer Verbindung bietet der Server ggf. ein Update an |
+| `heartbeat` | `cpu_pct`, `mem_pct`, `disks[]`, `agent_version`, `rustdesk_id`, Netz/Temperatur/Akku/Benutzer | Aktualisiert das Gerät, schreibt ein Metrik-Sample. Eine `rustdesk_id` wird wie bei `PATCH /api/devices/{id}` ohne Leerzeichen geprüft und gespeichert; entspricht sie nicht dem Format, wird sie verworfen und die gespeicherte bleibt. Beim ersten Heartbeat einer Verbindung bietet der Server ggf. ein Update an |
 | `inventory` | `kind` + Nutzdaten | Speichert Hardware-, Software- oder Netzinventar |
 | `job_started` | `job_id` | Status → `running` |
 | `job_output` | `job_id`, `chunk` | Chunk läuft durch die Geheimnis-Extraktion, dann in DB und Live-Socket |

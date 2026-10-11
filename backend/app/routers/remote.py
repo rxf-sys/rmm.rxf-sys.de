@@ -68,13 +68,16 @@ async def remote_session(
     device = await devices.get_device(device_id, settings.offline_after_s)
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
-    rid = device.get("rustdesk_id") or ""
+    # Rows written before IDs were validated can still hold anything. The
+    # grouped form ("123 456 789") is cleaned here as everywhere else, but
+    # not written back: a GET has no business changing the device, and the
+    # next heartbeat or edit stores the clean form anyway.
+    rid = devices.clean_rustdesk_id(device.get("rustdesk_id") or "")
     if not rid:
         raise HTTPException(
             status_code=409, detail="Für dieses Gerät ist keine RustDesk-ID hinterlegt"
         )
-    # Rows written before IDs were validated can still hold anything; the
-    # link goes to a protocol handler on the operator's machine, so an
+    # The link goes to a protocol handler on the operator's machine, so an
     # invalid value never becomes one.
     if not devices.valid_rustdesk_id(rid):
         raise HTTPException(

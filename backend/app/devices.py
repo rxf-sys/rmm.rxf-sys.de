@@ -87,6 +87,17 @@ INVENTORY_KINDS = ("hardware", "software")
 # Same pattern as the dashboard's (frontend/src/remoteDesk.ts). fullmatch
 # does the anchoring: re's "$" alone would also accept a trailing newline.
 _RUSTDESK_ID = re.compile(r"^(?:[0-9]{6,12}|[A-Za-z][A-Za-z0-9_-]{5,15})$")
+_WHITESPACE = re.compile(r"\s+")
+
+
+def clean_rustdesk_id(value: str) -> str:
+    """Drop all whitespace, as the dashboard does before it checks an ID.
+
+    RustDesk displays a generated ID in groups of three ("123 456 789"), and
+    that is the form people copy. No ID contains whitespace, so removing it
+    only ever turns the displayed form into the real one; what is left still
+    has to pass ``valid_rustdesk_id``."""
+    return _WHITESPACE.sub("", value)
 
 
 def valid_rustdesk_id(value: str) -> bool:
@@ -457,7 +468,7 @@ async def record_heartbeat(device_id: int, payload: dict[str, Any]) -> None:
     # The agent reports its RustDesk ID once the client is installed; keep the
     # last non-empty value so a heartbeat before install doesn't wipe it. A
     # value that is not an ID is dropped the same way, so the stored one stays.
-    rustdesk_id = str(payload.get("rustdesk_id", "")).strip()
+    rustdesk_id = clean_rustdesk_id(str(payload.get("rustdesk_id", "")))
     if rustdesk_id and not valid_rustdesk_id(rustdesk_id):
         log.warning("devices.rustdesk_id_rejected", device_id=device_id, length=len(rustdesk_id))
         rustdesk_id = ""

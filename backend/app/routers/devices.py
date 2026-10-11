@@ -243,18 +243,21 @@ class UpdateDeviceRequest(BaseModel):
     @field_validator("rustdesk_id")
     @classmethod
     def _rustdesk_id(cls, v: str | None) -> str | None:
-        # Empty clears the stored ID; anything else must be one. A custom
-        # error type keeps the message free of pydantic's "Value error, "
-        # prefix, since the dashboard shows it as-is.
-        if v is None or not v.strip():
+        # Whitespace goes first ("123 456 789" is how RustDesk shows an ID),
+        # and the cleaned value is what gets checked and stored. Empty
+        # clears the stored ID; anything else must be one. A custom error
+        # type keeps the message free of pydantic's "Value error, " prefix,
+        # since the dashboard shows it as-is.
+        if v is None:
             return v
-        if not devices.valid_rustdesk_id(v.strip()):
+        cleaned = devices.clean_rustdesk_id(v)
+        if cleaned and not devices.valid_rustdesk_id(cleaned):
             raise PydanticCustomError(
                 "rustdesk_id",
                 "Keine gültige RustDesk-ID: 6–12 Ziffern oder 6–16 Zeichen, beginnend"
                 " mit einem Buchstaben, aus A–Z, 0–9, _ und -",
             )
-        return v.strip()
+        return cleaned
 
 
 # Fields the audit row names but does not quote: notes, serial and IMEI are
