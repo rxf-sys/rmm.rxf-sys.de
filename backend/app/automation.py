@@ -333,9 +333,20 @@ async def run_patch_window(settings: Settings, now: float | None = None) -> list
             if macs:
                 try:
                     wol.wake(macs, settings.wol_broadcast)
-                    log.info("automation.patch_window_wake", device_id=d["id"])
                 except OSError as e:
                     log.warning("automation.wake_failed", device_id=d["id"], error=str(e))
+                    continue
+                log.info("automation.patch_window_wake", device_id=d["id"])
+                # Same record as the operator's wake (routers/devices.py):
+                # a packet that switches a machine on is a command to a
+                # device, whoever sent it.
+                await audit_record(
+                    "device.wake",
+                    device_id=d["id"],
+                    macs=len(macs),
+                    patch_window=True,
+                    actor="automation",
+                )
 
     created: list[int] = []
     for d in fleet:

@@ -263,6 +263,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   so belegt, und kein späterer Aufrufer kann den Befehl ohne Eintrag
   schicken. Beide Ereignisse zählen zur Kategorie „Geräte", und das Dashboard
   beschreibt sie in ganzen Sätzen.
+- **Auch das Wecken vor dem Patch-Fenster steht im Audit-Log.** Das Magic
+  Packet, das der Server offline Geräten im Fenster schickt, schreibt jetzt
+  `device.wake` wie das Aufwecken von Hand, mit dem Akteur `automation`, der
+  Zahl der MAC-Adressen und `patch_window: true`. Scheitert das Senden schon
+  am Socket, entsteht kein Eintrag.
 - **RustDesk-IDs werden geprüft.** Angenommen werden nur numerische IDs
   (6–12 Ziffern) und eigene Aliasse (6–16 Zeichen, beginnend mit einem
   Buchstaben, aus Buchstaben, Ziffern, `_` und `-`) — dieselbe Regel wie im
