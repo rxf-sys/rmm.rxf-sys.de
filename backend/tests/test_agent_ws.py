@@ -487,3 +487,21 @@ def test_ws_job_dispatched_before_a_reconnect_finishes_on_the_new_socket(
     assert final["output"] == "before\nafter\n"
     events = asyncio.run(audit.recent())
     assert not any(e["event"] == "agent.job_mismatch" for e in events)
+
+
+def test_ws_refusal_audit_is_capped_per_connection(ws_client: TestClient):
+    """An agent cycling through job ids gets each refused, but the audit log
+    records only the first few per connection — the rest go to structlog."""
+    from app.routers.agent import _MAX_JOB_REFUSALS_AUDITED
+
+    asyncio.run(audit.clear())
+    creds = _enroll("noisy-pc")
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as ws:
+        _sync(ws)
+        for job_id in range(900_000, 900_000 + _MAX_JOB_REFUSALS_AUDITED + 5):
+            ws.send_json({"type": "job_started", "payload": {"job_id": job_id}})
+        _sync(ws)
+
+    events = asyncio.run(audit.query(limit=500))["events"]
+    refused = [e for e in events if e["event"] == "agent.job_mismatch"]
+    assert len(refused) == _MAX_JOB_REFUSALS_AUDITED
