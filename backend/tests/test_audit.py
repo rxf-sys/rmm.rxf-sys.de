@@ -338,6 +338,34 @@ async def test_script_create_and_update_record_content_hash_and_danger(admin_cli
     assert updated["danger_from"] is True and updated["danger_to"] is False
 
 
+async def test_script_rename_records_the_previous_name(admin_client: AsyncClient):
+    """A rename is the edit that makes old rows hard to follow: job.created
+    names the script as it was called then. The update row bridges both
+    names, and only when the name actually changed."""
+    r = await admin_client.post(
+        "/api/scripts", json={"name": "Drucker", "shell": "bash", "content": "lpstat"}
+    )
+    sid = r.json()["script"]["id"]
+
+    r = await admin_client.put(
+        f"/api/scripts/{sid}",
+        json={"name": "Drucker-Reset", "shell": "bash", "content": "lpstat"},
+    )
+    assert r.status_code == 200
+    renamed = (await _last("script.updated"))["detail"]
+    assert renamed["script"] == "Drucker-Reset"
+    assert renamed["script_from"] == "Drucker"
+
+    r = await admin_client.put(
+        f"/api/scripts/{sid}",
+        json={"name": "Drucker-Reset", "shell": "bash", "content": "lpstat -t"},
+    )
+    assert r.status_code == 200
+    edited = (await _last("script.updated"))["detail"]
+    assert edited["script"] == "Drucker-Reset"
+    assert "script_from" not in edited
+
+
 async def test_script_update_of_unknown_script_is_404_without_a_record(admin_client: AsyncClient):
     await audit.clear()
     r = await admin_client.put(

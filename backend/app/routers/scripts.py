@@ -79,10 +79,15 @@ async def update_script(
         raise HTTPException(status_code=422, detail=str(e)) from e
     if script is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Skript nicht gefunden")
+    # A rename keeps old rows readable only if this row names both: job and
+    # schedule rows carry the name the script had when they were written.
+    renamed = {"script_from": previous["name"]} if previous["name"] != script["name"] else {}
     await audit_record(
         "script.updated",
         user=user["username"],
         script_id=script_id,
+        script=script["name"],
+        **renamed,
         content_sha256=scripts.content_sha256(script["content"]),
         content_sha256_from=scripts.content_sha256(previous["content"]),
         danger_from=previous["danger"],

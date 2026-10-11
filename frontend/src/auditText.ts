@@ -130,8 +130,12 @@ export function describeAudit(e: AuditEvent, names: AuditNames = {}): string {
         : `Befehl auf ${device()}: ${str(d.command) ?? ''}`;
     case 'script.created':
       return `Skript angelegt: ${script()}`;
-    case 'script.updated':
-      return `Skript „${script()}“ geändert`;
+    case 'script.updated': {
+      // Ältere Einträge zu diesem Skript tragen noch den alten Namen; ohne
+      // ihn hier wäre die Verbindung zwischen beiden nicht zu sehen.
+      const from = str(d.script_from);
+      return `Skript „${script()}“ geändert${from ? `, umbenannt von „${from}“` : ''}`;
+    }
     case 'script.deleted':
       return `Skript „${script()}“ gelöscht`;
     case 'script.scheduled_run':

@@ -221,8 +221,9 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Seriennummern und IMEIs gehören nicht ins Log. Skript-Einträge
   (`job.created` für Skripte, `script.scheduled_run`, `script.created`,
   `script.updated`) tragen den SHA-256 des Skriptinhalts, `script.updated`
-  zusätzlich den vorherigen Hash und die `destruktiv`-Markierung vorher und
-  nachher. Die Bibliothek ist änderbar; erst der Hash verbindet einen Lauf mit
+  zusätzlich den vorherigen Hash, die `destruktiv`-Markierung vorher und
+  nachher und bei einer Umbenennung den alten Namen (`script_from`) — ältere
+  Einträge nennen das Skript noch so, und der Feed sagt „umbenannt von …". Die Bibliothek ist änderbar; erst der Hash verbindet einen Lauf mit
   der Fassung, die tatsächlich lief, ohne einen Skriptinhalt, der Zugangsdaten
   enthalten kann, ins Log zu kopieren.
 - **Rollen-Matrix als Test** (`backend/tests/test_role_matrix.py`). Jeder

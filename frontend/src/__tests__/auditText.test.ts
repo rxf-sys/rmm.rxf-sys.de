@@ -119,6 +119,21 @@ describe('describeAudit', () => {
     expect(describeAudit(bare)).toBe('Skript „Skript #7“ geändert');
   });
 
+  it('mentions a rename with the old name, and only when the name changed', () => {
+    const renamed = event({
+      event: 'script.updated',
+      detail: { script_id: 7, script: 'Drucker-Reset', script_from: 'Drucker' },
+    });
+    expect(describeAudit(renamed)).toBe(
+      'Skript „Drucker-Reset“ geändert, umbenannt von „Drucker“',
+    );
+    const edited = event({
+      event: 'script.updated',
+      detail: { script_id: 7, script: 'Drucker-Reset' },
+    });
+    expect(describeAudit(edited)).toBe('Skript „Drucker-Reset“ geändert');
+  });
+
   it('says that the automatic update offer came from the server, with both versions', () => {
     const offer = event({
       event: 'agent.update_offered',
