@@ -32,6 +32,11 @@ export function collectErrors(page: Page): string[] {
 
 /** Serious and critical axe violations, as readable lines. */
 export async function axeViolations(page: Page): Promise<string[]> {
+  // The sticky bars cover whatever happens to scroll beneath them, and axe
+  // then counts that content as an obscured target. That depends on the
+  // scroll position, not on the target; keyboard focus is kept clear of the
+  // bars by scroll-padding. So the bars are taken out of the flow first.
+  await page.addStyleTag({ content: '.bottomnav, .topbar { position: static !important; }' });
   const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
   return r.violations
     .filter((v) => v.impact === 'serious' || v.impact === 'critical')

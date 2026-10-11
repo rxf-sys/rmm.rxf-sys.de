@@ -2,7 +2,7 @@ import { axeViolations, collectErrors, expect, noHorizontalScroll, signIn, test 
 
 /** Every page an admin can open, with the heading it must show. */
 const PAGES: [string, RegExp][] = [
-  ['/', /Übersicht/],
+  ['/', /^Guten (Morgen|Tag|Abend), admin$/],
   ['/devices', /Geräte/],
   ['/devices/2', /nas-keller/],
   ['/devices/2?tab=history', /nas-keller/],

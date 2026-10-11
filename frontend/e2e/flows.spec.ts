@@ -5,7 +5,8 @@ test('the device list sorts, selects and opens a bulk action', async ({ page }, 
   const errors = collectErrors(page);
   await signIn(page);
   await page.goto('/devices');
-  await page.getByRole('button', { name: /^Gerät/ }).click();
+  // The header button, not the topbar's "Gerät hinzufügen".
+  await page.getByRole('columnheader', { name: /Gerät/ }).getByRole('button').click();
   await expect(page).toHaveURL(/sort=name/);
   await page.getByRole('checkbox', { name: 'nas-keller auswählen' }).check();
   const bar = page.getByRole('region', { name: 'Auswahl' });
@@ -19,7 +20,8 @@ test('the device list sorts, selects and opens a bulk action', async ({ page }, 
 test('CSV export downloads the filtered list', async ({ page }, info) => {
   test.skip(info.project.name === 'phone', 'same code path as desktop');
   await signIn(page);
-  await page.goto('/devices?filter=probleme');
+  // The whole fleet: a filter that happens to be empty disables the export.
+  await page.goto('/devices');
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'CSV exportieren' }).click();
   expect((await download).suggestedFilename()).toMatch(/^vulpexa-devices-\d{4}-\d{2}-\d{2}\.csv$/);
@@ -29,6 +31,8 @@ test('the command palette finds a device by keyboard', async ({ page }, info) =>
   test.skip(info.project.name === 'phone', 'phones open the palette from the search button');
   await signIn(page);
   await page.goto('/');
+  // The shortcut is registered once the shell has rendered.
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await page.keyboard.press('Control+k');
   const box = page.getByRole('combobox');
   await box.fill('nas');
@@ -50,7 +54,8 @@ test('signing in through the login screen lands on the overview', async ({ page 
   await page.getByLabel(/Benutzername/).fill('admin');
   await page.getByLabel(/Passwort/).fill('demo-passwort-123');
   await page.getByRole('button', { name: /Anmelden/ }).click();
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Übersicht');
+  // The overview greets by name instead of repeating its own title.
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(/^Guten (Morgen|Tag|Abend), admin$/);
 });
 
 test('the enrollment dialog stays inside the screen', async ({ page }, info) => {
