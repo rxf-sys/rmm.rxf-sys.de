@@ -1,6 +1,6 @@
 import './device.css';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ApiError, api } from '../../api/client';
 import { qk } from '../../api/queryClient';
@@ -8,6 +8,7 @@ import { DeviceTabs } from '../../components/DeviceTabs';
 import { isAgent } from '../../deviceClass';
 import { restartCommand } from '../../deviceCommands';
 import { safeDeepLink } from '../../remoteDesk';
+import { rememberDevice } from '../../shell/palette/recent';
 import { useConfirm } from '../../hooks/useConfirm';
 import { IconUpgrade } from '../../icons';
 import { EmptyState, ErrorNote, Skeleton } from '../../ui';
@@ -42,6 +43,11 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
   const [editing, setEditing] = useState(false);
   const [updating, setUpdating] = useState(false);
   const panelId = useId();
+  // Every visit counts for the palette's "Zuletzt geöffnet", however the
+  // page was reached: list, link, toast or palette.
+  useEffect(() => {
+    rememberDevice(deviceId);
+  }, [deviceId]);
   // The tab lives in the URL: a reload lands on it again, and a link can
   // point straight at a device's "Updates".
   const [params, setParams] = useSearchParams();

@@ -8,7 +8,7 @@
  */
 import type { Device } from './types';
 
-export function duplicateHostnames(devices: Pick<Device, 'hostname'>[]): Set<string> {
+export function duplicateHostnames(devices: readonly Pick<Device, 'hostname'>[]): Set<string> {
   const seen = new Set<string>();
   const dups = new Set<string>();
   for (const d of devices) {

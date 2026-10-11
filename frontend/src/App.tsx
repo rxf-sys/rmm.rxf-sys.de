@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { CommandPalette } from './components/CommandPalette';
+import { CommandPalette } from './shell/palette/CommandPalette';
 import { ConnectionBanner } from './components/ConnectionBanner';
 import { DevicesPage } from './pages/devices/DevicesPage';
 import { BootSequence, type BootSummary } from './boot/BootSequence';

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_DEVICE_ROWS,
-  duplicateHostnames,
   indexDevices,
   matchTier,
   normalize,
@@ -113,10 +112,9 @@ describe('rankDevices', () => {
   });
 });
 
-describe('duplicateHostnames', () => {
-  it('collects names that occur more than once, ignoring case', () => {
+describe('indexDevices', () => {
+  it('marks names that occur more than once, ignoring case', () => {
     const fleet = [device({ id: 1, hostname: 'NAS' }), device({ id: 2, hostname: 'nas' }), device({ id: 3, hostname: 'kasse' })];
-    expect([...duplicateHostnames(fleet)]).toEqual(['nas']);
     expect(indexDevices(fleet).map((e) => e.showId)).toEqual([true, true, false]);
   });
 });

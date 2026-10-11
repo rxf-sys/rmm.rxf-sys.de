@@ -10,6 +10,7 @@
 
 import { osLabel } from '../../format';
 import type { Device } from '../../types';
+import { duplicateHostnames } from '../../deviceLabel';
 
 /** 0 = no match, then substring < word start < prefix < exact. */
 export type Tier = 0 | 1 | 2 | 3 | 4;
@@ -100,19 +101,6 @@ const W_HOST = 4;
 const W_TAG = 3;
 const W_OWNER = 2;
 const W_OS = 1;
-
-/** Hostnames that occur more than once, lower case. Hostnames are case
- *  insensitive, so "NAS" and "nas" are the same name to a person reading. */
-export function duplicateHostnames(devices: readonly Device[]): Set<string> {
-  const seen = new Set<string>();
-  const dup = new Set<string>();
-  for (const d of devices) {
-    const h = d.hostname.toLowerCase();
-    if (seen.has(h)) dup.add(h);
-    else seen.add(h);
-  }
-  return dup;
-}
 
 export function indexDevices(devices: readonly Device[]): DeviceEntry[] {
   const dup = duplicateHostnames(devices);
