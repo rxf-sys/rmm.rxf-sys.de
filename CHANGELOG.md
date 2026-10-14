@@ -29,6 +29,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Alarm-Sturm erzeugte Abruf-Sturm.** Jeder ausgelöste Alarm schickte einen
   eigenen Fleet-Hinweis. Fallen viele Geräte gleichzeitig aus, bündelt der
   Server die Hinweise jetzt in ein Fenster von 0,5 s.
+- **Ein erzeugtes Enrollment-Token ging verloren.** Wer nach „Token
+  erzeugen" zum Telefon-Formular wechselte oder den Dialog schloss, bevor der
+  Server antwortete, bekam den Installationsbefehl nie zu sehen, und die
+  Liste der offenen Tokens zeigte das neue Token erst nach dem nächsten
+  Abruf. Das Token erscheint jetzt auch nach dem Zurückwechseln, die Liste
+  wird in jedem Fall neu geladen, und ein zweiter Klick während der laufenden
+  Anfrage erzeugt kein zweites Token mehr.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

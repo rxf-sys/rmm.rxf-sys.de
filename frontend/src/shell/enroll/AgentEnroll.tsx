@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { Link } from 'react-router-dom';
@@ -14,6 +14,9 @@ import { AGENT_FILE_NAME, copyText, fetchWindowsAgent, saveBlob, selectContents 
 import { PLATFORMS, TTL_OPTIONS, downloadCommand, installCommand, tokenRequest, type AgentPlatform } from './enrollCommands';
 import { ENROLL_TOKENS_KEY, enrollErrorText } from './enrollText';
 import { OpenTokens } from './OpenTokens';
+
+/** Names the token request, so a form mounted again finds it in flight. */
+const MINT_KEY = ['enroll-tokens', 'mint'] as const;
 
 interface Props {
   /** Lives in the dialog, so switching to the phone form and back keeps it:
@@ -39,7 +42,33 @@ export function AgentEnroll({ created, onCreated, onReset, onClose }: Props) {
   const cmdRef = useRef<HTMLPreElement>(null);
   const origin = window.location.origin;
 
-  const mint = useMutation({ mutationFn: (body: ReturnType<typeof tokenRequest>) => api.createEnrollToken(body) });
+  // The handoff sits on the mutation, not on the mutate() call: TanStack
+  // drops per-call callbacks once this form unmounts (path switched to the
+  // phone form, dialog closed), and the token would be minted and audited
+  // but never shown, nor listed among the open tokens.
+  const mint = useMutation({
+    mutationKey: MINT_KEY,
+    mutationFn: (body: ReturnType<typeof tokenRequest>) => api.createEnrollToken(body),
+    onSuccess: (t) => {
+      onCreated(t);
+      setLabel('');
+      setTtl('');
+      setDlError(null);
+      void qc.invalidateQueries({ queryKey: ENROLL_TOKENS_KEY });
+    },
+  });
+  // A form mounted again after a path switch has a fresh observer that knows
+  // nothing of the request still running; the cache does.
+  const minting = useIsMutating({ mutationKey: MINT_KEY }) > 0;
+
+  // The form (and the button that had focus) is replaced by the result, so
+  // focus moves to its heading — but only when the token arrives while this
+  // form is shown, not when switching back to a token already on screen.
+  const shownRef = useRef(created);
+  useEffect(() => {
+    if (created && created !== shownRef.current) resultRef.current?.focus();
+    shownRef.current = created;
+  }, [created]);
 
   // "Kopiert" is a moment, not a state.
   useEffect(() => {
@@ -50,21 +79,8 @@ export function AgentEnroll({ created, onCreated, onReset, onClose }: Props) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (mint.isPending) return;
-    mint.mutate(tokenRequest(label, ttl === '' ? null : Number(ttl)), {
-      onSuccess: (t) => {
-        // The form (and the button that had focus) is replaced by the result;
-        // render it now so focus can move to its heading.
-        flushSync(() => {
-          onCreated(t);
-          setLabel('');
-          setTtl('');
-          setDlError(null);
-        });
-        resultRef.current?.focus();
-        void qc.invalidateQueries({ queryKey: ENROLL_TOKENS_KEY });
-      },
-    });
+    if (minting) return;
+    mint.mutate(tokenRequest(label, ttl === '' ? null : Number(ttl)));
   };
 
   const another = () => {
@@ -158,8 +174,8 @@ export function AgentEnroll({ created, onCreated, onReset, onClose }: Props) {
               <button type="button" className="btn" onClick={onClose}>
                 Abbrechen
               </button>
-              <button type="submit" className="btn btn-primary" aria-disabled={mint.isPending || undefined}>
-                {mint.isPending ? 'Erzeugt …' : 'Token erzeugen'}
+              <button type="submit" className="btn btn-primary" aria-disabled={minting || undefined}>
+                {minting ? 'Erzeugt …' : 'Token erzeugen'}
               </button>
             </div>
           </form>

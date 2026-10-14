@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
 import type { CreatedEnrollToken, EnrollToken, NewDevice, Person } from '../../../types';
 import { EnrollModal } from '../EnrollModal';
+import { ENROLL_TOKENS_KEY } from '../enrollText';
 
 const { tokensMock, createTokenMock, deleteTokenMock, personsMock, createDeviceMock } = vi.hoisted(() => ({
   tokensMock: vi.fn<() => Promise<{ tokens: EnrollToken[] }>>(),
@@ -40,14 +41,21 @@ function show() {
   const onClose = vi.fn();
   const onDeviceCreated = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  const { unmount } = render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <EnrollModal onClose={onClose} onDeviceCreated={onDeviceCreated} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  return { user, onClose, onDeviceCreated };
+  return { user, onClose, onDeviceCreated, client, unmount };
+}
+
+/** A token request the test answers by hand, to act while it is in flight. */
+function deferMint() {
+  let resolve: (t: CreatedEnrollToken) => void = () => {};
+  createTokenMock.mockImplementationOnce(() => new Promise((r) => (resolve = r)));
+  return (t: CreatedEnrollToken) => act(async () => resolve(t));
 }
 
 async function mint(user: ReturnType<typeof userEvent.setup>, label = 'Büro-PC') {
@@ -193,6 +201,41 @@ describe('EnrollModal', () => {
     expect(screen.queryByText('Offene Tokens')).not.toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'Rechner mit Agent' }));
     expect(screen.getByRole('group', { name: 'Installationsbefehl für Windows' })).toHaveTextContent('raw-token-xyz');
+  });
+
+  it('shows a token that arrives while the phone form is open', async () => {
+    const answer = deferMint();
+    const { user } = show();
+    await user.click(screen.getByRole('button', { name: 'Token erzeugen' }));
+    await user.click(screen.getByRole('radio', { name: 'Telefon oder Tablet ohne Agent' }));
+    await answer(fresh);
+    await user.click(screen.getByRole('radio', { name: 'Rechner mit Agent' }));
+    expect(screen.getByRole('heading', { name: `Token für „${fresh.label}“ erzeugt` })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Installationsbefehl für Windows' })).toHaveTextContent('raw-token-xyz');
+  });
+
+  it('keeps a pending request pending across a switch to the phone form and back', async () => {
+    const answer = deferMint();
+    const { user } = show();
+    await user.click(screen.getByRole('button', { name: 'Token erzeugen' }));
+    await user.click(screen.getByRole('radio', { name: 'Telefon oder Tablet ohne Agent' }));
+    await user.click(screen.getByRole('radio', { name: 'Rechner mit Agent' }));
+    // A second click would mint a second token nobody asked for.
+    await user.click(screen.getByRole('button', { name: 'Erzeugt …' }));
+    expect(createTokenMock).toHaveBeenCalledTimes(1);
+    await answer(fresh);
+    expect(screen.getByRole('heading', { name: `Token für „${fresh.label}“ erzeugt` })).toHaveFocus();
+    expect(screen.getByRole('group', { name: 'Installationsbefehl für Windows' })).toHaveTextContent('raw-token-xyz');
+  });
+
+  it('marks the open-token list stale when a token arrives after the dialog closed', async () => {
+    const answer = deferMint();
+    const { user, client, unmount } = show();
+    await screen.findByText('Laptop Mama');
+    await user.click(screen.getByRole('button', { name: 'Token erzeugen' }));
+    unmount();
+    await answer(fresh);
+    expect(client.getQueryState(ENROLL_TOKENS_KEY)?.isInvalidated).toBe(true);
   });
 
   it('revokes an open token only after a confirmation that names it', async () => {
