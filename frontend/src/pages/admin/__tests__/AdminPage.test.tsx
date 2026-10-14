@@ -158,6 +158,32 @@ describe('AdminPage', () => {
     expect(t.success).toHaveBeenCalledWith('Konto gelöscht', '„bob“');
   });
 
+  it('keeps keyboard focus in the list when the deleted row goes away', async () => {
+    show();
+    const menu = await openMenu('bob');
+    await userEvent.click(within(menu).getByRole('menuitem', { name: /Löschen/ }));
+    const dialog = screen.getByRole('dialog', { name: '„bob“ löschen?' });
+    await userEvent.type(within(dialog).getByRole('textbox'), 'bob');
+    m.accounts.mockResolvedValue({ accounts: [me, carla] });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Konto löschen' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Aktionen für bob' })).not.toBeInTheDocument());
+    // The row that moved up into its place, not <body>.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Aktionen für carla' })).toHaveFocus());
+  });
+
+  it('hands focus to the row above when the last row is deleted', async () => {
+    m.accounts.mockResolvedValue({ accounts: [me, bob] });
+    show();
+    const menu = await openMenu('bob');
+    await userEvent.click(within(menu).getByRole('menuitem', { name: /Löschen/ }));
+    const dialog = screen.getByRole('dialog', { name: '„bob“ löschen?' });
+    await userEvent.type(within(dialog).getByRole('textbox'), 'bob');
+    m.accounts.mockResolvedValue({ accounts: [me] });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Konto löschen' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Aktionen für bob' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Aktionen für admin' })).toHaveFocus());
+  });
+
   it('offers a two-factor reset only where there is one, naming the account', async () => {
     show();
     const carlaMenu = await openMenu('carla');

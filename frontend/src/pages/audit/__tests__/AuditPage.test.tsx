@@ -258,6 +258,25 @@ describe('AuditPage', () => {
     expect(search()).toBe('');
   });
 
+  it('keeps keyboard focus on the page when a reset removes its own button', async () => {
+    show('/audit?actor=lisa&range=30d');
+    await screen.findByRole('region', { name: 'Heute' });
+    const box = screen.getByRole('searchbox', { name: 'Audit-Log durchsuchen' });
+    await userEvent.click(screen.getByRole('button', { name: 'Filter zurücksetzen' }));
+    expect(screen.queryByRole('button', { name: 'Filter zurücksetzen' })).not.toBeInTheDocument();
+    // Not dropped to <body>: the search is where filtering starts again.
+    expect(box).toHaveFocus();
+  });
+
+  it('moves focus to the search after the reset in an empty result, too', async () => {
+    auditMock.mockResolvedValue({ events: [], total: 0 });
+    show('/audit?q=nichts');
+    const empty = (await screen.findByRole('heading', { name: 'Keine Einträge für diesen Filter' })).parentElement!;
+    await userEvent.click(within(empty).getByRole('button', { name: 'Filter zurücksetzen' }));
+    await waitFor(() => expect(lastQuery().q).toBeUndefined());
+    expect(screen.getByRole('searchbox', { name: 'Audit-Log durchsuchen' })).toHaveFocus();
+  });
+
   it('offers the whole log when the default week is empty', async () => {
     auditMock.mockResolvedValue({ events: [], total: 0 });
     show();

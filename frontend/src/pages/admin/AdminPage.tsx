@@ -1,6 +1,6 @@
 import './admin.css';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Pagination } from '../../components/Pagination';
@@ -67,6 +67,21 @@ export function AdminPage({ currentUser }: Props) {
   const totpOn = self?.totp_enabled ?? ownTotp ?? !!currentUser.totp_enabled;
 
   const reload = () => qc.invalidateQueries({ queryKey: adminKeys.accounts });
+
+  // A deleted row takes its menu button with it — the button the confirm
+  // dialog just handed focus back to — and focus would fall to <body>. It
+  // moves on to the row that takes its place, the one above, or "Konto
+  // anlegen". Set before the request: the reload may render before the
+  // await after it resumes.
+  const createRef = useRef<HTMLButtonElement>(null);
+  const focusAfterDelete = useRef<{ gone: number; to: number | null } | null>(null);
+  useEffect(() => {
+    const f = focusAfterDelete.current;
+    if (!f || accounts.some((x) => x.id === f.gone)) return;
+    focusAfterDelete.current = null;
+    const row = f.to === null ? null : document.querySelector<HTMLElement>(`[data-account-actions="${f.to}"]`);
+    (row ?? createRef.current)?.focus();
+  }, [accounts]);
   const mark = (id: number, on: boolean) =>
     setBusy((prev) => {
       const next = new Set(prev);
@@ -132,12 +147,16 @@ export function AdminPage({ currentUser }: Props) {
 
   const remove = async (a: Account) => {
     if (!(await ask(deleteText(a)))) return;
+    const shown = pager.items;
+    const at = shown.findIndex((x) => x.id === a.id);
+    focusAfterDelete.current = { gone: a.id, to: (shown[at + 1] ?? shown[at - 1])?.id ?? null };
     mark(a.id, true);
     try {
       await api.deleteAccount(a.id);
       await reload();
       notify.success('Konto gelöscht', `„${a.username}“`);
     } catch (e) {
+      focusAfterDelete.current = null;
       notify.error(`„${a.username}“ nicht gelöscht`, explain(e));
     } finally {
       mark(a.id, false);
@@ -203,7 +222,7 @@ export function AdminPage({ currentUser }: Props) {
         title="Administration"
         subtitle="Konten und Rollen, deine eigene Anmeldung und wohin Alarme gemeldet werden."
         actions={
-          <button type="button" className="btn btn-primary" onClick={() => setDialog({ kind: 'create' })}>
+          <button ref={createRef} type="button" className="btn btn-primary" onClick={() => setDialog({ kind: 'create' })}>
             <IconPlus size={14} /> Konto anlegen
           </button>
         }

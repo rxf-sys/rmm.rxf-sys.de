@@ -1,6 +1,6 @@
 import './audit.css';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, NavigationType, useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
 import { ApiError, api } from '../../api/client';
 import { qk } from '../../api/queryClient';
@@ -185,6 +185,7 @@ export function AuditPage({ devices }: Props) {
     return () => clearTimeout(t);
   }, [q]);
   const searchId = useId();
+  const searchRef = useRef<HTMLInputElement>(null);
   const csvHintId = useId();
 
   const setParam = (patch: Record<string, string | null>) =>
@@ -267,6 +268,10 @@ export function AuditPage({ devices }: Props) {
     setQ('');
     setSearch('');
     setParam({ range: null, security: null, category: null, actor: null, q: null });
+    // Both reset buttons exist only while something is filtered, so the one
+    // just pressed is about to vanish and would drop focus to <body>. The
+    // search box is where narrowing starts again.
+    searchRef.current?.focus();
   };
 
   // The page has its own route guard; a 403 here means the role changed
@@ -387,6 +392,7 @@ export function AuditPage({ devices }: Props) {
                 Audit-Log durchsuchen
               </label>
               <input
+                ref={searchRef}
                 id={searchId}
                 type="search"
                 className="input"

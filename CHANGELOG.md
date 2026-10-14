@@ -20,6 +20,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   früheren Suche ging, sah im Feld und in der Liste weiter die alte Suche,
   während die Adresse etwas anderes sagte. Feld und Liste übernehmen jetzt
   die Suche der Adresse.
+- **Tastaturfokus fiel an den Seitenanfang.** „Filter zurücksetzen“ im
+  Audit-Log entfernte sich beim Drücken selbst, ebenso die Zeile eines
+  gelöschten Kontos samt ihrem Menüknopf; der Fokus landete danach im
+  Nichts. Er geht jetzt ins Suchfeld des Audit-Logs bzw. auf das Aktionsmenü
+  der nachrückenden Kontozeile.
 - **RustDesk-ID ließ sich nicht korrigieren.** Das Eingabefeld erschien nur,
   solange gar keine ID hinterlegt war. Der Reiter „Fernzugriff" bietet jetzt
   „ID ändern" an; eine ungültige hinterlegte ID (etwa eine alte Eingabe mit

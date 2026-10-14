@@ -70,7 +70,13 @@ function Actions({ a, menu }: { a: Account; menu: RowsProps['menu'] }) {
       label={`Aktionen für ${a.username}`}
       items={menu(a)}
       trigger={(t) => (
-        <button type="button" className="btn btn-sm btn-ghost btn-icon" aria-label={`Aktionen für ${a.username}`} {...t}>
+        <button
+          type="button"
+          className="btn btn-sm btn-ghost btn-icon"
+          aria-label={`Aktionen für ${a.username}`}
+          data-account-actions={a.id}
+          {...t}
+        >
           <IconMore size={16} />
         </button>
       )}
