@@ -497,14 +497,19 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
   const empty = emptyText(state, narrowedOtherwise);
   const allPct = currentPct(stats.current, stats.devices);
 
+  // The label is the box's hit area: the whole cell in the table, the left
+  // strip of a card. A near miss would otherwise open the device, and the
+  // selection, which lives in this page, would go with it.
   const check = (d: Device) => (
-    <input
-      type="checkbox"
-      className="pt-check"
-      checked={selected.has(d.id)}
-      onChange={(e) => toggle(d.id, e)}
-      aria-label={`${d.hostname} auswählen`}
-    />
+    <label className="pt-hit">
+      <input
+        type="checkbox"
+        className="pt-check"
+        checked={selected.has(d.id)}
+        onChange={(e) => toggle(d.id, e)}
+        aria-label={`${d.hostname} auswählen`}
+      />
+    </label>
   );
 
   return (

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
 import { qk } from '../../../api/queryClient';
@@ -74,6 +74,13 @@ const fleet: Device[] = [
 const summary: PatchSummary = { '1': { pending: 5, security: 2 }, '2': { pending: 1, security: 1 } };
 const persons: Person[] = [{ id: 9, name: 'Lisa', email: '', phone: '', notes: '', created_at: 0, device_count: 1 }];
 
+/** Where the router is. */
+function Rail() {
+  const { pathname, search } = useLocation();
+  return <p data-testid="location">{pathname + search}</p>;
+}
+const location = () => screen.getByTestId('location').textContent;
+
 function show(
   opts: { devices?: Device[]; summary?: PatchSummary; persons?: Person[]; isOperator?: boolean; route?: string; client?: QueryClient } = {},
 ) {
@@ -91,6 +98,7 @@ function show(
           onRefresh={onRefresh}
           isOperator={opts.isOperator ?? false}
         />
+        <Rail />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -346,6 +354,18 @@ describe('PatchesPage Auswahl', () => {
     expect(bar).toHaveTextContent('40 ausgewählt · 10 davon ausgeblendet');
   });
 
+  it('wählt bei einem Klick neben das Kästchen aus, statt die Seite zu verlassen', async () => {
+    show({ isOperator: true });
+    const box = screen.getByRole('checkbox', { name: 'laptop auswählen' });
+    // Its hit area: the whole cell, not only the 16 px box. Leaving the page
+    // would drop the selection, which lives in the page.
+    await userEvent.click(box.parentElement!);
+    expect(box).toBeChecked();
+    expect(location()).toBe('/patches');
+    await userEvent.click(within(bodyRows()[2]!).getByText('macOS 15'));
+    expect(location()).toBe('/devices/3?tab=patches');
+  });
+
   it('startet nichts, wenn die Bestätigung abgebrochen wird', async () => {
     show({ isOperator: true });
     await userEvent.click(screen.getByRole('checkbox', { name: 'buero-pc auswählen' }));
@@ -450,11 +470,7 @@ describe('PatchesPage Fokus', () => {
 
 describe('PatchesPage auf dem Telefon', () => {
   const original = window.matchMedia;
-  afterEach(() => {
-    window.matchMedia = original;
-  });
-
-  it('zeigt Karten statt einer Tabelle', () => {
+  beforeEach(() => {
     window.matchMedia = vi.fn((query: string) => ({
       matches: true,
       media: query,
@@ -465,6 +481,12 @@ describe('PatchesPage auf dem Telefon', () => {
       removeListener: vi.fn(),
       dispatchEvent: vi.fn(),
     })) as unknown as typeof window.matchMedia;
+  });
+  afterEach(() => {
+    window.matchMedia = original;
+  });
+
+  it('zeigt Karten statt einer Tabelle', () => {
     show({ isOperator: true });
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     const list = screen.getByRole('region', { name: 'Update-Stand je Gerät' });
@@ -473,5 +495,14 @@ describe('PatchesPage auf dem Telefon', () => {
     expect(within(cards[0]!).getByRole('link', { name: 'buero-pc' })).toHaveAttribute('href', '/devices/1?tab=patches');
     expect(within(cards[0]!).getByRole('checkbox', { name: 'buero-pc auswählen' })).toBeInTheDocument();
     expect(within(cards[0]!).getByText('Lisa')).toBeInTheDocument();
+  });
+
+  it('gibt dem Kästchen einer Karte eine eigene Trefferfläche über dem Link', async () => {
+    show({ isOperator: true });
+    const box = screen.getByRole('checkbox', { name: 'nas auswählen' });
+    // The stretched link covers the card; the box's label sits above it.
+    await userEvent.click(box.parentElement!);
+    expect(box).toBeChecked();
+    expect(location()).toBe('/patches');
   });
 });
