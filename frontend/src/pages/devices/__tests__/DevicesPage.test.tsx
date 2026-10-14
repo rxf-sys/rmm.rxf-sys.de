@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DevicesPage } from '../DevicesPage';
 import type { Device, Person } from '../../../types';
 
@@ -233,5 +233,47 @@ describe('DevicesPage Auswahl', () => {
     await user.keyboard('{/Shift}');
     expect(screen.getByRole('region', { name: 'Auswahl' })).toHaveTextContent('3 ausgewählt');
     expect(screen.getByRole('checkbox', { name: 'pc-4 auswählen' })).not.toBeChecked();
+  });
+
+  it('wählt bei einem Klick neben das Kästchen aus, statt die Seite zu verlassen', async () => {
+    show('/devices', [device(), fullDisk], { canOperate: true });
+    const box = screen.getByRole('checkbox', { name: 'nas auswählen' });
+    // Its hit area: the whole cell, not only the 16 px box. Leaving the page
+    // would drop the selection, which lives in the page.
+    await userEvent.click(box.parentElement!);
+    expect(box).toBeChecked();
+    expect(location()).toBe('/devices');
+    // Anywhere else on the row still opens the device.
+    await userEvent.click(within(bodyRows()[0]!).getAllByRole('cell')[2]!);
+    expect(location()).toBe('/devices/3');
+  });
+});
+
+describe('DevicesPage auf dem Telefon', () => {
+  const original = window.matchMedia;
+  beforeEach(() => {
+    window.matchMedia = vi.fn((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+  });
+  afterEach(() => {
+    window.matchMedia = original;
+  });
+
+  it('gibt dem Kästchen einer Karte eine eigene Trefferfläche über dem Link', async () => {
+    show('/devices', [device(), fullDisk], { canOperate: true });
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    const box = screen.getByRole('checkbox', { name: 'nas auswählen' });
+    // The stretched link covers the card; the box's label sits above it.
+    await userEvent.click(box.parentElement!);
+    expect(box).toBeChecked();
+    expect(location()).toBe('/devices');
   });
 });

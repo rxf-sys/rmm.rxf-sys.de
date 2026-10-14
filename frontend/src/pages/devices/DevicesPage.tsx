@@ -347,6 +347,21 @@ export function DevicesPage({ devices, patchSummary, persons, loading, loadError
     },
     [navigate],
   );
+  // The label is the box's hit area: the whole cell in the table, the left
+  // strip of a card. A near miss would otherwise open the device, and the
+  // selection, which lives in this page, would go with it.
+  const check = (d: Device) => (
+    <label className="dl-hit">
+      <input
+        type="checkbox"
+        className="dl-check"
+        checked={selected.has(d.id)}
+        onChange={(e) => toggle(d.id, e)}
+        aria-label={`${d.hostname} auswählen`}
+      />
+    </label>
+  );
+
   const narrowed = filter !== 'alle' || q.trim() !== '' || personFilter !== null;
   const resetFilters = () => {
     setQ('');
@@ -476,15 +491,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, loadError
               <ul className="dcards">
                 {rows.map((d) => (
                   <li key={d.id} className={selected.has(d.id) ? 'dcard is-selected' : 'dcard'}>
-                    {canOperate && (
-                      <input
-                        type="checkbox"
-                        className="dl-check"
-                        checked={selected.has(d.id)}
-                        onChange={(e) => toggle(d.id, e)}
-                        aria-label={`${d.hostname} auswählen`}
-                      />
-                    )}
+                    {canOperate && check(d)}
                     <div className="dcard-main">
                       <div className="dcard-top">
                         <OsIcon os={d.os} size={14} />
@@ -558,15 +565,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, loadError
                     {rows.map((d) => (
                       <tr key={d.id} data-href={`/devices/${d.id}`} className={selected.has(d.id) ? 'is-selected' : undefined}>
                         {canOperate && (
-                          <td className="c-check">
-                            <input
-                              type="checkbox"
-                              className="dl-check"
-                              checked={selected.has(d.id)}
-                              onChange={(e) => toggle(d.id, e)}
-                              aria-label={`${d.hostname} auswählen`}
-                            />
-                          </td>
+                          <td className="c-check">{check(d)}</td>
                         )}
                         <td className="c-name">
                           <span className="dl-name">

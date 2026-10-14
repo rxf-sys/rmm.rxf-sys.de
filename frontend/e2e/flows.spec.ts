@@ -17,6 +17,26 @@ test('the device list sorts, selects and opens a bulk action', async ({ page }, 
   expect(errors).toEqual([]);
 });
 
+test('a click beside a device checkbox selects instead of opening the device', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/devices');
+  const box = page.getByRole('checkbox', { name: 'nas-keller auswählen' });
+  // The label around the box: the table cell on desktop, the strip down the
+  // card's left edge on a phone, above the card's stretched link.
+  const label = box.locator('xpath=..');
+  const area = await label.boundingBox();
+  const own = await box.boundingBox();
+  expect(area && own).toBeTruthy();
+  expect(area!.height).toBeGreaterThan(own!.height + 16);
+  // A near miss, well below the box. Playwright clicks only once the label
+  // itself receives the pointer there, not the stretched link or the boot
+  // overlay on top of it.
+  await label.click({ position: { x: 4, y: area!.height - 4 } });
+  await expect(box).toBeChecked();
+  await expect(page).toHaveURL(/\/devices$/);
+  await expect(page.getByRole('region', { name: 'Auswahl' })).toContainText('1 ausgewählt');
+});
+
 test('CSV export downloads the filtered list', async ({ page }, info) => {
   test.skip(info.project.name === 'phone', 'same code path as desktop');
   await signIn(page);

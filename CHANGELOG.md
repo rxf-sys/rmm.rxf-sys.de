@@ -271,12 +271,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   nach „Filter zurücksetzen" im Suchfeld. Warum ein Gerät ohne Verbindung
   nicht geprüft werden kann, erfährt jetzt auch, wer per Tastatur oder
   Screenreader unterwegs ist.
-- **Knapp neben das Kästchen geklickt, Auswahl weg.** Unter „Patches" öffnete
-  ein Klick neben das Auswahlkästchen einer Zeile das Gerät, auf dem Telefon
-  schon jeder Tipp auf die Karte außerhalb des Kästchens — und die Auswahl,
-  womöglich Dutzende Geräte über mehrere Filter, war verloren. Jetzt wählt
-  die ganze Kästchen-Spalte der Tabelle aus, auf der Karte der Streifen am
-  linken Rand.
+- **Knapp neben das Kästchen geklickt, Auswahl weg.** In der Geräteliste und
+  unter „Patches" öffnete ein Klick neben das Auswahlkästchen einer Zeile das
+  Gerät, auf dem Telefon schon jeder Tipp auf die Karte außerhalb des
+  Kästchens — und die Auswahl, womöglich Dutzende Geräte über mehrere Filter,
+  war verloren. Jetzt wählt die ganze Kästchen-Spalte der Tabelle aus, auf
+  der Karte der Streifen am linken Rand.
 - **Suche in der Geräteliste und unter „Patches" blieb nach der Navigation
   stehen.** Wer die Seite über die Leiste, „g d" oder „g p" erneut öffnete,
   bekam alle Filter zurückgesetzt, nur die Suche nicht: Sie stand weiter im
