@@ -398,6 +398,33 @@ describe('AlertsPage', () => {
       expect(ackMock.mock.calls.map(([id]) => id).sort()).toEqual([12, 16]);
     });
 
+    it('does not acknowledge again what someone else acknowledged while the dialog was open', async () => {
+      const s = live([freshOutage, oldOutage, fullDisk]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Alle quittieren' }));
+      expect(screen.getByRole('dialog', { name: '3 offene Alarme quittieren?' })).toBeInTheDocument();
+      // A poll lands while the dialog is open: a colleague took lisa-laptop.
+      await s.poll((list) => list.map((a) => (a.id === 12 ? { ...a, acked_at: NOW, acked_by: 'ben' } : a)));
+      await waitFor(() => expect(tab('Quittiert')).toHaveTextContent('1'));
+      await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Alle quittieren' }));
+      await waitFor(() => expect(notifyMock.success).toHaveBeenCalledWith('2 Alarme quittiert', '1 war schon quittiert.'));
+      // The server would record a second acknowledgement under this name.
+      expect(ackMock.mock.calls.map(([id]) => id).sort()).toEqual([11, 13]);
+    });
+
+    it('leaves out an alert whose own acknowledge is still running', async () => {
+      live([freshOutage, oldOutage, fullDisk]);
+      let finish: (v: unknown) => void = () => {};
+      ackMock.mockImplementationOnce(() => new Promise((r) => (finish = r)));
+      await userEvent.click(await screen.findByRole('button', { name: /^Quittieren: .*, lisa-laptop/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Alle quittieren' }));
+      const dialog = screen.getByRole('dialog', { name: '2 offene Alarme quittieren?' });
+      expect(dialog).not.toHaveTextContent('lisa-laptop');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Alle quittieren' }));
+      await waitFor(() => expect(notifyMock.success).toHaveBeenCalledWith('2 Alarme quittiert', undefined));
+      finish({});
+      expect(ackMock.mock.calls.map(([id]) => id).sort()).toEqual([11, 12, 13]);
+    });
+
     it('keeps the person filter while the persons are missing', async () => {
       // The persons arrive after the alerts, or a poll of them failed: the
       // link still says person 4, and "Alle quittieren" must not widen to

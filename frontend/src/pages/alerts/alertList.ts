@@ -171,6 +171,40 @@ export function ackFailure(e: unknown): 'gone' | 'denied' | 'error' {
   return 'error';
 }
 
+/** Alerts a confirmation named that were not sent after all. */
+export interface AckSkipped {
+  /** Acknowledged meanwhile, by someone else or by a click on its own row. */
+  acked: number;
+  /** Cleared meanwhile, or gone from the list. */
+  resolved: number;
+}
+
+const NOTHING_SKIPPED: AckSkipped = { acked: 0, resolved: 0 };
+
+/**
+ * Of the alerts a confirmation named, the ones still to send once it comes
+ * back. The dialog can stay open across a poll; an alert acknowledged in
+ * the meantime is not sent again — the server would record a second
+ * acknowledgement under this account's name — and neither is one whose own
+ * acknowledge is still running.
+ */
+export function stillToAck(
+  named: Alert[],
+  current: Alert[],
+  inFlight: ReadonlySet<number>,
+): { send: Alert[]; skipped: AckSkipped } {
+  const byId = new Map(current.map((a) => [a.id, a]));
+  const send: Alert[] = [];
+  const skipped = { acked: 0, resolved: 0 };
+  for (const a of named) {
+    const now = byId.get(a.id);
+    if (now === undefined || tabOf(now) === 'behoben') skipped.resolved += 1;
+    else if (tabOf(now) === 'quittiert' || inFlight.has(a.id)) skipped.acked += 1;
+    else send.push(a);
+  }
+  return { send, skipped };
+}
+
 export interface AckReport {
   tone: 'success' | 'info' | 'warning' | 'error';
   title: string;
@@ -179,39 +213,53 @@ export interface AckReport {
   error?: unknown;
 }
 
+const was = (n: number) => `${n} ${n === 1 ? 'war' : 'waren'}`;
+
 /** One toast for a round of acknowledgements, single or bulk. `describe`
- *  names the alert when there was only one. */
-export function ackReport(outcome: BulkOutcome<Alert>, describe: (a: Alert) => string): AckReport {
+ *  names the alert when there was only one; `skipped` counts what the
+ *  round left out because it was no longer open. */
+export function ackReport(
+  outcome: BulkOutcome<Alert>,
+  describe: (a: Alert) => string,
+  skipped: AckSkipped = NOTHING_SKIPPED,
+): AckReport {
   const total = outcome.ok.length + outcome.failed.length;
-  const single = total === 1;
-  const gone = outcome.failed.filter((f) => ackFailure(f.error) === 'gone').length;
+  // One request is "Nicht quittiert", not "1 von 1"; but a round that left
+  // others out is still a round, and its toast says what became of them.
+  const one = total === 1;
+  const single = one && skipped.acked + skipped.resolved === 0;
+  const gone = outcome.failed.filter((f) => ackFailure(f.error) === 'gone').length + skipped.resolved;
+  const notes = [
+    ...(skipped.acked > 0 ? [`${was(skipped.acked)} schon quittiert`] : []),
+    ...(gone > 0 ? [`${was(gone)} inzwischen behoben`] : []),
+  ];
+  const meanwhile = notes.length > 0 ? `${notes.join(', ')}.` : undefined;
   const denied = outcome.failed.filter((f) => ackFailure(f.error) === 'denied').length;
   const broken = outcome.failed.filter((f) => ackFailure(f.error) === 'error');
 
   if (broken.length > 0)
     return {
       tone: 'error',
-      title: single ? 'Nicht quittiert' : `${broken.length} von ${total} nicht quittiert`,
+      title: one ? 'Nicht quittiert' : `${broken.length} von ${total} nicht quittiert`,
       error: broken[0]!.error,
     };
   if (denied > 0)
     return {
       tone: 'warning',
-      title: single ? 'Nicht quittiert' : `${denied} von ${total} nicht quittiert`,
+      title: one ? 'Nicht quittiert' : `${denied} von ${total} nicht quittiert`,
       detail: denied === 1 ? 'Für dieses Gerät fehlt die Berechtigung.' : 'Für diese Geräte fehlt die Berechtigung.',
     };
-  if (outcome.ok.length === 0)
-    return single
-      ? { tone: 'info', title: 'Alarm ist nicht mehr offen', detail: 'Er wurde inzwischen behoben.' }
-      : { tone: 'info', title: 'Keiner der Alarme ist mehr offen', detail: 'Sie wurden inzwischen behoben.' };
+  if (outcome.ok.length === 0) {
+    if (single) return { tone: 'info', title: 'Alarm ist nicht mehr offen', detail: 'Er wurde inzwischen behoben.' };
+    return {
+      tone: 'info',
+      title: 'Keiner der Alarme ist mehr offen',
+      detail: skipped.acked > 0 ? meanwhile : 'Sie wurden inzwischen behoben.',
+    };
+  }
   return {
     tone: 'success',
     title: outcome.ok.length === 1 ? 'Alarm quittiert' : `${outcome.ok.length} Alarme quittiert`,
-    detail:
-      gone > 0
-        ? `${gone} ${gone === 1 ? 'war' : 'waren'} inzwischen behoben.`
-        : single
-          ? describe(outcome.ok[0]!)
-          : undefined,
+    detail: meanwhile ?? (single ? describe(outcome.ok[0]!) : undefined),
   };
 }

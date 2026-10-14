@@ -13,6 +13,7 @@ import {
   openFor,
   preview,
   sortAlerts,
+  stillToAck,
   tabOf,
   urgency,
 } from '../alertList';
@@ -265,5 +266,40 @@ describe('acknowledging', () => {
       describeAlert,
     );
     expect(report).toEqual({ tone: 'error', title: '2 von 3 nicht quittiert', error: boom });
+  });
+
+  it('sends only what is still open and not already on its way', () => {
+    const open = alert({ id: 1 });
+    const running = alert({ id: 2 });
+    const takenMeanwhile = alert({ id: 3 });
+    const clearedMeanwhile = alert({ id: 4 });
+    const vanished = alert({ id: 5 });
+    const now = [open, running, { ...takenMeanwhile, acked_at: NOW, acked_by: 'ben' }, { ...clearedMeanwhile, resolved_at: NOW }];
+    const { send, skipped } = stillToAck([open, running, takenMeanwhile, clearedMeanwhile, vanished], now, new Set([2]));
+    expect(send.map((a) => a.id)).toEqual([1]);
+    expect(skipped).toEqual({ acked: 2, resolved: 2 });
+  });
+
+  it('says what a round left out', () => {
+    expect(ackReport({ ok: [alert({ id: 1 })], failed: [] }, describeAlert, { acked: 1, resolved: 0 })).toEqual({
+      tone: 'success',
+      title: 'Alarm quittiert',
+      detail: '1 war schon quittiert.',
+    });
+    expect(
+      ackReport({ ok: [alert({ id: 1 })], failed: [{ item: alert({ id: 2 }), error: new ApiError(404, '') }] }, describeAlert, {
+        acked: 2,
+        resolved: 1,
+      }),
+    ).toEqual({ tone: 'success', title: 'Alarm quittiert', detail: '2 waren schon quittiert, 2 waren inzwischen behoben.' });
+    expect(ackReport({ ok: [], failed: [] }, describeAlert, { acked: 3, resolved: 0 })).toEqual({
+      tone: 'info',
+      title: 'Keiner der Alarme ist mehr offen',
+      detail: '3 waren schon quittiert.',
+    });
+    // One request that failed is still "Nicht quittiert", not "1 von 1".
+    expect(
+      ackReport({ ok: [], failed: [{ item: alert(), error: new TypeError('x') }] }, describeAlert, { acked: 1, resolved: 0 }),
+    ).toMatchObject({ tone: 'error', title: 'Nicht quittiert' });
   });
 });

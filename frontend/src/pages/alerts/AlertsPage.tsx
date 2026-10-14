@@ -31,7 +31,9 @@ import {
   openFor,
   preview,
   sortAlerts,
+  stillToAck,
   tabOf,
+  type AckSkipped,
   type Tab,
 } from './alertList';
 import { useCachedQueryState } from '../../hooks/useCachedQueryState';
@@ -302,7 +304,15 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
     if (!rows.some((a) => h.ids.has(a.id))) handoff.current = null;
   }, [rows, busy]);
 
-  const acknowledge = async (list: Alert[], index: number) => {
+  // The list as it stands now, for the moment a confirmation comes back: the
+  // dialog can stay open across a poll and across the end of a row's own
+  // acknowledge.
+  const latest = useRef({ alerts, busy });
+  useEffect(() => {
+    latest.current = { alerts, busy };
+  });
+
+  const acknowledge = async (list: Alert[], index: number, skipped?: AckSkipped) => {
     const ids = list.map((a) => a.id);
     const round = { ids: new Set(ids), index };
     handoff.current = round;
@@ -333,14 +343,16 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
       for (const id of ids) next.delete(id);
       return next;
     });
-    const report = ackReport(outcome, (a) => `${hostOf(a.device_id)}: ${a.message}`);
+    const report = ackReport(outcome, (a) => `${hostOf(a.device_id)}: ${a.message}`, skipped);
     if (report.tone === 'error') notify.error(report.title, report.error);
     else notify[report.tone](report.title, report.detail);
   };
 
   const ackAll = async () => {
-    // Exactly what the dialog names: the open alerts the filter shows now.
-    const targets = shown;
+    // Exactly what the dialog names: the open alerts the filter shows now,
+    // without one whose own acknowledge is already running.
+    const targets = stillToAck(shown, alerts, busy).send;
+    if (targets.length === 0) return;
     const who = personLabel !== null ? ` auf Geräten von ${personLabel}` : '';
     const { head, rest } = preview(targets, CONFIRM_NAMED);
     const ok = await ask({
@@ -364,8 +376,9 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
       confirmLabel: 'Alle quittieren',
     });
     if (!ok) return;
+    const { send, skipped } = stillToAck(targets, latest.current.alerts, latest.current.busy);
     setBulkRunning(true);
-    await acknowledge(targets, 0);
+    await acknowledge(send, 0, skipped);
     setBulkRunning(false);
   };
 
