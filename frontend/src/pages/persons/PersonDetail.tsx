@@ -23,8 +23,8 @@ import {
   personActivity,
   personFacts,
   personVerdict,
+  phoneLink,
   plural,
-  telHref,
 } from './personsMeta';
 import { RECENT_AUDIT_KEY, useAccounts, useRecentAudit } from './personsQueries';
 
@@ -180,7 +180,20 @@ export function PersonDetail({
 
   const contactRows: [string, ReactNode][] = [];
   if (person.email) contactRows.push(['E-Mail', <a href={`mailto:${person.email}`}>{person.email}</a>]);
-  if (person.phone) contactRows.push(['Telefon', <a href={telHref(person.phone)}>{person.phone}</a>]);
+  const tel = phoneLink(person.phone);
+  if (person.phone)
+    contactRows.push([
+      'Telefon',
+      tel ? (
+        <span>
+          {tel.before}
+          <a href={tel.href}>{tel.number}</a>
+          {tel.after}
+        </span>
+      ) : (
+        person.phone
+      ),
+    ]);
   if (person.notes) contactRows.push(['Notiz', <span className="pn-notes">{person.notes}</span>]);
 
   return (

@@ -89,6 +89,17 @@ describe('PersonDetail', () => {
     expect(screen.getByText('Ruft bei Problemen abends an.')).toBeInTheDocument();
   });
 
+  it('dials only the first of two numbers and links no free text', () => {
+    show({ person: person({ phone: '0711 123456 / 0171 9876543' }) });
+    expect(screen.getByRole('link', { name: '0711 123456' })).toHaveAttribute('href', 'tel:0711123456');
+    expect(screen.getByText(/0171 9876543/)).not.toHaveAttribute('href');
+  });
+
+  it('shows a phone note without digits as text, not as a dead link', () => {
+    show({ person: person({ phone: 'nur abends' }) });
+    expect(screen.getByText('nur abends').closest('a')).toBeNull();
+  });
+
   it('links each device and names its status in words', () => {
     show();
     const devices = screen.getByRole('region', { name: 'Zugewiesene Geräte' });

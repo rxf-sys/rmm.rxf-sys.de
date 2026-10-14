@@ -55,6 +55,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   war — auch wenn es gar kein oder ein Techniker-Konto gab. Sie sagt dann
   jetzt, was geschehen würde, und nennt sonst jedes verknüpfte Konto statt
   nur des ersten.
+- Personen: Der Telefon-Link wählte bei üblichen Schreibweisen falsch.
+  „+49 (0)711 123456" behielt die Null nach der Ländervorwahl, zwei Nummern
+  im Feld wurden zu einer verschmolzen, und Text ohne Ziffern („nur abends")
+  wurde zu einem leeren Link. Jetzt wird nur die erste Nummer verlinkt und
+  richtig gewählt; Text ohne Nummer bleibt Text.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist
