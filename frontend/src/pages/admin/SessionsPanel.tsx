@@ -65,15 +65,13 @@ export function SessionsPanel({ now }: { now: number }) {
       }
     >
       {dialog}
-      {q.error ? (
+      {q.error && (
         <div className="ad-pad">
           <ErrorNote error={q.error} onRetry={() => void q.refetch()} />
         </div>
-      ) : q.isPending ? (
-        <div className="ad-pad">
-          <SkeletonRows rows={2} h={40} />
-        </div>
-      ) : (
+      )}
+      {/* A failed refresh keeps the sessions already shown, below the error. */}
+      {q.data ? (
         <ul className="ad-list">
           {q.data.map((s) => (
             <li key={s.token_prefix} className="ad-row">
@@ -95,6 +93,12 @@ export function SessionsPanel({ now }: { now: number }) {
             </li>
           ))}
         </ul>
+      ) : (
+        !q.error && (
+          <div className="ad-pad">
+            <SkeletonRows rows={2} h={40} />
+          </div>
+        )
       )}
     </Panel>
   );

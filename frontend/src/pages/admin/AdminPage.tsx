@@ -229,7 +229,9 @@ export function AdminPage({ currentUser }: Props) {
       />
 
       <Panel title="Konten" meta={q.data ? accountSummary(q.data) : undefined} padded={false}>
-        {q.error ? (
+        {/* A failed refresh keeps the last list (TanStack keeps data on a
+            failed refetch); only a list that never loaded gives way to the error. */}
+        {q.error && !q.data ? (
           <div className="ad-pad">
             <ErrorNote error={explain(q.error)} onRetry={() => void q.refetch()} />
           </div>
@@ -243,6 +245,11 @@ export function AdminPage({ currentUser }: Props) {
           </EmptyState>
         ) : (
           <>
+            {q.error && (
+              <div className="ad-pad">
+                <ErrorNote error={explain(q.error)} onRetry={() => void q.refetch()} />
+              </div>
+            )}
             {asCards ? <AccountCards {...rows} /> : <AccountTable {...rows} sort={sort} onSort={onSort} />}
             <Pagination {...pager} label="Konten" />
             <p className="ad-foot">

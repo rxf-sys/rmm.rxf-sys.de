@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
 import type { Account, NtfyConfig, SessionInfo } from '../../../types';
 import { AdminPage } from '../AdminPage';
-import { FORBIDDEN_TEXT, SELF_LOCK } from '../accounts';
+import { FORBIDDEN_TEXT, SELF_LOCK, adminKeys } from '../accounts';
 
 const m = vi.hoisted(() => ({
   accounts: vi.fn<() => Promise<{ accounts: Account[] }>>(),
@@ -66,13 +66,14 @@ const carla = acc(3, 'carla', { role: 'viewer', disabled: true });
 
 function show(user: Account = me) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <AdminPage currentUser={user} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 
 const openMenu = async (name: string) => {
@@ -264,6 +265,33 @@ describe('AdminPage', () => {
     expect(await screen.findByText(FORBIDDEN_TEXT)).toBeInTheDocument();
     expect(screen.queryByText(/admin privileges required/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Erneut versuchen' })).toBeInTheDocument();
+  });
+
+  it('keeps the loaded accounts when a background refresh fails, with the error above them', async () => {
+    const { client } = show();
+    await screen.findByRole('table');
+    // A focus refetch while deploy.sh restarts the container.
+    m.accounts.mockRejectedValue(new TypeError('Failed to fetch'));
+    await act(() => client.refetchQueries({ queryKey: adminKeys.accounts }));
+    const panel = screen.getByRole('region', { name: 'Konten' });
+    expect(await within(panel).findByRole('alert')).toHaveTextContent('Server nicht erreichbar');
+    expect(within(panel).getByRole('combobox', { name: 'Rolle von bob' })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Aktionen für carla' })).toBeInTheDocument();
+
+    m.accounts.mockResolvedValue({ accounts: [me, bob, carla] });
+    await userEvent.click(within(panel).getByRole('button', { name: 'Erneut versuchen' }));
+    await waitFor(() => expect(within(panel).queryByRole('alert')).not.toBeInTheDocument());
+  });
+
+  it('keeps the session list when its refresh fails', async () => {
+    const { client } = show();
+    const panel = (await screen.findByRole('heading', { name: 'Deine Sitzungen' })).closest('section')!;
+    await within(panel).findByText('diese Sitzung');
+    m.sessions.mockRejectedValue(new TypeError('Failed to fetch'));
+    await act(() => client.refetchQueries({ queryKey: adminKeys.sessions }));
+    expect(await within(panel).findByRole('alert')).toHaveTextContent('Server nicht erreichbar');
+    expect(within(panel).getByText('diese Sitzung')).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Sitzung bbbb2222/ })).toBeInTheDocument();
   });
 
   it('sorts by a column header and marks it', async () => {

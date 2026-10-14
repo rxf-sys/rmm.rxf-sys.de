@@ -25,6 +25,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   gelöschten Kontos samt ihrem Menüknopf; der Fokus landete danach im
   Nichts. Er geht jetzt ins Suchfeld des Audit-Logs bzw. auf das Aktionsmenü
   der nachrückenden Kontozeile.
+- **Administration: kurzer Serverausfall leerte Konten- und
+  Sitzungsliste.** Schlug eine Aktualisierung im Hintergrund fehl (etwa
+  während eines Deployments), ersetzte die Fehlermeldung die schon geladene
+  Liste samt ihren Aktionen. Die Liste bleibt jetzt stehen, die Meldung
+  steht darüber.
 - **RustDesk-ID ließ sich nicht korrigieren.** Das Eingabefeld erschien nur,
   solange gar keine ID hinterlegt war. Der Reiter „Fernzugriff" bietet jetzt
   „ID ändern" an; eine ungültige hinterlegte ID (etwa eine alte Eingabe mit
