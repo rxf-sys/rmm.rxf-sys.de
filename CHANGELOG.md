@@ -102,6 +102,58 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   zählte bis zur Sperre als Fehlversuch. Sie führt jetzt zurück zu
   Benutzername und Passwort und sagt, dass diese nicht mehr angenommen
   werden.
+- **Dokumentation: kaputter Link legte die Seite lahm.** Ein von Hand
+  verändertes oder abgeschnittenes Sprungziel wie `/doku#100%` ersetzte die
+  ganze Seite durch die Fehleransicht. Ein unbekanntes Ziel wird jetzt
+  einfach ignoriert.
+- **Dokumentation: Token-Gültigkeit stimmte nicht mehr.** Dort stand fest
+  „24 h gültig", und bei HTTP 403 hieß es, das Token sei „älter als 24 h".
+  Seit „Gerät hinzufügen" 1 Stunde bis 14 Tage anbietet, führte das bei
+  einem abgelaufenen Ein-Stunden-Token auf die falsche Ursache. Die Doku
+  nennt jetzt die beim Erzeugen gewählte Dauer, den Standard
+  `ENROLLMENT_TOKEN_TTL_HOURS` und widerrufene Tokens als weitere Ursache.
+- Schlug die Abfrage der RustDesk-Konfiguration fehl, forderte der
+  RustDesk-Abschnitt der Dokumentation dazu auf, `RUSTDESK_RELAY_HOST` und
+  `RUSTDESK_KEY` zu setzen — auch auf einem korrekt eingerichteten Server.
+  Er sagt jetzt, dass der Stand nicht abrufbar war.
+- Die Kopieren-Knöpfe der Dokumentation hießen für Screenreader alle nur
+  „Kopieren". Ihr Name nennt jetzt auch den Befehl, etwa „Kopieren:
+  PowerShell als Administrator".
+- Personen: Ein Statussymbol in der Liste stand auch bei Personen, deren
+  Geräte nur offline sind — der Filter „Mit Befund" blendete genau diese
+  aber aus. Symbol und Filter folgen jetzt derselben Regel; wie viele Geräte
+  online sind, steht weiterhin in der Zeile.
+- Personen: Die Löschbestätigung behauptete „Ein verknüpftes
+  Betrachter-Konto wird mitgelöscht", solange die Kontenliste nicht geladen
+  war — auch wenn es gar kein oder ein Techniker-Konto gab. Sie sagt dann
+  jetzt, was geschehen würde, und nennt sonst jedes verknüpfte Konto statt
+  nur des ersten.
+- Personen: Der Telefon-Link wählte bei üblichen Schreibweisen falsch.
+  „+49 (0)711 123456" behielt die Null nach der Ländervorwahl, zwei Nummern
+  im Feld wurden zu einer verschmolzen, und Text ohne Ziffern („nur abends")
+  wurde zu einem leeren Link. Jetzt wird nur die erste Nummer verlinkt und
+  richtig gewählt; Text ohne Nummer bleibt Text.
+- Personen: Wer eine Person bearbeitete, deren gespeicherte E-Mail keine
+  einzelne Adresse ist (etwa „mama@…, papa@…" oder eine Notiz aus der Zeit
+  vor der Neugestaltung), konnte nicht mehr speichern — auch wenn nur die
+  Telefonnummer geändert wurde. Das Feld nimmt wieder jeden Text, wie der
+  Server. Der Mail-Link kodiert die Adresse jetzt (`?`, `#`, `%`, `&`) und
+  erscheint nur noch, wenn im Feld Adressen stehen.
+- Personen: Das einmalig angezeigte Passwort eines neuen Betrachter-Kontos
+  verschwand ohne Rückfrage mit Escape, einem Klick neben den Dialog oder
+  einem zweiten Enter nach dem Anlegen. Solange es nicht kopiert ist, fragt
+  der Dialog jetzt nach, und der Fokus steht auf „Kopieren" statt auf
+  „Fertig".
+- Personen: Wer ein Gerät zuwies oder löste und kurz danach auf der
+  Geräteseite „Bearbeiten" speicherte, machte die Zuweisung unbemerkt
+  rückgängig — die Geräteseite hielt noch den alten Stand. Sie bekommt die
+  Änderung jetzt sofort mit.
+- Personen auf schmalen Bildschirmen: „Alle Personen" legte einen neuen
+  Verlaufseintrag an, sodass die Zurück-Geste des Telefons die eben
+  verlassene Person wieder öffnete statt die Seite zu verlassen. Der Knopf
+  geht jetzt im Verlauf zurück. Danach — und nach dem Löschen einer Person —
+  steht der Tastaturfokus auf der verlassenen Person in der Liste bzw. auf
+  der Suche, statt auf den Seitenanfang zu fallen.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

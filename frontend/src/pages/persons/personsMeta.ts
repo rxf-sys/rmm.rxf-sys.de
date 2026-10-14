@@ -25,11 +25,71 @@ export function formatDay(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-/** A dialable number: keeps a leading plus and the digits, drops the
- *  spaces, slashes and dashes people write numbers with. */
-export function telHref(phone: string): string {
-  const t = phone.trim();
-  return `tel:${t.startsWith('+') ? '+' : ''}${t.replace(/\D/g, '')}`;
+/** One address: no spaces and exactly one @. Deliberately loose — this
+ *  decides only whether to offer a link, not whether the value is valid. */
+const ADDRESS = /^[^\s@]+@[^\s@]+$/;
+
+/**
+ * A mailto: link for the email field, or null when the field holds no
+ * address list to write to („über Tochter“). The field is free text on the
+ * server, so the check happens here. RFC 6068 wants ?, #, % and & in an
+ * address percent-encoded; raw, the mail client reads them as headers or a
+ * fragment and writes to someone else.
+ */
+export function mailtoHref(email: string): string | null {
+  const parts = email
+    .split(/[,;]/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length === 0 || !parts.every((p) => ADDRESS.test(p))) return null;
+  return `mailto:${parts.map((p) => encodeURIComponent(p).replace(/%40/g, '@')).join(',')}`;
+}
+
+/** A number as people write one: an optional plus or opening bracket, a
+ *  digit, then digits with spaces, brackets, slashes, dots and dashes. */
+const NUMBER_RUN = /\+?\(?\d[\d\s()/.\-–]*/g;
+/** A slash followed by a new prefix starts a second number („0711 123456 /
+ *  0171 9876543“). A German subscriber number never starts with 0, so the
+ *  slash in „0711 / 123456“ stays inside one number. */
+const NEXT_NUMBER = /\s*\/\s*(?=[+0])/;
+/** Fewer digits than this is a room or an extension, not a number to dial. */
+const MIN_DIGITS = 3;
+
+export interface PhoneLink {
+  /** Text before the number, e.g. „Büro: “. */
+  before: string;
+  /** The number as written; this part becomes the link. */
+  number: string;
+  /** Anything after it, e.g. a second number or „(abends)“. */
+  after: string;
+  href: string;
+}
+
+/**
+ * The first dialable number in a free-text phone field, split out so only
+ * that number is linked. The field takes any text (the server does not
+ * check it), so this keeps a plus and the digits, drops the separators
+ * people type, and leaves text without a number unlinked.
+ */
+export function phoneLink(phone: string): PhoneLink | null {
+  for (const m of phone.matchAll(NUMBER_RUN)) {
+    let number = m[0];
+    const next = NEXT_NUMBER.exec(number);
+    if (next) number = number.slice(0, next.index);
+    number = number.replace(/[\s(/.\-–]+$/, '');
+    const intl = number.startsWith('+');
+    // „+49 (0)711 …“: the bracketed trunk 0 is dialled only from inside the
+    // country; with the country code in front it makes a wrong number.
+    const digits = (intl ? number.replace(/\(\s*0\s*\)/, '') : number).replace(/\D/g, '');
+    if (digits.length < MIN_DIGITS) continue;
+    return {
+      before: phone.slice(0, m.index),
+      number,
+      after: phone.slice(m.index + number.length),
+      href: `tel:${intl ? '+' : ''}${digits}`,
+    };
+  }
+  return null;
 }
 
 // ---- Fleet state of one person ----------------------------------------
@@ -140,6 +200,12 @@ export function matchesPerson(row: PersonRow, q: string, filter: PersonFilter): 
 
 export function accountFor(accounts: Account[] | undefined, personId: number): Account | null {
   return accounts?.find((a) => a.person_id === personId) ?? null;
+}
+
+/** Every account linked to the person. Deleting the person acts on all of
+ *  them (users_for_person in routers/persons.py), not just the first. */
+export function accountsOf(accounts: Account[], personId: number): Account[] {
+  return accounts.filter((a) => a.person_id === personId);
 }
 
 /** An event belongs to a person if their account did it, or if it happened

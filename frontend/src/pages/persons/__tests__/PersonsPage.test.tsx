@@ -1,13 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
 import { qk } from '../../../api/queryClient';
-import type { Account, AuditEvent, Person } from '../../../types';
+import type { Account, Alert, AuditEvent, Person } from '../../../types';
 import { PersonsPage } from '../PersonsPage';
-import { account, device, person } from './fixtures';
+import { account, alert, device, person } from './fixtures';
 
 const { accountsMock, createMock, updateMock, deleteMock, notifyMock } = vi.hoisted(() => ({
   accountsMock: vi.fn<() => Promise<{ accounts: Account[] }>>(),
@@ -47,23 +47,42 @@ function Where() {
   return <output data-testid="where">{useLocation().search}</output>;
 }
 
-function show({ route = '/personen', isAdmin = true, persons = [martina, bernd], client }: { route?: string; isAdmin?: boolean; persons?: Person[]; client?: QueryClient } = {}) {
+/** The browser's or the phone's own back, outside the page. */
+function SystemBack() {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  return (
+    <button type="button" data-path={pathname} onClick={() => void navigate(-1)}>
+      System zurück
+    </button>
+  );
+}
+
+function show({
+  route = '/personen',
+  before = [],
+  isAdmin = true,
+  persons = [martina, bernd],
+  alerts = [],
+  client,
+}: { route?: string; before?: string[]; isAdmin?: boolean; persons?: Person[]; alerts?: Alert[]; client?: QueryClient } = {}) {
   const qc = client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const onRefresh = vi.fn();
   const onOpenDevice = vi.fn();
   render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[route]}>
+      <MemoryRouter initialEntries={[...before, route]} initialIndex={before.length}>
         <PersonsPage
           persons={persons}
           devices={[laptop, tablet, nas]}
-          alerts={[]}
+          alerts={alerts}
           patchSummary={{}}
           isAdmin={isAdmin}
           onOpenDevice={onOpenDevice}
           onRefresh={onRefresh}
         />
         <Where />
+        <SystemBack />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -114,8 +133,18 @@ describe('PersonsPage', () => {
   });
 
   it('marks a person whose devices need a look with an icon that has a name', () => {
+    show({ alerts: [alert()] });
+    expect(within(list()).getByRole('img', { name: '1 offener Alarm' })).toBeInTheDocument();
+  });
+
+  it('flags exactly the people the „Mit Befund“ filter shows', async () => {
+    // One of Martina's devices is offline: normal for a family laptop, and not
+    // a finding — so neither an icon nor a place under „Mit Befund“.
     show();
-    expect(within(list()).getByRole('img', { name: '1 Gerät offline' })).toBeInTheDocument();
+    expect(within(list()).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(list()).getByRole('button', { name: /Martina Fuchs/ })).toHaveTextContent('2 Geräte · 1 online');
+    await userEvent.click(within(list()).getByRole('tab', { name: /Mit Befund/ }));
+    expect(within(list()).queryByRole('button', { name: /Martina Fuchs/ })).not.toBeInTheDocument();
   });
 
   it('shows one thing at a time on a narrow screen, with a way back', async () => {
@@ -130,6 +159,44 @@ describe('PersonsPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Alle Personen' }));
     expect(list()).toBeInTheDocument();
+  });
+
+  it('returns to the list by going back, so the system back then leaves the page', async () => {
+    stackedScreen();
+    show({ before: ['/start'] });
+    await userEvent.click(within(list()).getByRole('button', { name: /Martina Fuchs/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Alle Personen' }));
+    expect(list()).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'System zurück' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'System zurück' })).toHaveAttribute('data-path', '/start'));
+  });
+
+  it('closes a linked person without adding a history entry', async () => {
+    stackedScreen();
+    show({ before: ['/start'], route: '/personen?person=2' });
+    await userEvent.click(screen.getByRole('button', { name: 'Alle Personen' }));
+    await waitFor(() => expect(screen.getByTestId('where')).toBeEmptyDOMElement());
+    await userEvent.click(screen.getByRole('button', { name: 'System zurück' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'System zurück' })).toHaveAttribute('data-path', '/start'));
+  });
+
+  it('puts focus back on the person just left when the list returns', async () => {
+    stackedScreen();
+    show();
+    await userEvent.click(within(list()).getByRole('button', { name: /Martina Fuchs/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Alle Personen' }));
+    await waitFor(() => expect(within(list()).getByRole('button', { name: /Martina Fuchs/ })).toHaveFocus());
+  });
+
+  it('puts focus on the search after deleting the open person', async () => {
+    stackedScreen();
+    deleteMock.mockResolvedValue({ ok: true });
+    show({ route: '/personen?person=2' });
+    await screen.findByText('martina');
+    await userEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Person löschen …' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Person löschen' }));
+    await waitFor(() => expect(within(list()).getByRole('searchbox', { name: 'Personen durchsuchen' })).toHaveFocus());
   });
 
   it('looks like loading, not like an empty page, while the list is on its way', () => {
@@ -191,6 +258,19 @@ describe('PersonsPage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('saves a person whose stored email is free text, not one address', async () => {
+    // The server stores any text; data from before the redesign has such
+    // values, and the form must not block an unrelated change over them.
+    const family = person({ email: 'mama@web.de, papa@web.de' });
+    updateMock.mockResolvedValue({ person: family });
+    show({ route: '/personen?person=2', persons: [family, bernd] });
+    await userEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }));
+    const dialog = screen.getByRole('dialog', { name: 'Martina Fuchs bearbeiten' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /Telefon/ }), '9');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    expect(updateMock).toHaveBeenCalledWith(2, expect.objectContaining({ email: 'mama@web.de, papa@web.de', phone: '+49 170 00000009' }));
+  });
+
   it('keeps the dialog open and explains a refused save', async () => {
     updateMock.mockRejectedValue(new ApiError(403, '{"detail":"admin privileges required"}'));
     show({ route: '/personen?person=2' });
@@ -215,6 +295,27 @@ describe('PersonsPage', () => {
     expect(deleteMock).toHaveBeenCalledWith(2);
     expect(onRefresh).toHaveBeenCalled();
     await waitFor(() => expect(screen.getByTestId('where')).toBeEmptyDOMElement());
+  });
+
+  it('does not state an account deletion as fact while the accounts are unknown', async () => {
+    accountsMock.mockReturnValue(new Promise(() => {}));
+    show({ route: '/personen?person=2' });
+    await userEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Person löschen …' }));
+    const confirm = screen.getByRole('dialog', { name: 'Martina Fuchs löschen?' });
+    expect(confirm).not.toHaveTextContent('wird mitgelöscht');
+    expect(confirm).toHaveTextContent('Ein Betrachter-Konto würde mitgelöscht, ein Konto mit höherer Rolle nur von ihr gelöst.');
+  });
+
+  it('names every account linked to the person before deleting', async () => {
+    accountsMock.mockResolvedValue({ accounts: [account(), account({ id: 6, username: 'm.technik', role: 'techniker' })] });
+    show({ route: '/personen?person=2' });
+    await screen.findByText('martina');
+    await userEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Person löschen …' }));
+    const confirm = screen.getByRole('dialog', { name: 'Martina Fuchs löschen?' });
+    expect(confirm).toHaveTextContent('Das Betrachter-Konto „martina“ wird mitgelöscht');
+    expect(confirm).toHaveTextContent('Das Konto „m.technik“ (Techniker) bleibt bestehen');
   });
 
   it('deletes nothing when the confirmation is cancelled', async () => {
