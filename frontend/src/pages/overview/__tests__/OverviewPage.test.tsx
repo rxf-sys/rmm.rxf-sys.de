@@ -77,6 +77,7 @@ function fleet(over: Partial<Fleet> = {}): Fleet {
     loading: false,
     error: null,
     loadedAt: 1_800_000_000,
+    loadErrors: { devices: null, patchSummary: null },
     refresh: () => {},
     ...over,
   };

@@ -12,7 +12,7 @@ import { IconBell, IconChevronRight, IconPlus, IconShield, IconStatusDanger, Ico
 import { buildTasks, verdict, type OverviewTask, type TaskTarget } from '../../overviewTasks';
 import { PAGE_PATH, devicePath, type PageId } from '../../routes';
 import type { Account } from '../../types';
-import { EmptyState, LineChart, PageHeader, Panel, Skeleton, StatusBadge, type StatusKind } from '../../ui';
+import { EmptyState, ErrorNote, LineChart, PageHeader, Panel, Skeleton, StatusBadge, type StatusKind } from '../../ui';
 import { FleetMap } from './FleetMap';
 
 interface Props {
@@ -105,7 +105,9 @@ function Stat({
 }
 
 export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
-  const { devices, alerts, patchSummary, loading, loadedAt } = fleet;
+  const { devices, alerts, patchSummary, loading, loadedAt, loadErrors } = fleet;
+  // Without the summary every count below would read "nothing open".
+  const summaryMissing = loadErrors.patchSummary != null;
   // Die Aufgaben rechnen mit „jetzt" („seit 3 Tagen offline"), also muss die
   // Uhr laufen — sonst altert die Seite still, solange der Tab offen bleibt.
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
@@ -184,14 +186,20 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
         subtitle={
           <>
             <span>{sub}</span>
-            <span className="ov-verdict">
-              <StatusBadge kind={verdictKind} label={head.text} />
-            </span>
+            {/* With no device list there is nothing to judge: "Noch kein Gerät
+                angebunden" would be a guess. */}
+            {loadErrors.devices == null && (
+              <span className="ov-verdict">
+                <StatusBadge kind={verdictKind} label={head.text} />
+              </span>
+            )}
           </>
         }
       />
 
-      {devices.length === 0 ? (
+      {devices.length === 0 && loadErrors.devices != null ? (
+        <ErrorNote error={loadErrors.devices} onRetry={fleet.refresh} />
+      ) : devices.length === 0 ? (
         <EmptyState
           icon={<IconPlus size={20} />}
           title="Noch keine Geräte"
@@ -240,17 +248,17 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
               to={PAGE_PATH.patches}
               icon={<IconShield size={15} />}
               label="Offene Updates"
-              value={fmt.format(pending)}
-              context={pending ? `auf ${fmt.format(patchedDevices)} Geräten` : 'alles aktuell'}
-              tone={pending ? 'warn' : undefined}
+              value={summaryMissing ? '—' : fmt.format(pending)}
+              context={summaryMissing ? 'nicht geladen' : pending ? `auf ${fmt.format(patchedDevices)} Geräten` : 'alles aktuell'}
+              tone={!summaryMissing && pending ? 'warn' : undefined}
             />
             <Stat
               to={PAGE_PATH.patches}
               icon={<IconStatusDanger size={15} />}
               label="Sicherheitsupdates"
-              value={fmt.format(security)}
-              context={security ? `auf ${fmt.format(securityDevices)} Geräten` : 'nichts offen'}
-              tone={security ? 'danger' : 'ok'}
+              value={summaryMissing ? '—' : fmt.format(security)}
+              context={summaryMissing ? 'nicht geladen' : security ? `auf ${fmt.format(securityDevices)} Geräten` : 'nichts offen'}
+              tone={summaryMissing ? undefined : security ? 'danger' : 'ok'}
             />
             <Stat
               to={PAGE_PATH.alerts}
@@ -271,7 +279,9 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
               {tasks.length === 0 ? (
                 <p className="ov-nothing">
                   <StatusBadge kind="ok" label="Alles erledigt" />
-                  Platten unter 80 %, keine Sicherheitsupdates offen, alle Geräte erreichbar.
+                  {summaryMissing
+                    ? 'Platten unter 80 %, alle Geräte erreichbar. Der Update-Stand konnte nicht geladen werden.'
+                    : 'Platten unter 80 %, keine Sicherheitsupdates offen, alle Geräte erreichbar.'}
                 </p>
               ) : (
                 <>

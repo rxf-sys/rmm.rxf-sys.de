@@ -8,6 +8,14 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **Ein gescheiterter erster Abruf sah aus wie eine leere Flotte.** Kam die
+  Geräteliste beim Start nicht an (Server weg, 500, unerwartete Antwort),
+  zeigten Geräteliste und Übersicht „Noch keine Geräte" mit „Gerät
+  hinzufügen" — unter einem Streifen, der gleichzeitig sagte, dass gar nichts
+  geladen werden konnte. Beide Seiten zeigen jetzt den Fehler mit „Erneut
+  versuchen"; die Übersicht urteilt dann auch nicht mehr „Noch kein Gerät
+  angebunden" und nennt die Update-Zahlen „nicht geladen", solange der
+  Update-Stand fehlt.
 - **Ein Aussetzer machte die Flotte „aktuell" und die Personen leer.**
   Schlug ein Abruf des Update-Stands fehl (Neustart beim Deploy, kurzer
   Netzausfall, 5xx), galt das als leere Antwort: die Patch-Seite meldete

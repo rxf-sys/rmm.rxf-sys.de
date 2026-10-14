@@ -21,7 +21,7 @@ import {
   OsIcon,
 } from '../../icons';
 import type { Device, PatchSummary, Person } from '../../types';
-import { EmptyState, PageHeader, SkeletonRows, StatusBadge } from '../../ui';
+import { EmptyState, ErrorNote, PageHeader, SkeletonRows, StatusBadge } from '../../ui';
 import { BulkBar } from './BulkBar';
 import {
   FILTER_LABEL,
@@ -53,6 +53,10 @@ interface Props {
   patchSummary: PatchSummary;
   persons: Person[];
   loading: boolean;
+  /** The list failed before it ever arrived: `devices` is then empty
+   *  because nothing is known, not because there is nothing. */
+  loadError?: unknown;
+  onRetry?: () => void;
   /** Admin or Techniker: selection and bulk actions. */
   canOperate: boolean;
   onOpenEnroll?: () => void;
@@ -205,7 +209,7 @@ function SortHeader({ col, sort, onSort }: { col: (typeof COLUMNS)[number]; sort
   );
 }
 
-export function DevicesPage({ devices, patchSummary, persons, loading, canOperate, onOpenEnroll }: Props) {
+export function DevicesPage({ devices, patchSummary, persons, loading, loadError, onRetry, canOperate, onOpenEnroll }: Props) {
   // Everything that shapes the list lives in the URL: the overview links
   // straight to "Probleme", a reload keeps the view, a saved view is just a
   // query string, and a colleague gets the same list from a pasted link.
@@ -360,7 +364,9 @@ export function DevicesPage({ devices, patchSummary, persons, loading, canOperat
         }
       />
 
-      {devices.length === 0 && !loading ? (
+      {devices.length === 0 && loadError ? (
+        <ErrorNote error={loadError} onRetry={onRetry} />
+      ) : devices.length === 0 && !loading ? (
         <EmptyState
           icon={<IconMonitor size={22} />}
           title="Noch keine Geräte"

@@ -1,5 +1,6 @@
 import { qk } from '../../api/queryClient';
 import { useCachedQueryState } from '../../hooks/useCachedQueryState';
+import { firstLoadError } from '../../hooks/useFleet';
 
 export interface FleetLoad {
   /** The device list or the patch summary is still on its first load. */
@@ -10,10 +11,6 @@ export interface FleetLoad {
   error: unknown;
 }
 
-/** The error of a query that failed before any data arrived. */
-function firstLoadError(state: { status: string; data: unknown; error: unknown } | undefined): unknown {
-  return state?.status === 'error' && state.data === undefined ? state.error : null;
-}
 
 /**
  * Where the fleet data behind the page stands.

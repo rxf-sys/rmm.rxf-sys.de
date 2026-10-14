@@ -304,6 +304,8 @@ export default function App() {
                   patchSummary={fleet.patchSummary}
                   persons={fleet.persons}
                   loading={fleet.loading}
+                  loadError={fleet.loadErrors.devices}
+                  onRetry={fleet.refresh}
                   canOperate={isOperator}
                   onOpenEnroll={isOperator ? () => setEnrollOpen(true) : undefined}
                 />

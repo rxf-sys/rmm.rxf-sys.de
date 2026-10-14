@@ -154,6 +154,16 @@ describe('useFleet', () => {
     await client.cancelQueries();
   });
 
+  it('tells a device list that never arrived from an empty one', async () => {
+    // A 4xx is not retried, so the first load fails at once.
+    vi.mocked(api.devices).mockRejectedValueOnce(new ApiError(400, 'kaputt'));
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.devices).toEqual([]);
+    expect(result.current.loadErrors.devices).toBeInstanceOf(ApiError);
+    expect(result.current.loadErrors.patchSummary).toBeNull();
+  });
+
   it('refetches on an explicit refresh', async () => {
     const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));

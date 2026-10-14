@@ -15,6 +15,11 @@ export interface Fleet {
   persons: Person[];
   loading: boolean;
   error: string | null;
+  /** Errors of lists whose first load failed. Their empty arrays then mean
+   *  "unknown", not "none": a page says so instead of an empty state that
+   *  invites enrolling the first device or calls everything up to date.
+   *  Null once a list has arrived, however old it gets. */
+  loadErrors: { devices: unknown; patchSummary: unknown };
   /** Sekunden seit Epoch der letzten erfolgreichen Abfrage, sonst null.
    *  Fällt der Server aus, sagt die Oberfläche damit, wie alt das ist, was
    *  sie gerade zeigt — vorher blieben die alten Zahlen kommentarlos stehen. */
@@ -155,6 +160,12 @@ function useFleetSocket(enabled: boolean): void {
   }, [enabled, qc]);
 }
 
+/** The error of a query that failed before any data arrived; null once
+ *  data is there, even if a later refresh failed. */
+export function firstLoadError(q: { status: string; data: unknown; error: unknown } | undefined): unknown {
+  return q?.status === 'error' && q.data === undefined ? q.error : null;
+}
+
 /** The alert list as the fleet query caches it. */
 export interface AlertList {
   alerts: Alert[];
@@ -221,6 +232,7 @@ export function useFleet(enabled: boolean): Fleet {
     persons: persons.data ?? EMPTY_PERSONS,
     loading: enabled && (devices.isPending || alerts.isPending),
     error: failed ? apiErrorMessage(failed) : null,
+    loadErrors: { devices: firstLoadError(devices), patchSummary: firstLoadError(patchSummary) },
     loadedAt: updated > 0 ? Math.floor(updated / 1000) : null,
     refresh,
   };

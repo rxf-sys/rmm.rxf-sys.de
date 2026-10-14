@@ -3,6 +3,7 @@ import { useIsFetching, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { qk } from '../../api/queryClient';
 import { useCachedQueryState } from '../../hooks/useCachedQueryState';
+import { firstLoadError } from '../../hooks/useFleet';
 
 export const ACCOUNTS_KEY = ['accounts'] as const;
 /** The newest slice of the audit log; each person's activity is filtered
@@ -40,6 +41,6 @@ export function usePersonsLoad(): { loading: boolean; error: unknown } {
   const state = useCachedQueryState(qk.persons);
   return {
     loading: fetching > 0 && state?.status === 'pending',
-    error: state?.status === 'error' && state.data === undefined ? state.error : null,
+    error: firstLoadError(state),
   };
 }
