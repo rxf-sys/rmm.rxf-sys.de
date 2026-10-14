@@ -38,7 +38,10 @@ export function CodeBlock({ code, label }: { code: string; label: string }) {
       <div className="console-head dc-code-head">
         <span className="dc-code-label">{label}</span>
         <span className="console-actions">
-          <button type="button" className="console-btn" onClick={copy}>
+          {/* A dozen buttons on this page say "Kopieren"; the name carries the
+              label too, so a list of buttons tells them apart. It starts with
+              the visible word, so voice control still finds it. */}
+          <button type="button" className="console-btn" onClick={copy} aria-label={`${copied ? 'Kopiert' : 'Kopieren'}: ${label}`}>
             {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
             {copied ? 'Kopiert' : 'Kopieren'}
           </button>

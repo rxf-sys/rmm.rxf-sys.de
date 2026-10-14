@@ -8,11 +8,6 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
-- **Abgelehnte Eingaben brachten keine lesbare Meldung.** Wies der Server
-  eine Eingabe als ungültig zurück (zu kurz, zu lang, Feld fehlt, falsches
-  Format), kam seine Liste der Beanstandungen unverändert in Meldung oder
-  Fehlerhinweis an, statt als Text. Jetzt steht dort ein deutscher Satz wie
-  „Ungültige Eingabe: Passwort ist zu kurz (mindestens 8 Zeichen)."
 - **Menüs ließen sich mit der Tastatur schlecht bedienen.** Beim ersten
   Öffnen eines Menüs („Weitere Aktionen", „Aktionen" der Auswahl, Zeilenmenüs)
   blieb der Fokus auf dem Knopf, Pfeiltasten und Escape taten nichts. Und
@@ -89,6 +84,57 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Behebung aus. Jetzt kommen alle offenen und quittierten Alarme, der Filter
   greift in der Datenbankabfrage, und von den behobenen die 200 zuletzt
   behobenen; sind es mehr, sagt der Reiter das.
+- **Lange Suche im Audit-Log ließ die Seite abstürzen.** Eine Suche über
+  200 Zeichen beantwortet der Server mit einer Prüfliste statt eines Satzes;
+  die Oberfläche versuchte, diese Liste als Text darzustellen, und die Seite
+  brach ab — auch nach jedem Neuladen, weil die Suche in der Adresse stand.
+  Das Suchfeld nimmt jetzt höchstens 200 Zeichen an, eine längere Suche aus
+  einem Link wird gekürzt, und abgelehnte Eingaben erscheinen überall als
+  Satz wie „Ungültige Eingabe: Passwort ist zu kurz (mindestens 8 Zeichen).“
+- **Audit-Log: Suchfeld folgte der Adresse nicht.** Wer das Audit-Log über
+  die Navigation oder „g l“ erneut öffnete oder mit „Zurück“ zu einer
+  früheren Suche ging, sah im Feld und in der Liste weiter die alte Suche,
+  während die Adresse etwas anderes sagte. Feld und Liste übernehmen jetzt
+  die Suche der Adresse.
+- **Tastaturfokus fiel an den Seitenanfang.** „Filter zurücksetzen“ im
+  Audit-Log entfernte sich beim Drücken selbst, ebenso die Zeile eines
+  gelöschten Kontos samt ihrem Menüknopf; der Fokus landete danach im
+  Nichts. Er geht jetzt ins Suchfeld des Audit-Logs bzw. auf das Aktionsmenü
+  der nachrückenden Kontozeile.
+- **Administration: kurzer Serverausfall leerte Konten- und
+  Sitzungsliste.** Schlug eine Aktualisierung im Hintergrund fehl (etwa
+  während eines Deployments), ersetzte die Fehlermeldung die schon geladene
+  Liste samt ihren Aktionen. Die Liste bleibt jetzt stehen, die Meldung
+  steht darüber.
+- **Passwortlänge mit Emoji falsch gezählt.** Die Administration zählte
+  ein Emoji als zwei Zeichen und bot deshalb zu kurze Passwörter zum
+  Speichern an, die der Server ablehnte — die Ablehnung ließ die Seite
+  abstürzen. Gezählt wird jetzt wie auf dem Server.
+- **Zwei-Faktor-Bereich zeigte Veraltetes.** Wer direkt nach dem
+  Einrichten wieder abschaltete, bekam die gelöschten Backup-Codes weiter
+  zum Kopieren angeboten; wer die eigene Zwei-Faktor-Anmeldung über die
+  Kontenliste zurücksetzte, behielt ein offenes Abschalt-Formular, das nur
+  noch „2FA ist nicht aktiv“ meldete. Beides verschwindet jetzt mit dem
+  zweiten Faktor.
+- **Sitzung abmelden meldete Erfolg und Fehler zugleich.** Ein Doppelklick
+  auf „Abmelden“ schickte zwei Anfragen; die zweite fand die Sitzung nicht
+  mehr und meldete „Sitzung nicht abgemeldet“. Der Knopf nimmt während der
+  Anfrage keinen zweiten Klick an („Meldet ab …“), und eine schon beendete
+  Sitzung gilt nicht mehr als Fehler.
+- **E-Mail-Adressen mit Umlaut abgelehnt.** „Konto anlegen“ und „E-Mail
+  ändern“ ließen den Browser Adressen wie „jürgen@firma.de“ zurückweisen,
+  die der Server problemlos speichert. Die Felder prüft jetzt nur noch der
+  Server.
+- **Betrachter-Konten aus der Administration sahen nichts.** Ein
+  Betrachter sieht nur die Geräte seiner Person, doch „Konto anlegen“ bot
+  keine Person an (und schlug ausgerechnet „Betrachter“ vor), und ein
+  herabgestuftes Konto ließ sich nirgends verknüpfen — es meldete sich an
+  einem leeren Dashboard an. „Konto anlegen“ verlangt für Betrachter jetzt
+  eine Person, das Menü jeder Betrachter-Zeile bietet „Person zuordnen …“
+  bzw. „Person ändern …“, und wer ein Konto ohne Person zum Betrachter
+  macht, wird vorher gefragt. Die Kontenliste nennt die Person unter der
+  Rolle und markiert Betrachter ohne Person. Die Verknüpfung landet im
+  Audit-Log; `POST /api/accounts` nimmt dafür `person_id` an.
 - **RustDesk-ID ließ sich nicht korrigieren.** Das Eingabefeld erschien nur,
   solange gar keine ID hinterlegt war. Der Reiter „Fernzugriff" bietet jetzt
   „ID ändern" an; eine ungültige hinterlegte ID (etwa eine alte Eingabe mit
@@ -110,6 +156,80 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Alarm-Sturm erzeugte Abruf-Sturm.** Jeder ausgelöste Alarm schickte einen
   eigenen Fleet-Hinweis. Fallen viele Geräte gleichzeitig aus, bündelt der
   Server die Hinweise jetzt in ein Fenster von 0,5 s.
+- **Ein erzeugtes Enrollment-Token ging verloren.** Wer nach „Token
+  erzeugen" zum Telefon-Formular wechselte oder den Dialog schloss, bevor der
+  Server antwortete, bekam den Installationsbefehl nie zu sehen, und die
+  Liste der offenen Tokens zeigte das neue Token erst nach dem nächsten
+  Abruf. Das Token erscheint jetzt auch nach dem Zurückwechseln, die Liste
+  wird in jedem Fall neu geladen, und ein zweiter Klick während der laufenden
+  Anfrage erzeugt kein zweites Token mehr.
+- Wurde das eben erzeugte Token unter „Offene Tokens" widerrufen, blieb sein
+  Installationsbefehl samt „Gültig bis …" stehen, als wäre er noch nutzbar —
+  ausgeführt endete er mit „Enrollment-Token ungültig oder abgelaufen". Der
+  Dialog kehrt jetzt zum Formular für ein neues Token zurück.
+- Im Formular für Telefone und Tablets endete eine zu lange Angabe (etwa eine
+  IMEI über 40 Zeichen oder eine Notiz über 2000) in „Unbekannter Fehler",
+  ohne Hinweis auf das Feld. Die Felder hören jetzt dort auf, wo der Server
+  ablehnt, und eine abgelehnte Angabe wird mit Feldnamen und Höchstlänge
+  genannt.
+- Lehnte der Server im zweiten Schritt der Anmeldung das Passwort ab — etwa
+  weil es zwischen den Schritten neu gesetzt oder das Konto deaktiviert
+  wurde —, meldete die Seite „Der Code stimmt nicht", und jeder weitere Code
+  zählte bis zur Sperre als Fehlversuch. Sie führt jetzt zurück zu
+  Benutzername und Passwort und sagt, dass diese nicht mehr angenommen
+  werden.
+- **Dokumentation: kaputter Link legte die Seite lahm.** Ein von Hand
+  verändertes oder abgeschnittenes Sprungziel wie `/doku#100%` ersetzte die
+  ganze Seite durch die Fehleransicht. Ein unbekanntes Ziel wird jetzt
+  einfach ignoriert.
+- **Dokumentation: Token-Gültigkeit stimmte nicht mehr.** Dort stand fest
+  „24 h gültig", und bei HTTP 403 hieß es, das Token sei „älter als 24 h".
+  Seit „Gerät hinzufügen" 1 Stunde bis 14 Tage anbietet, führte das bei
+  einem abgelaufenen Ein-Stunden-Token auf die falsche Ursache. Die Doku
+  nennt jetzt die beim Erzeugen gewählte Dauer, den Standard
+  `ENROLLMENT_TOKEN_TTL_HOURS` und widerrufene Tokens als weitere Ursache.
+- Schlug die Abfrage der RustDesk-Konfiguration fehl, forderte der
+  RustDesk-Abschnitt der Dokumentation dazu auf, `RUSTDESK_RELAY_HOST` und
+  `RUSTDESK_KEY` zu setzen — auch auf einem korrekt eingerichteten Server.
+  Er sagt jetzt, dass der Stand nicht abrufbar war.
+- Die Kopieren-Knöpfe der Dokumentation hießen für Screenreader alle nur
+  „Kopieren". Ihr Name nennt jetzt auch den Befehl, etwa „Kopieren:
+  PowerShell als Administrator".
+- Personen: Ein Statussymbol in der Liste stand auch bei Personen, deren
+  Geräte nur offline sind — der Filter „Mit Befund" blendete genau diese
+  aber aus. Symbol und Filter folgen jetzt derselben Regel; wie viele Geräte
+  online sind, steht weiterhin in der Zeile.
+- Personen: Die Löschbestätigung behauptete „Ein verknüpftes
+  Betrachter-Konto wird mitgelöscht", solange die Kontenliste nicht geladen
+  war — auch wenn es gar kein oder ein Techniker-Konto gab. Sie sagt dann
+  jetzt, was geschehen würde, und nennt sonst jedes verknüpfte Konto statt
+  nur des ersten.
+- Personen: Der Telefon-Link wählte bei üblichen Schreibweisen falsch.
+  „+49 (0)711 123456" behielt die Null nach der Ländervorwahl, zwei Nummern
+  im Feld wurden zu einer verschmolzen, und Text ohne Ziffern („nur abends")
+  wurde zu einem leeren Link. Jetzt wird nur die erste Nummer verlinkt und
+  richtig gewählt; Text ohne Nummer bleibt Text.
+- Personen: Wer eine Person bearbeitete, deren gespeicherte E-Mail keine
+  einzelne Adresse ist (etwa „mama@…, papa@…" oder eine Notiz aus der Zeit
+  vor der Neugestaltung), konnte nicht mehr speichern — auch wenn nur die
+  Telefonnummer geändert wurde. Das Feld nimmt wieder jeden Text, wie der
+  Server. Der Mail-Link kodiert die Adresse jetzt (`?`, `#`, `%`, `&`) und
+  erscheint nur noch, wenn im Feld Adressen stehen.
+- Personen: Das einmalig angezeigte Passwort eines neuen Betrachter-Kontos
+  verschwand ohne Rückfrage mit Escape, einem Klick neben den Dialog oder
+  einem zweiten Enter nach dem Anlegen. Solange es nicht kopiert ist, fragt
+  der Dialog jetzt nach, und der Fokus steht auf „Kopieren" statt auf
+  „Fertig".
+- Personen: Wer ein Gerät zuwies oder löste und kurz danach auf der
+  Geräteseite „Bearbeiten" speicherte, machte die Zuweisung unbemerkt
+  rückgängig — die Geräteseite hielt noch den alten Stand. Sie bekommt die
+  Änderung jetzt sofort mit.
+- Personen auf schmalen Bildschirmen: „Alle Personen" legte einen neuen
+  Verlaufseintrag an, sodass die Zurück-Geste des Telefons die eben
+  verlassene Person wieder öffnete statt die Seite zu verlassen. Der Knopf
+  geht jetzt im Verlauf zurück. Danach — und nach dem Löschen einer Person —
+  steht der Tastaturfokus auf der verlassenen Person in der Liste bzw. auf
+  der Suche, statt auf den Seitenanfang zu fallen.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

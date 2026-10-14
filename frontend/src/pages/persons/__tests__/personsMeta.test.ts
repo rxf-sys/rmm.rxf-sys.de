@@ -5,6 +5,7 @@ import {
   accountFate,
   explainError,
   initial,
+  mailtoHref,
   matchesPerson,
   nameList,
   openAlertsOn,
@@ -12,7 +13,7 @@ import {
   personFacts,
   personRows,
   personVerdict,
-  telHref,
+  phoneLink,
 } from '../personsMeta';
 import { account, alert, device, event, person } from './fixtures';
 
@@ -114,8 +115,51 @@ describe('wording', () => {
   });
 
   it('turns a written phone number into a dialable link', () => {
-    expect(telHref('+49 (170) 123-45 / 6')).toBe('tel:+49170123456');
-    expect(telHref('0170 1234')).toBe('tel:01701234');
+    expect(phoneLink('+49 (170) 123-45 / 6')?.href).toBe('tel:+49170123456');
+    expect(phoneLink('0170 1234')?.href).toBe('tel:01701234');
+    expect(phoneLink('0711 / 123456')?.href).toBe('tel:0711123456');
+    expect(phoneLink('(0711) 123456')?.href).toBe('tel:0711123456');
+  });
+
+  it('encodes an address for mailto, so ? # % & stay part of it', () => {
+    expect(mailtoHref('martina@example.de')).toBe('mailto:martina@example.de');
+    expect(mailtoHref('info?team@firma.de')).toBe('mailto:info%3Fteam@firma.de');
+    expect(mailtoHref('a#b%c&d@x.de')).toBe('mailto:a%23b%25c%26d@x.de');
+    expect(mailtoHref('jürgen@web.de')).toBe('mailto:j%C3%BCrgen@web.de');
+    expect(mailtoHref(' mama@web.de; papa@web.de ')).toBe('mailto:mama@web.de,papa@web.de');
+  });
+
+  it('links no email field that is not a list of addresses', () => {
+    expect(mailtoHref('über Tochter')).toBeNull();
+    expect(mailtoHref('Tochter: anna@web.de')).toBeNull();
+    // Would add a hidden CC for whoever clicks it.
+    expect(mailtoHref('x@y.de?cc=other@z.de')).toBeNull();
+    expect(mailtoHref('')).toBeNull();
+  });
+
+  it('drops the bracketed trunk zero after a country code', () => {
+    expect(phoneLink('+49 (0)711 123456')?.href).toBe('tel:+49711123456');
+  });
+
+  it('links only the first of several numbers and keeps the rest as text', () => {
+    expect(phoneLink('0711 123456 / 0171 9876543')).toEqual({
+      before: '',
+      number: '0711 123456',
+      after: ' / 0171 9876543',
+      href: 'tel:0711123456',
+    });
+    expect(phoneLink('Büro: 0711 123456, mobil 0171 98765 (abends)')).toEqual({
+      before: 'Büro: ',
+      number: '0711 123456',
+      after: ', mobil 0171 98765 (abends)',
+      href: 'tel:0711123456',
+    });
+    expect(phoneLink('Zi. 4, Tel. 0711 123456')?.href).toBe('tel:0711123456');
+  });
+
+  it('links nothing when there is no number to dial', () => {
+    expect(phoneLink('nur abends')).toBeNull();
+    expect(phoneLink('Zimmer 12')).toBeNull();
   });
 
   it('takes the whole first character for the avatar', () => {

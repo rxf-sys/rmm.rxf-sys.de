@@ -23,8 +23,11 @@ export function DocsPage() {
   // The page arrives as a lazy chunk, after the browser has given up on the
   // fragment of a shared link like /doku#rustdesk. The next frame also comes
   // after the shell's scroll-to-top for a new page.
+  // The fragment is compared as it stands: section ids are plain ASCII, so a
+  // link to one never needs decoding, and decoding a hand-edited fragment
+  // such as "#100%" throws and would take the whole page down.
   useEffect(() => {
-    const id = decodeURIComponent(initialHash.slice(1));
+    const id = initialHash.slice(1);
     if (!isSectionId(id)) return;
     const frame = requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }));
     return () => cancelAnimationFrame(frame);

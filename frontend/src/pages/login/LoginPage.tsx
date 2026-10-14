@@ -1,5 +1,6 @@
 import './login.css';
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { IconHistory, IconKey, IconShieldCheck } from '../../icons';
 import { ErrorNote, StatusBadge } from '../../ui';
 import { describeLoginFailure, type LoginStep } from './loginError';
@@ -79,6 +80,9 @@ export function LoginPage({ onLogin }: Props) {
         setCode('');
         setStep('code');
       } else if (f.kind === 'credentials') {
+        // Refused at the code step, the sign-in starts over; render step one
+        // now so the password field exists to take focus.
+        if (step === 'code') flushSync(back);
         fail('credentials', f.message);
         // The password is the likelier typo; selected, so retyping replaces it.
         passRef.current?.focus();

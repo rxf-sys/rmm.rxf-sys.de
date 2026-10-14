@@ -1,11 +1,12 @@
 import './admin.css';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Pagination } from '../../components/Pagination';
 import { roleLabel } from '../../format';
 import { useConfirm } from '../../hooks/useConfirm';
+import { personsQuery } from '../../hooks/useFleet';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useNow } from '../../hooks/useNow';
 import { usePagination } from '../../hooks/usePagination';
@@ -13,19 +14,36 @@ import { IconInfo, IconKey, IconPlus, IconPower, IconShield, IconUsers } from '.
 import type { Account, Role } from '../../types';
 import { EmptyState, ErrorNote, PageHeader, Panel, SkeletonRows, type MenuEntry } from '../../ui';
 import { notify } from '../../ui/toast';
-import { CreateAccountDialog, EmailDialog, PasswordDialog } from './AccountDialogs';
+import { CreateAccountDialog, EmailDialog, PasswordDialog, PersonDialog } from './AccountDialogs';
 import { AccountCards, AccountTable } from './AccountRows';
 import { NtfyPanel } from './NtfyPanel';
 import { SessionsPanel } from './SessionsPanel';
 import { TwoFactorPanel } from './TwoFactorPanel';
-import { SELF_LOCK, accountSummary, adminKeys, explain, formatSort, nextSort, parseSort, sortAccounts, type AccountDraft, type SortKey } from './accounts';
+import {
+  SELF_LOCK,
+  accountSummary,
+  adminKeys,
+  explain,
+  formatSort,
+  nextSort,
+  parseSort,
+  sortAccounts,
+  type AccountDraft,
+  type PersonChoices,
+  type SortKey,
+} from './accounts';
 import { deleteText, disableText, resetTotpText, roleChangeText } from './confirmations';
 
 interface Props {
   currentUser: Account;
 }
 
-type Dialog = { kind: 'create' } | { kind: 'password'; account: Account } | { kind: 'email'; account: Account } | null;
+type Dialog =
+  | { kind: 'create' }
+  | { kind: 'password'; account: Account }
+  | { kind: 'email'; account: Account }
+  | { kind: 'person'; account: Account }
+  | null;
 type UpdateBody = Parameters<typeof api.updateAccount>[1];
 
 /** Below this the table becomes a list of cards (DESIGN.md, Datentabelle). */
@@ -64,9 +82,34 @@ export function AdminPage({ currentUser }: Props) {
   const sorted = useMemo(() => sortAccounts(accounts, sort), [accounts, sort]);
   const pager = usePagination(sorted, 'accounts', `${sort.key}|${sort.dir}`);
   const self = accounts.find((a) => a.id === currentUser.id);
+
+  // Which person a viewer sees, for the rows and the pickers.
+  // The fleet's list, which the persons page updates as it changes it.
+  const personsQ = useQuery(personsQuery);
+  const personsList = personsQ.data;
+  const personName = useMemo(() => {
+    const names = new Map((personsList ?? []).map((p) => [p.id, p.name]));
+    return (id: number) => names.get(id);
+  }, [personsList]);
+  const persons: PersonChoices = { list: personsList, error: personsQ.error, retry: () => void personsQ.refetch() };
   const totpOn = self?.totp_enabled ?? ownTotp ?? !!currentUser.totp_enabled;
 
   const reload = () => qc.invalidateQueries({ queryKey: adminKeys.accounts });
+
+  // A deleted row takes its menu button with it — the button the confirm
+  // dialog just handed focus back to — and focus would fall to <body>. It
+  // moves on to the row that takes its place, the one above, or "Konto
+  // anlegen". Set before the request: the reload may render before the
+  // await after it resumes.
+  const createRef = useRef<HTMLButtonElement>(null);
+  const focusAfterDelete = useRef<{ gone: number; to: number | null } | null>(null);
+  useEffect(() => {
+    const f = focusAfterDelete.current;
+    if (!f || accounts.some((x) => x.id === f.gone)) return;
+    focusAfterDelete.current = null;
+    const row = f.to === null ? null : document.querySelector<HTMLElement>(`[data-account-actions="${f.to}"]`);
+    (row ?? createRef.current)?.focus();
+  }, [accounts]);
   const mark = (id: number, on: boolean) =>
     setBusy((prev) => {
       const next = new Set(prev);
@@ -132,12 +175,16 @@ export function AdminPage({ currentUser }: Props) {
 
   const remove = async (a: Account) => {
     if (!(await ask(deleteText(a)))) return;
+    const shown = pager.items;
+    const at = shown.findIndex((x) => x.id === a.id);
+    focusAfterDelete.current = { gone: a.id, to: (shown[at + 1] ?? shown[at - 1])?.id ?? null };
     mark(a.id, true);
     try {
       await api.deleteAccount(a.id);
       await reload();
       notify.success('Konto gelöscht', `„${a.username}“`);
     } catch (e) {
+      focusAfterDelete.current = null;
       notify.error(`„${a.username}“ nicht gelöscht`, explain(e));
     } finally {
       mark(a.id, false);
@@ -146,7 +193,14 @@ export function AdminPage({ currentUser }: Props) {
 
   // The dialogs keep themselves open on failure: these throw, they show it.
   const create = async (d: AccountDraft) => {
-    const r = await api.createAccount({ username: d.username.trim(), password: d.password, role: d.role, email: d.email.trim() || undefined });
+    const r = await api.createAccount({
+      username: d.username.trim(),
+      password: d.password,
+      role: d.role,
+      email: d.email.trim() || undefined,
+      // A person picked before switching to another role is not meant.
+      person_id: d.role === 'viewer' ? (d.personId ?? undefined) : undefined,
+    });
     setDialog(null);
     await reload();
     notify.success('Konto angelegt', `„${r.account.username}“ meldet sich als ${roleLabel(r.account.role)} an.`);
@@ -163,6 +217,18 @@ export function AdminPage({ currentUser }: Props) {
     notify.success(email ? 'E-Mail gespeichert' : 'E-Mail entfernt', `„${a.username}“`);
   };
 
+  const setPerson = (a: Account) => async (personId: number) => {
+    await api.updateAccount(a.id, { person_id: personId });
+    setDialog(null);
+    await reload();
+    if (personId === 0) {
+      notify.success('Person gelöst', `„${a.username}“ ist mit keiner Person mehr verknüpft.`);
+      return;
+    }
+    const who = `„${personName(personId) ?? `Person ${personId}`}“`;
+    notify.success('Person zugeordnet', a.role === 'viewer' ? `„${a.username}“ sieht jetzt die Geräte von ${who}.` : `„${a.username}“ ist jetzt mit ${who} verknüpft.`);
+  };
+
   // Own second factor changed in the panel below: the list says so at once.
   const onOwnTotp = (enabled: boolean) => {
     setOwnTotp(enabled);
@@ -176,6 +242,14 @@ export function AdminPage({ currentUser }: Props) {
       { label: 'Passwort setzen …', icon: <IconKey size={14} />, onSelect: () => setDialog({ kind: 'password', account: a }) },
       { label: a.email ? 'E-Mail ändern …' : 'E-Mail hinterlegen …', onSelect: () => setDialog({ kind: 'email', account: a }) },
     ];
+    // A viewer sees only its person's devices. The other roles see them all,
+    // but a link they already have can still be moved or removed.
+    if (a.role === 'viewer' || a.person_id != null)
+      entries.push({
+        label: a.person_id != null ? 'Person ändern …' : 'Person zuordnen …',
+        icon: <IconUsers size={14} />,
+        onSelect: () => setDialog({ kind: 'person', account: a }),
+      });
     // Only an account with a second factor has one to reset.
     if (a.totp_enabled) entries.push({ label: 'Zwei-Faktor zurücksetzen …', icon: <IconShield size={14} />, onSelect: () => void resetTotp(a) });
     entries.push(
@@ -194,6 +268,7 @@ export function AdminPage({ currentUser }: Props) {
     now,
     onRole: (a: Account, role: Role) => void changeRole(a, role),
     menu,
+    personName,
   };
 
   return (
@@ -203,14 +278,16 @@ export function AdminPage({ currentUser }: Props) {
         title="Administration"
         subtitle="Konten und Rollen, deine eigene Anmeldung und wohin Alarme gemeldet werden."
         actions={
-          <button type="button" className="btn btn-primary" onClick={() => setDialog({ kind: 'create' })}>
+          <button ref={createRef} type="button" className="btn btn-primary" onClick={() => setDialog({ kind: 'create' })}>
             <IconPlus size={14} /> Konto anlegen
           </button>
         }
       />
 
       <Panel title="Konten" meta={q.data ? accountSummary(q.data) : undefined} padded={false}>
-        {q.error ? (
+        {/* A failed refresh keeps the last list (TanStack keeps data on a
+            failed refetch); only a list that never loaded gives way to the error. */}
+        {q.error && !q.data ? (
           <div className="ad-pad">
             <ErrorNote error={explain(q.error)} onRetry={() => void q.refetch()} />
           </div>
@@ -224,6 +301,11 @@ export function AdminPage({ currentUser }: Props) {
           </EmptyState>
         ) : (
           <>
+            {q.error && (
+              <div className="ad-pad">
+                <ErrorNote error={explain(q.error)} onRetry={() => void q.refetch()} />
+              </div>
+            )}
             {asCards ? <AccountCards {...rows} /> : <AccountTable {...rows} sort={sort} onSort={onSort} />}
             <Pagination {...pager} label="Konten" />
             <p className="ad-foot">
@@ -242,9 +324,12 @@ export function AdminPage({ currentUser }: Props) {
         <NtfyPanel />
       </div>
 
-      {dialog?.kind === 'create' && <CreateAccountDialog accounts={accounts} onCreate={create} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'create' && <CreateAccountDialog accounts={accounts} persons={persons} onCreate={create} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'password' && <PasswordDialog account={dialog.account} onSave={setPassword(dialog.account)} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'email' && <EmailDialog account={dialog.account} onSave={setEmail(dialog.account)} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'person' && (
+        <PersonDialog account={dialog.account} persons={persons} onSave={setPerson(dialog.account)} onClose={() => setDialog(null)} />
+      )}
     </div>
   );
 }

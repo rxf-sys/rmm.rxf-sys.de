@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../api/client';
+import { useRef, useState } from 'react';
+import { ApiError, api } from '../../api/client';
 import { formatAgo, formatDateTime } from '../../format';
 import { useConfirm } from '../../hooks/useConfirm';
 import type { SessionInfo } from '../../types';
@@ -25,13 +26,30 @@ export function SessionsPanel({ now }: { now: number }) {
   const others = q.data?.filter((s) => !s.current) ?? [];
   const reload = () => qc.invalidateQueries({ queryKey: adminKeys.sessions });
 
+  // Sessions being ended. The ref guards the handler — a double click's
+  // second event can arrive before the re-render — the state draws the row.
+  const inFlight = useRef(new Set<string>());
+  const [revoking, setRevoking] = useState<ReadonlySet<string>>(() => new Set());
+  const track = (prefix: string, on: boolean) => {
+    if (on) inFlight.current.add(prefix);
+    else inFlight.current.delete(prefix);
+    setRevoking(new Set(inFlight.current));
+  };
+
   const revoke = async (s: SessionInfo) => {
+    if (inFlight.current.has(s.token_prefix)) return;
+    track(s.token_prefix, true);
     try {
       await api.revokeSession(s.token_prefix);
-      await reload();
       notify.success('Sitzung abgemeldet', `${s.token_prefix}…`);
     } catch (e) {
-      notify.error('Sitzung nicht abgemeldet', e);
+      // Gone already — expired, or ended in another tab. What the user
+      // wanted is true, so it is not reported as a failure.
+      if (e instanceof ApiError && e.status === 404) notify.info('Sitzung war schon beendet', `${s.token_prefix}…`);
+      else notify.error('Sitzung nicht abgemeldet', e);
+    } finally {
+      await reload();
+      track(s.token_prefix, false);
     }
   };
 
@@ -65,15 +83,13 @@ export function SessionsPanel({ now }: { now: number }) {
       }
     >
       {dialog}
-      {q.error ? (
+      {q.error && (
         <div className="ad-pad">
           <ErrorNote error={q.error} onRetry={() => void q.refetch()} />
         </div>
-      ) : q.isPending ? (
-        <div className="ad-pad">
-          <SkeletonRows rows={2} h={40} />
-        </div>
-      ) : (
+      )}
+      {/* A failed refresh keeps the sessions already shown, below the error. */}
+      {q.data ? (
         <ul className="ad-list">
           {q.data.map((s) => (
             <li key={s.token_prefix} className="ad-row">
@@ -88,13 +104,27 @@ export function SessionsPanel({ now }: { now: number }) {
                 </span>
               </div>
               {!s.current && (
-                <button type="button" className="btn btn-sm" onClick={() => void revoke(s)}>
-                  Abmelden<span className="sr-only"> (Sitzung {s.token_prefix}…)</span>
+                // aria-disabled rather than disabled: a disabled button drops
+                // the focus of whoever just pressed it.
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  aria-disabled={revoking.has(s.token_prefix) || undefined}
+                  onClick={() => void revoke(s)}
+                >
+                  {revoking.has(s.token_prefix) ? 'Meldet ab …' : 'Abmelden'}
+                  <span className="sr-only"> (Sitzung {s.token_prefix}…)</span>
                 </button>
               )}
             </li>
           ))}
         </ul>
+      ) : (
+        !q.error && (
+          <div className="ad-pad">
+            <SkeletonRows rows={2} h={40} />
+          </div>
+        )
       )}
     </Panel>
   );

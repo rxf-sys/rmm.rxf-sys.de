@@ -25,6 +25,9 @@ class CreateAccountRequest(BaseModel):
     password: str = Field(min_length=MIN_PASSWORD_LEN, max_length=256)
     role: str = Field(default="viewer", pattern="^(admin|techniker|viewer)$")
     email: str = Field(default="", max_length=200)
+    # A viewer only sees its person's devices; without one it sees nothing.
+    # Set here, the link is made in the same request as the account.
+    person_id: int | None = Field(default=None, ge=1)
 
 
 class UpdateAccountRequest(BaseModel):
@@ -67,14 +70,24 @@ async def list_accounts(user: dict = Depends(require_admin)) -> dict:
 async def create_account(
     body: CreateAccountRequest, user: dict = Depends(require_admin)
 ) -> dict:
+    if body.person_id is not None and await persons.get_person(body.person_id) is None:
+        raise HTTPException(status_code=422, detail="Person nicht gefunden")
     try:
         created = await accounts.create_user(
-            body.username, body.password, role=body.role, email=body.email or None
+            body.username,
+            body.password,
+            role=body.role,
+            email=body.email or None,
+            person_id=body.person_id,
         )
     except accounts.AccountError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     await audit_record(
-        "account.created", user=user["username"], username=created["username"], role=created["role"]
+        "account.created",
+        user=user["username"],
+        username=created["username"],
+        role=created["role"],
+        person_id=created["person_id"],
     )
     return {"account": created}
 
@@ -122,6 +135,8 @@ async def update_account(
         username=target["username"],
         role=body.role,
         disabled=body.disabled,
+        # What a viewer may see hangs on this link; 0 means unlinked.
+        person_id=body.person_id,
     )
     return {"account": updated}
 

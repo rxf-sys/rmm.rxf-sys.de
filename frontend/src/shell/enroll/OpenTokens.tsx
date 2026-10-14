@@ -16,7 +16,14 @@ const tokenName = (t: EnrollToken) => (t.label ? `„${t.label}“` : 'ohne Beze
  * until it expires, so the list sits next to the form that makes them, and
  * an unneeded one can be revoked right here.
  */
-export function OpenTokens({ justCreated }: { justCreated: number | null }) {
+export function OpenTokens({
+  justCreated,
+  onRevoked,
+}: {
+  justCreated: number | null;
+  /** After a token is revoked; the token form drops a command that used it. */
+  onRevoked: (id: number) => void;
+}) {
   const qc = useQueryClient();
   const now = useNow(30_000);
   const { ask, dialog } = useConfirm();
@@ -46,6 +53,7 @@ export function OpenTokens({ justCreated }: { justCreated: number | null }) {
     setRevoking(t.id);
     try {
       await api.deleteEnrollToken(t.id);
+      onRevoked(t.id);
       notify.success('Token widerrufen', t.label || undefined);
     } catch (e) {
       notify.error('Widerrufen fehlgeschlagen', new Error(enrollErrorText(e)));

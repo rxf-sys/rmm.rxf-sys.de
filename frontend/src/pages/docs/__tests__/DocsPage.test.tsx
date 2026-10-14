@@ -92,16 +92,35 @@ describe('DocsPage', () => {
     }
   });
 
+  it('names each copy button after the command it copies', async () => {
+    show();
+    expect(await section('rustdesk').findByRole('button', { name: 'Kopieren: Linux und macOS' })).toBeInTheDocument();
+    expect(section('windows-agent').getByRole('button', { name: 'Kopieren: PowerShell als Administrator' })).toBeInTheDocument();
+    expect(section('rustdesk').getByRole('button', { name: 'Kopieren: Windows' })).toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { name: 'Kopieren' })).toHaveLength(0);
+  });
+
   it('puts this server into the one-liner and copies it exactly', async () => {
     const user = userEvent.setup();
     show();
     const windows = section('windows-agent');
-    await user.click(windows.getAllByRole('button', { name: 'Kopieren' })[0]!);
+    await user.click(windows.getByRole('button', { name: 'Kopieren: PowerShell als Administrator' }));
     expect(await navigator.clipboard.readText()).toBe(
       `irm -Headers @{'X-Enroll-Token'='<TOKEN>'} '${window.location.origin}/api/agent/setup/windows' | iex`,
     );
-    expect(windows.getByRole('button', { name: 'Kopiert' })).toBeInTheDocument();
+    expect(windows.getByRole('button', { name: 'Kopiert: PowerShell als Administrator' })).toBeInTheDocument();
     expect(windows.getByText('In die Zwischenablage kopiert')).toBeInTheDocument();
+  });
+
+  it('gives the token validity chosen in the enroll dialog, not a fixed 24 h', () => {
+    show();
+    // The dialog offers 1 h to 14 days; only the server default is 24 h.
+    const install = section('windows-agent').getByText(/Token gilt/).closest('li')!;
+    expect(install).toHaveTextContent('so lange, wie beim Erzeugen gewählt');
+    expect(install).toHaveTextContent('ENROLLMENT_TOKEN_TTL_HOURS');
+    const refused = section('windows-fehler').getByRole('heading', { name: /Token ungültig oder abgelaufen/ }).parentElement!;
+    expect(refused).toHaveTextContent('verbraucht, widerrufen oder abgelaufen');
+    expect(document.body).not.toHaveTextContent(/24 h gültig|älter als 24 h/);
   });
 
   it('selects the command and says so when the browser refuses the clipboard', async () => {
@@ -109,11 +128,11 @@ describe('DocsPage', () => {
     vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'));
     show();
     const errors = section('windows-fehler');
-    await user.click(errors.getAllByRole('button', { name: 'Kopieren' })[0]!);
+    await user.click(errors.getByRole('button', { name: 'Kopieren: PowerShell' }));
     await waitFor(() => expect(notify.warning).toHaveBeenCalledWith('Nicht kopiert', expect.stringContaining('markiert')));
     const pre = errors.getByText(/SecurityProtocol = /).closest('pre');
     expect(window.getSelection()?.anchorNode).toBe(pre);
-    expect(errors.queryByRole('button', { name: 'Kopiert' })).not.toBeInTheDocument();
+    expect(errors.queryByRole('button', { name: /^Kopiert/ })).not.toBeInTheDocument();
   });
 
   it('shows the live relay, key and ready-to-paste RustDesk commands', async () => {
@@ -168,6 +187,17 @@ describe('DocsPage', () => {
     expect(remoteConfigMock).toHaveBeenCalledTimes(2);
   });
 
+  it('does not tell the admin to set up a relay when its config only failed to load', async () => {
+    remoteConfigMock.mockRejectedValueOnce(new ApiError(500, JSON.stringify({ detail: 'Datenbank gesperrt' })));
+    show();
+    const rd = section('rustdesk');
+    await rd.findByRole('alert');
+    const body = document.getElementById('rustdesk')!;
+    expect(body).not.toHaveTextContent(/Sobald RUSTDESK_RELAY_HOST/);
+    expect(body).toHaveTextContent('Der Stand dieses Servers ließ sich nicht abrufen');
+    expect(rd.getByText('rustdesk.exe --config "host=<RELAY>,key=<PUBKEY>"')).toBeInTheDocument();
+  });
+
   it('marks the section being read in the contents', () => {
     const scrollTo = layout();
     show();
@@ -215,6 +245,14 @@ describe('DocsPage', () => {
     show('/doku#rustdesk');
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
     expect(spy.mock.contexts[0]).toBe(document.getElementById('rustdesk'));
+  });
+
+  it('survives a malformed fragment from a hand-edited link', async () => {
+    const spy = vi.spyOn(Element.prototype, 'scrollIntoView');
+    show('/doku#100%');
+    await act(() => new Promise<void>((done) => requestAnimationFrame(() => done())));
+    expect(screen.getByRole('heading', { level: 1, name: 'Dokumentation' })).toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it('ignores a fragment that names no section', async () => {

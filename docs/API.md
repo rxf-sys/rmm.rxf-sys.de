@@ -215,8 +215,8 @@ pflegen.
 | DELETE | `/api/auth/sessions/{token_prefix}` | Session | Eine eigene Session beenden |
 | POST | `/api/auth/sessions/revoke-others` | Session | Alle anderen eigenen Sessions beenden |
 | GET | `/api/accounts` | Admin | Konten auflisten |
-| POST | `/api/accounts` | Admin | Konto anlegen |
-| PATCH | `/api/accounts/{user_id}` | Admin | Rolle, Passwort, Sperre, 2FA-Reset. Selbstaussperrung und "letzter Admin" sind blockiert |
+| POST | `/api/accounts` | Admin | Konto anlegen; optional `person_id` verknüpft es mit einer Person (Betrachter sehen nur deren Geräte) |
+| PATCH | `/api/accounts/{user_id}` | Admin | Rolle, Passwort, Sperre, 2FA-Reset, Person (`person_id`, `0` löst sie). Selbstaussperrung und "letzter Admin" sind blockiert |
 | DELETE | `/api/accounts/{user_id}` | Admin | Konto löschen (gleiche Sperren) |
 | GET | `/api/persons` | Session | Betreute Personen |
 | POST | `/api/persons` | Admin | Person anlegen; legt optional ein Viewer-Konto mit an |

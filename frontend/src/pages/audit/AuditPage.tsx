@@ -1,7 +1,7 @@
 import './audit.css';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Link, NavigationType, useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
 import { ApiError, api } from '../../api/client';
 import { qk } from '../../api/queryClient';
 import { auditCategoryLabel, auditNamesFrom, describeAudit, type AuditNames } from '../../auditText';
@@ -28,6 +28,7 @@ import {
   RANGE_LABEL,
   RANGE_SPAN,
   RANGES,
+  SEARCH_MAX,
   actorLabel,
   csvFileName,
   detailRows,
@@ -36,6 +37,7 @@ import {
   hasFilters,
   isNarrowed,
   readFilters,
+  readSearch,
   sinceFor,
   timeOfDay,
   toCsv,
@@ -160,13 +162,30 @@ export function AuditPage({ devices }: Props) {
   // The search text is component state and only written to the URL: React
   // Router applies URL changes in a transition, so an input controlled by
   // the URL drops keystrokes when someone types fast.
-  const [q, setQ] = useState(() => params.get('q') ?? '');
+  const [q, setQ] = useState(() => readSearch(params));
   const [search, setSearch] = useState(() => q.trim());
+  // The page stays mounted when the address changes under it (the rail's
+  // Audit-Log link, "g l", Back). Those navigations push or pop; the page's
+  // own writes replace. Only the former set the box from the address —
+  // syncing on our own replaces would undo keystrokes whose URL update is
+  // still in its transition.
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  const [seenKey, setSeenKey] = useState(location.key);
+  if (location.key !== seenKey) {
+    setSeenKey(location.key);
+    if (navigationType !== NavigationType.Replace) {
+      const fromUrl = readSearch(params);
+      setQ(fromUrl);
+      setSearch(fromUrl);
+    }
+  }
   useEffect(() => {
     const t = setTimeout(() => setSearch(q.trim()), SEARCH_DELAY_MS);
     return () => clearTimeout(t);
   }, [q]);
   const searchId = useId();
+  const searchRef = useRef<HTMLInputElement>(null);
   const csvHintId = useId();
 
   const setParam = (patch: Record<string, string | null>) =>
@@ -249,6 +268,10 @@ export function AuditPage({ devices }: Props) {
     setQ('');
     setSearch('');
     setParam({ range: null, security: null, category: null, actor: null, q: null });
+    // Both reset buttons exist only while something is filtered, so the one
+    // just pressed is about to vanish and would drop focus to <body>. The
+    // search box is where narrowing starts again.
+    searchRef.current?.focus();
   };
 
   // The page has its own route guard; a 403 here means the role changed
@@ -369,10 +392,12 @@ export function AuditPage({ devices }: Props) {
                 Audit-Log durchsuchen
               </label>
               <input
+                ref={searchRef}
                 id={searchId}
                 type="search"
                 className="input"
                 value={q}
+                maxLength={SEARCH_MAX}
                 onChange={(e) => {
                   setQ(e.target.value);
                   setParam({ q: e.target.value.trim() || null });

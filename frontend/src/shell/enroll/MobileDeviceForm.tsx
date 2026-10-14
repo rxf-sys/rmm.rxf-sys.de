@@ -6,7 +6,7 @@ import { IconCheck } from '../../icons';
 import type { NewDevice } from '../../types';
 import { ErrorNote } from '../../ui';
 import { notify } from '../../ui/toast';
-import { MOBILE_OS_OPTIONS, PERSON_PICKER_KEY, enrollErrorText } from './enrollText';
+import { DEVICE_LIMITS, MOBILE_OS_OPTIONS, PERSON_PICKER_KEY, enrollErrorText } from './enrollText';
 
 interface Props {
   /** After each device. The form stays open, so several devices can be
@@ -113,6 +113,7 @@ export function MobileDeviceForm({ onCreated, onCancel }: Props) {
             if (e.target.value.trim()) setMissingName(false);
           }}
           placeholder="z. B. iPhone von Lisa"
+          maxLength={DEVICE_LIMITS.hostname}
           required
           aria-invalid={missingName || undefined}
           aria-describedby={missingName ? `${id}-name-err` : undefined}
@@ -141,13 +142,27 @@ export function MobileDeviceForm({ onCreated, onCancel }: Props) {
           <label className="field-label" htmlFor={`${id}-ver`}>
             Version (optional)
           </label>
-          <input id={`${id}-ver`} className="input" value={osVersion} onChange={(e) => setOsVersion(e.target.value)} placeholder="z. B. 18.6" />
+          <input
+            id={`${id}-ver`}
+            className="input"
+            value={osVersion}
+            onChange={(e) => setOsVersion(e.target.value)}
+            maxLength={DEVICE_LIMITS.os_version}
+            placeholder="z. B. 18.6"
+          />
         </div>
         <div className="field">
           <label className="field-label" htmlFor={`${id}-model`}>
             Modell (optional)
           </label>
-          <input id={`${id}-model`} className="input" value={model} onChange={(e) => setModel(e.target.value)} placeholder="z. B. iPhone 15" />
+          <input
+            id={`${id}-model`}
+            className="input"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            maxLength={DEVICE_LIMITS.model}
+            placeholder="z. B. iPhone 15"
+          />
         </div>
       </div>
 
@@ -190,13 +205,29 @@ export function MobileDeviceForm({ onCreated, onCancel }: Props) {
           <label className="field-label" htmlFor={`${id}-serial`}>
             Seriennummer (optional)
           </label>
-          <input id={`${id}-serial`} className="input mono" value={serial} onChange={(e) => setSerial(e.target.value)} spellCheck={false} autoCapitalize="characters" />
+          <input
+            id={`${id}-serial`}
+            className="input mono"
+            value={serial}
+            onChange={(e) => setSerial(e.target.value)}
+            maxLength={DEVICE_LIMITS.serial}
+            spellCheck={false}
+            autoCapitalize="characters"
+          />
         </div>
         <div className="field">
           <label className="field-label" htmlFor={`${id}-imei`}>
             IMEI (optional)
           </label>
-          <input id={`${id}-imei`} className="input mono" value={imei} onChange={(e) => setImei(e.target.value)} inputMode="numeric" spellCheck={false} />
+          <input
+            id={`${id}-imei`}
+            className="input mono"
+            value={imei}
+            onChange={(e) => setImei(e.target.value)}
+            maxLength={DEVICE_LIMITS.imei}
+            inputMode="numeric"
+            spellCheck={false}
+          />
         </div>
       </div>
       {persons.error && canPickPerson && <ErrorNote error={persons.error} onRetry={() => void persons.refetch()} />}
@@ -211,6 +242,7 @@ export function MobileDeviceForm({ onCreated, onCancel }: Props) {
           rows={2}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
+          maxLength={DEVICE_LIMITS.notes}
           placeholder="z. B. Displayschaden, Vertrag läuft bis 05/2027"
         />
       </div>

@@ -15,6 +15,15 @@ describe('describeLoginFailure', () => {
     expect(describeLoginFailure(api(401, 'Code ungültig'), 'code').kind).toBe('code');
   });
 
+  it('blames the credentials when the server refuses them at the code step', () => {
+    // The server checks the password before the code: an account disabled or
+    // a password reset between the two steps is not a wrong code.
+    expect(describeLoginFailure(api(401, 'Benutzername oder Passwort falsch'), 'code')).toEqual({
+      kind: 'credentials',
+      message: 'Benutzername oder Passwort wird nicht mehr angenommen. Erneut anmelden.',
+    });
+  });
+
   it('separates throttling, an unreachable server and a server fault', () => {
     expect(describeLoginFailure(api(429, 'zu viele Fehlversuche'), 'credentials').kind).toBe('throttled');
     expect(describeLoginFailure(new TypeError('Failed to fetch'), 'credentials').kind).toBe('unreachable');

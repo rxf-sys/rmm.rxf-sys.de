@@ -45,7 +45,10 @@ export function TwoFactorPanel({ username, enabled, onChanged }: Props) {
       formRef.current?.focus();
     } else if (opened.current) {
       opened.current = false;
-      (codesRef.current ?? actionRef.current)?.focus();
+      // Only when the closed form took focus with it: a reset from the
+      // account list (below) closes the form while focus is over there.
+      const lost = !document.activeElement || document.activeElement === document.body;
+      if (lost) (codesRef.current ?? actionRef.current)?.focus();
     }
   }, [mode.kind]);
 
@@ -54,6 +57,17 @@ export function TwoFactorPanel({ username, enabled, onChanged }: Props) {
     setCode('');
     setError(null);
   };
+
+  // The second factor can change under this panel: switched off here, or
+  // reset from the own row in the account list. Backup codes of a removed
+  // second factor are deleted on the server, so offering them would hand out
+  // dead codes; and a form for the old state only earns a 409.
+  const [wasEnabled, setWasEnabled] = useState(enabled);
+  if (enabled !== wasEnabled) {
+    setWasEnabled(enabled);
+    if (!enabled) setCodes(null);
+    if ((mode.kind === 'disable' && !enabled) || (mode.kind === 'setup' && enabled)) reset();
+  }
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);

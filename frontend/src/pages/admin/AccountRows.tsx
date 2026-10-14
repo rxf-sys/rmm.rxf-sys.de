@@ -2,7 +2,7 @@ import { formatAgo, formatDateTime, roleLabel } from '../../format';
 import { IconChevronDown, IconChevronUp, IconMore, IconSort } from '../../icons';
 import type { Account, Role } from '../../types';
 import { Menu, StatusBadge, type MenuEntry } from '../../ui';
-import { ROLES, type Sort, type SortKey } from './accounts';
+import { ROLES, seesNothing, type Sort, type SortKey } from './accounts';
 
 interface RowsProps {
   accounts: Account[];
@@ -11,6 +11,8 @@ interface RowsProps {
   now: number;
   onRole: (a: Account, role: Role) => void;
   menu: (a: Account) => MenuEntry[];
+  /** A person's name; undefined while the list is not there. */
+  personName: (id: number) => string | undefined;
 }
 
 function RoleControl({ a, self, onRole }: { a: Account; self: boolean; onRole: (a: Account, role: Role) => void }) {
@@ -36,6 +38,24 @@ function RoleControl({ a, self, onRole }: { a: Account; self: boolean; onRole: (
         </option>
       ))}
     </select>
+  );
+}
+
+/** Whose devices the account is tied to. A viewer without a person sees
+ *  none, and the row says so instead of leaving it to a puzzled call. */
+function PersonLine({ a, personName }: { a: Account; personName: RowsProps['personName'] }) {
+  if (seesNothing(a))
+    return (
+      <span className="ad-person">
+        <StatusBadge kind="warn" label="keine Person" plain />
+      </span>
+    );
+  const name = a.person_id == null ? undefined : personName(a.person_id);
+  if (!name) return null;
+  return (
+    <span className="ad-person" title={name}>
+      für {name}
+    </span>
   );
 }
 
@@ -70,7 +90,13 @@ function Actions({ a, menu }: { a: Account; menu: RowsProps['menu'] }) {
       label={`Aktionen für ${a.username}`}
       items={menu(a)}
       trigger={(t) => (
-        <button type="button" className="btn btn-sm btn-ghost btn-icon" aria-label={`Aktionen für ${a.username}`} {...t}>
+        <button
+          type="button"
+          className="btn btn-sm btn-ghost btn-icon"
+          aria-label={`Aktionen für ${a.username}`}
+          data-account-actions={a.id}
+          {...t}
+        >
           <IconMore size={16} />
         </button>
       )}
@@ -102,7 +128,7 @@ function SortHeader({ col, sort, onSort }: { col: (typeof COLUMNS)[number]; sort
 
 /** Accounts as a table. There is no account page to open, so rows are not
  *  links; everything happens in the row. */
-export function AccountTable({ accounts, selfId, now, onRole, menu, sort, onSort }: RowsProps & { sort: Sort; onSort: (k: SortKey) => void }) {
+export function AccountTable({ accounts, selfId, now, onRole, menu, personName, sort, onSort }: RowsProps & { sort: Sort; onSort: (k: SortKey) => void }) {
   return (
     <div className="dt-wrap">
       <table className="dt ad-table">
@@ -128,6 +154,7 @@ export function AccountTable({ accounts, selfId, now, onRole, menu, sort, onSort
                 </td>
                 <td className="ad-c-role">
                   <RoleControl a={a} self={self} onRole={onRole} />
+                  <PersonLine a={a} personName={personName} />
                 </td>
                 <td className="ad-c-mail" title={a.email ?? undefined}>
                   {a.email || <span className="ad-none">—</span>}
@@ -151,7 +178,7 @@ export function AccountTable({ accounts, selfId, now, onRole, menu, sort, onSort
 }
 
 /** The same accounts as cards, for phones. */
-export function AccountCards({ accounts, selfId, now, onRole, menu }: RowsProps) {
+export function AccountCards({ accounts, selfId, now, onRole, menu, personName }: RowsProps) {
   return (
     <ul className="ad-cards">
       {accounts.map((a) => {
@@ -168,6 +195,7 @@ export function AccountCards({ accounts, selfId, now, onRole, menu }: RowsProps)
                 <dt>Rolle</dt>
                 <dd>
                   <RoleControl a={a} self={self} onRole={onRole} />
+                  <PersonLine a={a} personName={personName} />
                 </dd>
               </div>
               <div>

@@ -29,9 +29,20 @@ describe('roleChangeText', () => {
   });
 
   it('lets moves between viewer and technician through, and no-ops', () => {
-    expect(roleChangeText(acc(), 'viewer')).toBeNull();
+    expect(roleChangeText(acc({ person_id: 4 }), 'viewer')).toBeNull();
     expect(roleChangeText(acc({ role: 'viewer' }), 'techniker')).toBeNull();
     expect(roleChangeText(acc(), 'techniker')).toBeNull();
+  });
+
+  it('asks before making a viewer of an account that has no person to see', () => {
+    const t = roleChangeText(acc(), 'viewer');
+    expect(t?.title).toBe('„anna“ zum Betrachter machen?');
+    expect(t?.body).toContain('sieht danach keine Geräte');
+    expect(t?.body).toContain('Person zuordnen');
+    expect(t?.confirmLabel).toBe('Zum Betrachter machen');
+    // A demoted admin hears it too, on top of what it loses.
+    expect(roleChangeText(acc({ role: 'admin' }), 'viewer')?.body).toContain('sieht danach keine Geräte');
+    expect(roleChangeText(acc({ role: 'admin', person_id: 4 }), 'viewer')?.body).not.toContain('keine Geräte');
   });
 });
 

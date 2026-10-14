@@ -30,8 +30,9 @@ function WindowsAgent({ server }: { server: string }) {
           hinterlegt“.
         </li>
         <li>
-          Das <b>Token ist 24 h gültig und nur einmal verwendbar</b> — nach dem Enrollment ist es verbraucht. Für ein weiteres
-          Gerät ein neues Token erzeugen.
+          Das <b>Token gilt nur einmal und nur so lange, wie beim Erzeugen gewählt</b> — zwischen 1 Stunde und 14 Tagen; „Standard
+          des Servers“ folgt <code>ENROLLMENT_TOKEN_TTL_HOURS</code> (ab Werk 24 h). Nach dem Enrollment ist es verbraucht. Für
+          ein weiteres Gerät ein neues Token erzeugen.
         </li>
       </ul>
       <Note title="SmartScreen und Defender">
@@ -69,7 +70,11 @@ function WindowsErrors({ server }: { server: string }) {
           </p>
         </FaqItem>
         <FaqItem title="„Token ungültig oder abgelaufen“ (HTTP 403)">
-          <p>Das Token wurde bereits verbraucht oder ist älter als 24 h. Im Dashboard ein neues erzeugen.</p>
+          <p>
+            Das Token ist verbraucht, widerrufen oder abgelaufen. Wie lange es gilt, wird beim Erzeugen gewählt (Standard:{' '}
+            <code>ENROLLMENT_TOKEN_TTL_HOURS</code>, ab Werk 24 h); die noch offenen Tokens stehen mit ihrer Restlaufzeit unter{' '}
+            <b>„Gerät hinzufügen“</b>. Im Dashboard ein neues erzeugen.
+          </p>
         </FaqItem>
         <FaqItem title="Datei ist gesperrt, „file in use“ bei Neuinstallation">
           <p>
@@ -335,10 +340,20 @@ function RustDesk() {
               <CodeBlock label="Linux und macOS" code={cmds.unix} />
               {cmds.placeholder && (
                 <Note title="Noch mit Platzhaltern">
-                  <p>
-                    <code>{'<RELAY>'}</code> und <code>{'<PUBKEY>'}</code> stehen für Relay und Schlüssel. Sobald{' '}
-                    <code>RUSTDESK_RELAY_HOST</code> und <code>RUSTDESK_KEY</code> gesetzt sind, steht hier der fertige Befehl.
-                  </p>
+                  {/* Without data the request failed: the relay may well be set
+                      up, so sending the admin to the .env would mislead. */}
+                  {c ? (
+                    <p>
+                      <code>{'<RELAY>'}</code> und <code>{'<PUBKEY>'}</code> stehen für Relay und Schlüssel. Sobald{' '}
+                      <code>RUSTDESK_RELAY_HOST</code> und <code>RUSTDESK_KEY</code> gesetzt sind, steht hier der fertige Befehl.
+                    </p>
+                  ) : (
+                    <p>
+                      <code>{'<RELAY>'}</code> und <code>{'<PUBKEY>'}</code> stehen für Relay und Schlüssel. Der Stand dieses Servers
+                      ließ sich nicht abrufen (siehe oben); nach einem erfolgreichen „Erneut versuchen“ steht hier der fertige Befehl,
+                      sofern der Relay eingerichtet ist.
+                    </p>
+                  )}
                 </Note>
               )}
               {c?.enabled && !c.has_key && (

@@ -4,6 +4,11 @@ import { ApiError, apiErrorMessage } from '../../api/client';
  *  (backend/app/routers/auth.py). It arrives as a 401 detail. */
 export const TOTP_REQUIRED = 'totp_required';
 
+/** The server's only way of saying "wrong code" (backend/app/routers/auth.py),
+ *  for app and backup codes alike. Every other 401 there means the password
+ *  check, which runs before the code, refused the sign-in. */
+export const CODE_REJECTED = 'Code ungültig';
+
 export type LoginStep = 'credentials' | 'code';
 
 /** A failed sign-in, sorted by what the form should do about it. */
@@ -34,9 +39,14 @@ export function describeLoginFailure(err: unknown, step: LoginStep): LoginFailur
       };
     }
     if (err.status === 401) {
-      return step === 'code'
-        ? { kind: 'code', message: 'Der Code stimmt nicht. Einen neuen Code aus der App nehmen oder einen Backup-Code verwenden.' }
-        : { kind: 'credentials', message: 'Benutzername oder Passwort stimmt nicht.' };
+      if (step === 'credentials') return { kind: 'credentials', message: 'Benutzername oder Passwort stimmt nicht.' };
+      if (detail === CODE_REJECTED) {
+        return { kind: 'code', message: 'Der Code stimmt nicht. Einen neuen Code aus der App nehmen oder einen Backup-Code verwenden.' };
+      }
+      // The password was accepted a step ago and is refused now: reset or
+      // account disabled in between. Another code would only count as one
+      // more failure towards the throttle.
+      return { kind: 'credentials', message: 'Benutzername oder Passwort wird nicht mehr angenommen. Erneut anmelden.' };
     }
     // FastAPI's validation detail is a list of objects, not a sentence.
     if (err.status === 422) return { kind: 'other', message: 'Die Eingabe hat ein ungültiges Format.' };

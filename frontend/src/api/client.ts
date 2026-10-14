@@ -139,6 +139,7 @@ const FIELD_LABEL: Record<string, string> = {
   scope_value: 'Geltungsbereich',
   base: 'Server-Adresse',
   topic: 'Thema',
+  q: 'Suchbegriff',
 };
 
 /** How many problems of one rejection are named; the rest are counted. */
@@ -213,7 +214,8 @@ function validationMessage(detail: unknown[]): string {
   return `Ungültige Eingabe: ${named}${rest > 0 ? ` und ${rest} weitere ${rest === 1 ? 'Angabe' : 'Angaben'}` : ''}.`;
 }
 
-/** Pull a human-readable message out of an ApiError's JSON body. */
+/** Pull a human-readable message out of an ApiError's JSON body. Always a
+ *  string: callers render it as text. */
 export function apiErrorMessage(e: unknown): string {
   // fetch() rejects with a TypeError when the network or the server is gone.
   if (e instanceof TypeError) return 'Server nicht erreichbar';
@@ -340,11 +342,12 @@ export const api = {
 
   // Accounts (admin panel)
   accounts: (signal?: AbortSignal) => get<{ accounts: Account[] }>('/api/accounts', signal),
-  createAccount: (body: { username: string; password: string; role: string; email?: string }) =>
+  createAccount: (body: { username: string; password: string; role: string; email?: string; person_id?: number }) =>
     post<{ account: Account }>('/api/accounts', body),
+  /** `person_id: 0` unlinks the person; leaving it out keeps the link. */
   updateAccount: (
     id: number,
-    body: { role?: string; disabled?: boolean; password?: string; email?: string; reset_totp?: boolean },
+    body: { role?: string; disabled?: boolean; password?: string; email?: string; reset_totp?: boolean; person_id?: number },
   ) => patch<{ account: Account }>(`/api/accounts/${id}`, body),
   deleteAccount: (id: number) => del<{ ok: boolean }>(`/api/accounts/${id}`),
   deleteDevice: (id: number) => del<{ ok: boolean }>(`/api/devices/${id}`),

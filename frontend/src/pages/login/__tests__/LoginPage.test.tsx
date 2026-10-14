@@ -99,6 +99,31 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText('Code aus der Authenticator-App')).toHaveFocus();
   });
 
+  it('goes back to the credentials when the server stops accepting them at the code step', async () => {
+    const onLogin = vi
+      .fn<OnLogin>()
+      .mockRejectedValueOnce(rejectWith(401, 'totp_required'))
+      .mockRejectedValueOnce(rejectWith(401, 'Benutzername oder Passwort falsch'))
+      .mockResolvedValue(undefined);
+    const { user } = show(onLogin);
+    await signIn(user);
+    await user.type(await screen.findByLabelText('Code aus der Authenticator-App'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Bestätigen' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Anmelden' })).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Benutzername oder Passwort wird nicht mehr angenommen.');
+    const password = screen.getByLabelText('Passwort');
+    expect(password).toHaveFocus();
+    expect(password).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.queryByLabelText('Code aus der Authenticator-App')).not.toBeInTheDocument();
+
+    // The old password is selected, so typing replaces it; the next attempt
+    // starts over with credentials only, no stale code.
+    await user.keyboard('neu');
+    await user.click(screen.getByRole('button', { name: 'Anmelden' }));
+    expect(onLogin).toHaveBeenLastCalledWith('admin', 'neu', undefined);
+  });
+
   it('goes back from the second step to the username', async () => {
     const { user } = show(vi.fn<OnLogin>().mockRejectedValue(rejectWith(401, 'totp_required')));
     await signIn(user);
