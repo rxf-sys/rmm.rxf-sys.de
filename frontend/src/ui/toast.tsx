@@ -52,7 +52,11 @@ export function resetJobResults(): void {
   toast.dismiss();
 }
 
-function pushResult(r: JobResult): void {
+/** Record a result for the session `gen` it was started in. A poll sent
+ *  before sign-out can still answer after it; checking here, at the one place
+ *  results enter, keeps every caller from leaking it to the next account. */
+function pushResult(r: JobResult, gen: number): void {
+  if (gen !== generation) return;
   results = [r, ...results.filter((x) => x.jobId !== r.jobId)].slice(0, MAX_RESULTS);
   listeners.forEach((l) => l());
 }
@@ -90,15 +94,18 @@ export function trackJob(job: Job, opts: { deviceName: string; label: string }):
   const gen = generation;
 
   const finish = (j: Job) => {
-    pushResult({
-      jobId: j.id,
-      deviceId: j.device_id,
-      deviceName: opts.deviceName,
-      label: opts.label,
-      status: j.status,
-      exitCode: j.exit_code,
-      finishedAt: Math.floor(Date.now() / 1000),
-    });
+    pushResult(
+      {
+        jobId: j.id,
+        deviceId: j.device_id,
+        deviceName: opts.deviceName,
+        label: opts.label,
+        status: j.status,
+        exitCode: j.exit_code,
+        finishedAt: Math.floor(Date.now() / 1000),
+      },
+      gen,
+    );
     const detail = `${opts.deviceName}${j.exit_code !== null ? ` · Exit ${j.exit_code}` : ''}`;
     if (j.status === 'done') toast.success(`${opts.label} abgeschlossen`, { id, description: detail, duration: 6000, action: open });
     else if (j.status === 'timeout')
@@ -173,18 +180,23 @@ export function trackJobs(entries: { job: Job; deviceName: string }[], label: st
       batch.map((e) =>
         api.job(e.job.id).then(
           ({ job: j }) => {
+            // The session ended while this poll was in flight.
+            if (gen !== generation) return;
             if (!TERMINAL.has(j.status)) return queue.push(e);
             finished += 1;
             if (j.status !== 'done') failed.push({ job: j, deviceName: e.deviceName });
-            pushResult({
-              jobId: j.id,
-              deviceId: j.device_id,
-              deviceName: e.deviceName,
-              label,
-              status: j.status,
-              exitCode: j.exit_code,
-              finishedAt: Math.floor(Date.now() / 1000),
-            });
+            pushResult(
+              {
+                jobId: j.id,
+                deviceId: j.device_id,
+                deviceName: e.deviceName,
+                label,
+                status: j.status,
+                exitCode: j.exit_code,
+                finishedAt: Math.floor(Date.now() / 1000),
+              },
+              gen,
+            );
           },
           // A failed poll is not a failed job; it goes back in line.
           () => queue.push(e),

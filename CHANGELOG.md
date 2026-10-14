@@ -8,6 +8,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **Auftragsergebnisse überlebten die Abmeldung.** Lief beim Abmelden noch
+  eine Abfrage für eine Massenaktion, landeten ihre Ergebnisse danach in der
+  Benachrichtigungszentrale — beim nächsten Konto im selben Tab, auch bei
+  einem Betrachter. Ergebnisse einer beendeten Sitzung werden jetzt
+  verworfen.
 - **Alarm-Center zeigte höchstens 50 Alarme.** Die Liste kam ohne Limit und
   der Server schnitt bei 50 Zeilen ab — vor dem Filter auf die Geräte eines
   Betrachters. Ab 50 offenen Alarmen fehlten die ältesten im Reiter „Offen"
