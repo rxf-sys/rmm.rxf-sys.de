@@ -46,6 +46,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Die Kopieren-Knöpfe der Dokumentation hießen für Screenreader alle nur
   „Kopieren". Ihr Name nennt jetzt auch den Befehl, etwa „Kopieren:
   PowerShell als Administrator".
+- Personen: Ein Statussymbol in der Liste stand auch bei Personen, deren
+  Geräte nur offline sind — der Filter „Mit Befund" blendete genau diese
+  aber aus. Symbol und Filter folgen jetzt derselben Regel; wie viele Geräte
+  online sind, steht weiterhin in der Zeile.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

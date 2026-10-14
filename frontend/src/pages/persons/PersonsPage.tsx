@@ -24,6 +24,7 @@ import {
   isPersonFilter,
   matchesPerson,
   nameList,
+  needsAttention,
   personRows,
   plural,
   type Draft,
@@ -260,7 +261,10 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
                     const active = shown?.person.id === p.id;
                     const online = r.devices.filter((d) => d.online).length;
                     const account = accountFor(accounts, p.id);
-                    const flagged = r.verdict.kind === 'danger' || r.verdict.kind === 'warn' || r.verdict.kind === 'off';
+                    // The same test as the „Mit Befund“ filter: an icon here
+                    // promises the person is listed there. Offline alone is not
+                    // a finding; the line above already says how many are online.
+                    const flagged = needsAttention(r.verdict);
                     return (
                       <li key={p.id}>
                         <button

@@ -5,9 +5,9 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
 import { qk } from '../../../api/queryClient';
-import type { Account, AuditEvent, Person } from '../../../types';
+import type { Account, Alert, AuditEvent, Person } from '../../../types';
 import { PersonsPage } from '../PersonsPage';
-import { account, device, person } from './fixtures';
+import { account, alert, device, person } from './fixtures';
 
 const { accountsMock, createMock, updateMock, deleteMock, notifyMock } = vi.hoisted(() => ({
   accountsMock: vi.fn<() => Promise<{ accounts: Account[] }>>(),
@@ -47,7 +47,13 @@ function Where() {
   return <output data-testid="where">{useLocation().search}</output>;
 }
 
-function show({ route = '/personen', isAdmin = true, persons = [martina, bernd], client }: { route?: string; isAdmin?: boolean; persons?: Person[]; client?: QueryClient } = {}) {
+function show({
+  route = '/personen',
+  isAdmin = true,
+  persons = [martina, bernd],
+  alerts = [],
+  client,
+}: { route?: string; isAdmin?: boolean; persons?: Person[]; alerts?: Alert[]; client?: QueryClient } = {}) {
   const qc = client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const onRefresh = vi.fn();
   const onOpenDevice = vi.fn();
@@ -57,7 +63,7 @@ function show({ route = '/personen', isAdmin = true, persons = [martina, bernd],
         <PersonsPage
           persons={persons}
           devices={[laptop, tablet, nas]}
-          alerts={[]}
+          alerts={alerts}
           patchSummary={{}}
           isAdmin={isAdmin}
           onOpenDevice={onOpenDevice}
@@ -114,8 +120,18 @@ describe('PersonsPage', () => {
   });
 
   it('marks a person whose devices need a look with an icon that has a name', () => {
+    show({ alerts: [alert()] });
+    expect(within(list()).getByRole('img', { name: '1 offener Alarm' })).toBeInTheDocument();
+  });
+
+  it('flags exactly the people the „Mit Befund“ filter shows', async () => {
+    // One of Martina's devices is offline: normal for a family laptop, and not
+    // a finding — so neither an icon nor a place under „Mit Befund“.
     show();
-    expect(within(list()).getByRole('img', { name: '1 Gerät offline' })).toBeInTheDocument();
+    expect(within(list()).queryByRole('img')).not.toBeInTheDocument();
+    expect(within(list()).getByRole('button', { name: /Martina Fuchs/ })).toHaveTextContent('2 Geräte · 1 online');
+    await userEvent.click(within(list()).getByRole('tab', { name: /Mit Befund/ }));
+    expect(within(list()).queryByRole('button', { name: /Martina Fuchs/ })).not.toBeInTheDocument();
   });
 
   it('shows one thing at a time on a narrow screen, with a way back', async () => {
