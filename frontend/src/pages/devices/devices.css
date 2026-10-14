@@ -91,10 +91,13 @@
   margin: 0;
   cursor: pointer;
 }
-/* The label around a row's or a card's checkbox, sized below. */
+/* The label around a row's or a card's checkbox, sized below. Not
+   selectable: a Shift-click on it selects a range of rows, not text. */
 .dl-hit {
   display: flex;
   cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* ---- Table: the shared .dt styles live in components.css; here only the

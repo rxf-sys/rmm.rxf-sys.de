@@ -1,5 +1,5 @@
 import './devices.css';
-import { useCallback, useMemo, useState, type ChangeEvent } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { FilterBar, type FilterOption } from '../../components/FilterBar';
 import { Pagination } from '../../components/Pagination';
@@ -293,9 +293,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, loadError
   const pageAll = rows.length > 0 && rows.every((d) => selected.has(d.id));
   const pageSome = rows.some((d) => selected.has(d.id));
 
-  const toggle = (id: number, e: ChangeEvent<HTMLInputElement>) => {
-    // A checkbox changes on click, so the native event knows about Shift.
-    const shift = (e.nativeEvent as globalThis.MouseEvent).shiftKey === true;
+  const toggle = (id: number, shift: boolean) => {
     const index = rows.findIndex((d) => d.id === id);
     const on = !selected.has(id);
     setSelected((prev) => {
@@ -354,14 +352,27 @@ export function DevicesPage({ devices, patchSummary, persons, loading, loadError
   );
   // The label is the box's hit area: the whole cell in the table, the left
   // strip of a card. A near miss would otherwise open the device, and the
-  // selection, which lives in this page, would go with it.
+  // selection, which lives in this page, would go with it. A click beside
+  // the box is handled here instead of being handed on: browsers do not
+  // pass a Shift-click on a label to its checkbox (Firefox never, Chromium
+  // not while the page holds a text selection), and range selection needs
+  // exactly that click.
   const check = (d: Device) => (
-    <label className="dl-hit">
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- the checkbox inside is the keyboard control (focusable, Space toggles); this only widens its pointer target.
+    <label
+      className="dl-hit"
+      onClick={(e) => {
+        if (e.target !== e.currentTarget) return;
+        e.preventDefault();
+        toggle(d.id, e.shiftKey);
+      }}
+    >
       <input
         type="checkbox"
         className="dl-check"
         checked={selected.has(d.id)}
-        onChange={(e) => toggle(d.id, e)}
+        // A checkbox changes on click, so the native event knows about Shift.
+        onChange={(e) => toggle(d.id, (e.nativeEvent as globalThis.MouseEvent).shiftKey === true)}
         aria-label={`${d.hostname} auswählen`}
       />
     </label>

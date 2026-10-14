@@ -251,6 +251,22 @@ describe('DevicesPage Auswahl', () => {
     expect(screen.getByRole('checkbox', { name: 'pc-4 auswählen' })).not.toBeChecked();
   });
 
+  it('wählt mit Umschalt auch neben dem Kästchen einen Bereich', async () => {
+    // Browsers do not hand a Shift-click on a label to its checkbox
+    // (Firefox never, Chromium not while text is selected); the hit area
+    // has to carry the Shift state itself.
+    const list = [1, 2, 3, 4].map((i) => device({ id: 10 + i, hostname: `pc-${i}` }));
+    show('/devices?sort=name', list, { canOperate: true });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('checkbox', { name: 'pc-1 auswählen' }).parentElement!);
+    await user.keyboard('{Shift>}');
+    await user.click(screen.getByRole('checkbox', { name: 'pc-3 auswählen' }).parentElement!);
+    await user.keyboard('{/Shift}');
+    expect(screen.getByRole('region', { name: 'Auswahl' })).toHaveTextContent('3 ausgewählt');
+    expect(screen.getByRole('checkbox', { name: 'pc-2 auswählen' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'pc-4 auswählen' })).not.toBeChecked();
+  });
+
   it('wählt bei einem Klick neben das Kästchen aus, statt die Seite zu verlassen', async () => {
     show('/devices', [device(), fullDisk], { canOperate: true });
     const box = screen.getByRole('checkbox', { name: 'nas auswählen' });

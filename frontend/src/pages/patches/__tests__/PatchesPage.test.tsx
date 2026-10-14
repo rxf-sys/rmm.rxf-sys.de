@@ -404,6 +404,21 @@ describe('PatchesPage Auswahl', () => {
     expect(location()).toBe('/devices/3?tab=patches');
   });
 
+  it('wählt mit Umschalt auch neben dem Kästchen einen Bereich', async () => {
+    // Browsers do not hand a Shift-click on a label to its checkbox
+    // (Firefox never, Chromium not while text is selected); the hit area
+    // has to carry the Shift state itself.
+    show({ isOperator: true });
+    const boxes = bodyRows().map((r) => within(r).getByRole('checkbox'));
+    const user = userEvent.setup();
+    await user.click(boxes[0]!.parentElement!);
+    await user.keyboard('{Shift>}');
+    await user.click(boxes[2]!.parentElement!);
+    await user.keyboard('{/Shift}');
+    expect(screen.getByRole('region', { name: 'Auswahl' })).toHaveTextContent('3');
+    expect(boxes.map((b) => (b as HTMLInputElement).checked)).toEqual([true, true, true, false]);
+  });
+
   it('startet nichts, wenn die Bestätigung abgebrochen wird', async () => {
     show({ isOperator: true });
     await userEvent.click(screen.getByRole('checkbox', { name: 'buero-pc auswählen' }));

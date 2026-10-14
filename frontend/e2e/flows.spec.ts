@@ -37,6 +37,29 @@ test('a click beside a device checkbox selects instead of opening the device', a
   await expect(page.getByRole('region', { name: 'Auswahl' })).toContainText('1 ausgewählt');
 });
 
+for (const [path, label] of [
+  ['/devices?sort=name', 'device list'],
+  ['/patches', 'patches page'],
+] as const) {
+  test(`Shift-click beside a checkbox selects the range on the ${label}`, async ({ page }) => {
+    await signIn(page);
+    await page.goto(path);
+    const boxes = page.getByRole('checkbox', { name: /^(?!Alle ).+ auswählen$/ });
+    // A caret somewhere in the page text, as any earlier click leaves one:
+    // with it, Chromium keeps a Shift-click on a label for text selection
+    // instead of handing it to the checkbox.
+    await page.getByRole('heading', { level: 1 }).click();
+    for (const [i, modifiers] of [[0, []], [2, ['Shift']]] as const) {
+      const label = boxes.nth(i).locator('xpath=..');
+      const area = await label.boundingBox();
+      await label.click({ position: { x: 4, y: area!.height - 4 }, modifiers: [...modifiers] });
+    }
+    await expect(page.getByRole('region', { name: 'Auswahl' })).toContainText('3 ausgewählt');
+    await expect(boxes.nth(1)).toBeChecked();
+    expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toBe('');
+  });
+}
+
 test('CSV export downloads the filtered list', async ({ page }, info) => {
   test.skip(info.project.name === 'phone', 'same code path as desktop');
   await signIn(page);
