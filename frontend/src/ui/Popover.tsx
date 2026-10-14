@@ -69,9 +69,24 @@ export function Popover({ trigger, children, label, placement = 'bottom-end', cl
     // panel logically follows.
     const leaveByTab = (e: KeyboardEvent) => {
       const panel = panelRef.current;
+      if (!panel) return;
       const active = document.activeElement;
-      if (!panel || !(active instanceof Node) || !panel.contains(active)) return;
       const tabbables = Array.from(panel.querySelectorAll<HTMLElement>(TABBABLE));
+      // A control that removed or disabled itself (a delete button, a submit
+      // that empties its form) left focus on <body>, and Tab would go on
+      // from the end of <body>. Take it back into the open panel instead.
+      if (active === null || active === document.body) {
+        const to = e.shiftKey ? tabbables[tabbables.length - 1] : tabbables[0];
+        if (to) {
+          e.preventDefault();
+          to.focus();
+        } else {
+          if (e.shiftKey) e.preventDefault();
+          close(true);
+        }
+        return;
+      }
+      if (!panel.contains(active)) return;
       const atStart = active === panel || active === tabbables[0];
       const atEnd = tabbables.length === 0 || active === tabbables[tabbables.length - 1];
       if (e.shiftKey && atStart) {
@@ -90,7 +105,6 @@ export function Popover({ trigger, children, label, placement = 'bottom-end', cl
   }, [open, close]);
 
   const closeFromContent = useCallback(() => close(true), [close]);
-
 
   return (
     <>

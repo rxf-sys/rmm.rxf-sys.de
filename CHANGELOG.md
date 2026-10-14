@@ -8,12 +8,16 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
-- **Menüs ließen sich mit der Tastatur schlecht bedienen.** Beim ersten
-  Öffnen eines Menüs („Weitere Aktionen", „Aktionen" der Auswahl, Zeilenmenüs)
-  blieb der Fokus auf dem Knopf, Pfeiltasten und Escape taten nichts. Und
-  Tab aus einem offenen Menü sprang an den Anfang der Seite statt zum
-  nächsten Element. Jetzt landet der Fokus beim Öffnen immer im Menü, Tab
-  führt zum Element nach dem Knopf und Umschalt+Tab zurück auf den Knopf.
+- **Menüs und Aufklapp-Fenster ließen sich mit der Tastatur schlecht
+  bedienen.** Beim ersten Öffnen eines Menüs („Weitere Aktionen", „Aktionen"
+  der Auswahl, Zeilenmenüs) blieb der Fokus auf dem Knopf, Pfeiltasten und
+  Escape taten nichts. Und Tab aus einem offenen Menü sprang an den Anfang
+  der Seite statt zum nächsten Element; ebenso aus den Benachrichtigungen,
+  dem Benutzermenü und den gespeicherten Ansichten. Jetzt landet der Fokus
+  beim Öffnen immer im Menü oder Fenster, Tab führt zum Element nach dem
+  Knopf und Umschalt+Tab zurück auf den Knopf. Sperrt oder entfernt sich ein
+  Knopf darin selbst, etwa „Speichern" einer Ansicht, holt Tab den Fokus ins
+  offene Fenster zurück.
 - **Ein ungewöhnliches Inventar legte die Geräteseite lahm.** Meldete ein
   Agent ein Feld in unerwarteter Form (etwa die Softwareliste als Objekt,
   ein Paket ohne Namen oder den Firewall-Status als Objekt), brach die

@@ -60,6 +60,23 @@ for (const [path, label] of [
   });
 }
 
+test('saving a view by keyboard keeps focus in the views panel', async ({ page }) => {
+  // "Speichern" empties the name and so disables itself while focused; the
+  // browser drops focus to <body>, and the next Tab would start over at the
+  // top of the page with the panel still open.
+  await signIn(page);
+  await page.goto('/devices');
+  await page.getByRole('button', { name: /Ansichten/ }).click();
+  const panel = page.getByRole('dialog', { name: 'Ansichten' });
+  await panel.getByLabel('Aktuelle Ansicht speichern').fill('Server');
+  await panel.getByRole('button', { name: 'Speichern' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(panel.getByRole('button', { name: 'Speichern' })).toBeDisabled();
+  await page.keyboard.press('Tab');
+  await expect(panel).toBeVisible();
+  expect(await panel.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+});
+
 test('CSV export downloads the filtered list', async ({ page }, info) => {
   test.skip(info.project.name === 'phone', 'same code path as desktop');
   await signIn(page);
