@@ -243,7 +243,7 @@ describe('PatchesPage Rollen', () => {
 
   it('prüft ein einzelnes Gerät aus seiner Zeile', async () => {
     show({ isOperator: true });
-    expect(screen.getByRole('button', { name: 'nas jetzt prüfen' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'nas jetzt prüfen' })).toHaveAttribute('aria-disabled', 'true');
     await userEvent.click(screen.getByRole('button', { name: 'laptop jetzt prüfen' }));
     await waitFor(() => expect(scanMock).toHaveBeenCalledWith(3));
     expect(notifyMock.info).toHaveBeenCalledWith('Prüfung auf laptop gestartet', expect.any(String));
@@ -273,7 +273,11 @@ describe('PatchesPage Auswahl', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'laptop auswählen' }));
     const bar = screen.getByRole('region', { name: 'Auswahl' });
     expect(bar).toHaveTextContent('1 ausgewählt');
-    expect(within(bar).getByRole('button', { name: /Sicherheitsupdates installieren/ })).toBeDisabled();
+    const install = within(bar).getByRole('button', { name: /Sicherheitsupdates installieren/ });
+    expect(install).toHaveAttribute('aria-disabled', 'true');
+    expect(install).toHaveAccessibleDescription('Kein ausgewähltes Gerät hat offene Sicherheitsupdates');
+    await userEvent.click(install);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await userEvent.click(within(bar).getByRole('button', { name: 'Jetzt prüfen' }));
     await waitFor(() => expect(scanMock).toHaveBeenCalledWith(3));
     await userEvent.click(within(bar).getByRole('button', { name: 'Auswahl aufheben' }));
@@ -358,6 +362,89 @@ describe('PatchesPage Auswahl', () => {
     await userEvent.click(within(screen.getByRole('region', { name: 'Auswahl' })).getByRole('button', { name: 'Jetzt prüfen' }));
     expect(notifyMock.warning).toHaveBeenCalledWith('nas ist nicht verbunden', expect.any(String));
     expect(scanMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('PatchesPage Fokus', () => {
+  /** Scans that hang until `release` is called. */
+  function holdScans() {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    scanMock.mockImplementation(() => gate.then(() => ({ ok: true })));
+    return () => release();
+  }
+
+  // A disabled button drops the focus: a keyboard user would land at the
+  // top of the page and a screen reader loses its place.
+  it('lässt den Fokus auf „Geräte prüfen", solange die Prüfung läuft', async () => {
+    const release = holdScans();
+    show({ isOperator: true });
+    const button = screen.getByRole('button', { name: '3 Geräte prüfen' });
+    await userEvent.click(button);
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveFocus();
+    await userEvent.click(button);
+    expect(scanMock).toHaveBeenCalledTimes(3);
+    release();
+    await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('lässt den Fokus in der Aktionsleiste, solange die Prüfung läuft', async () => {
+    const release = holdScans();
+    show({ isOperator: true });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'buero-pc auswählen' }));
+    const bar = screen.getByRole('region', { name: 'Auswahl' });
+    const scan = within(bar).getByRole('button', { name: 'Jetzt prüfen' });
+    await userEvent.click(scan);
+    expect(scan).not.toBeDisabled();
+    expect(scan).toHaveAttribute('aria-disabled', 'true');
+    expect(scan).toHaveFocus();
+    const install = within(bar).getByRole('button', { name: /Sicherheitsupdates installieren/ });
+    expect(install).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(install);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    release();
+    await waitFor(() => expect(scan).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('lässt den Fokus auf dem Prüfknopf einer Zeile', async () => {
+    const release = holdScans();
+    show({ isOperator: true });
+    const button = screen.getByRole('button', { name: 'laptop jetzt prüfen' });
+    await userEvent.click(button);
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveFocus();
+    release();
+    await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('sagt auch per Tastatur, warum ein Gerät ohne Verbindung nicht geprüft wird', async () => {
+    show({ isOperator: true });
+    const button = screen.getByRole('button', { name: 'nas jetzt prüfen' });
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAccessibleDescription(/Nicht verbunden/);
+    await userEvent.click(button);
+    expect(scanMock).not.toHaveBeenCalled();
+  });
+
+  it('bringt den Fokus nach „Alle Treffer auswählen" in die Aktionsleiste', async () => {
+    const many = Array.from({ length: 30 }, (_, i) => device({ id: 100 + i, hostname: `pc-${String(i + 1).padStart(2, '0')}` }));
+    show({ devices: many, summary: {}, isOperator: true });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Alle Geräte dieser Seite auswählen' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Alle 30 Treffer auswählen' }));
+    const bar = screen.getByRole('region', { name: 'Auswahl' });
+    expect(bar).toHaveTextContent('30 ausgewählt');
+    expect(bar).toHaveFocus();
+  });
+
+  it('bringt den Fokus nach „Filter zurücksetzen" ins Suchfeld', async () => {
+    show({ route: '/patches?filter=sicherheit' });
+    await userEvent.click(screen.getByRole('button', { name: /Filter zurücksetzen/ }));
+    expect(hostnames()).toHaveLength(4);
+    expect(screen.getByRole('searchbox', { name: 'Geräte durchsuchen' })).toHaveFocus();
   });
 });
 

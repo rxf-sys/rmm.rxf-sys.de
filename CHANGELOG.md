@@ -62,6 +62,14 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   gerade ausblendet, und fehlte deshalb, obwohl Treffer unausgewählt waren.
   Ein Klick ersetzte die Auswahl, statt sie zu ergänzen — die eben noch als
   „davon ausgeblendet" gemeldeten Geräte fielen still heraus.
+- **Tastaturfokus ging unter „Patches" verloren.** „Geräte prüfen", „Jetzt
+  prüfen", „Sicherheitsupdates installieren" und der Prüfknopf einer Zeile
+  wurden während der Arbeit gesperrt und warfen den Fokus dabei an den
+  Seitenanfang. Sie behalten ihn jetzt und nehmen nur keinen zweiten Klick
+  an. Nach „Alle Treffer auswählen" landet der Fokus in der Aktionsleiste,
+  nach „Filter zurücksetzen" im Suchfeld. Warum ein Gerät ohne Verbindung
+  nicht geprüft werden kann, erfährt jetzt auch, wer per Tastatur oder
+  Screenreader unterwegs ist.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

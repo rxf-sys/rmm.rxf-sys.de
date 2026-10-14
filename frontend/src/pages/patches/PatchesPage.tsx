@@ -1,6 +1,6 @@
 import './patches.css';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { qk } from '../../api/queryClient';
@@ -200,14 +200,21 @@ function Connection({ d, now }: { d: Device; now: number }) {
   );
 }
 
+/** aria-disabled rather than disabled, here and on the other scan and
+ *  install buttons: a disabled button drops the focus it has, and a keyboard
+ *  user would start over at the top of the page. It also keeps the reason an
+ *  offline device cannot be scanned reachable — the title is the button's
+ *  description, which a disabled button never gets to say. */
 function ScanButton({ d, busy, onScan }: { d: Device; busy: boolean; onScan: (d: Device) => void }) {
   const ok = reachable(d);
   return (
     <button
       type="button"
       className="btn-icon ghost sq30 pt-scan"
-      onClick={() => onScan(d)}
-      disabled={busy || !ok}
+      onClick={() => {
+        if (ok && !busy) onScan(d);
+      }}
+      aria-disabled={busy || !ok || undefined}
       aria-label={`${d.hostname} jetzt prüfen`}
       title={ok ? 'Jetzt nach Updates suchen' : 'Nicht verbunden — eine Prüfung braucht eine offene Agent-Verbindung'}
     >
@@ -477,9 +484,15 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
 
   const narrowedOtherwise = os !== 'alle' || conn !== 'alle' || personFilter !== null || q.trim() !== '';
   const narrowed = state !== 'alle' || narrowedOtherwise;
+  // Both "Filter zurücksetzen" and "Alle Treffer auswählen" disappear with
+  // their own click. The focus moves on to where the work goes on — the
+  // search, the selection — instead of dropping to the top of the page.
+  const searchRef = useRef<HTMLInputElement>(null);
+  const bulkRef = useRef<HTMLElement>(null);
   const resetFilters = () => {
     setQ('');
     setParam({ filter: null, os: null, conn: null, person: null, q: null });
+    searchRef.current?.focus();
   };
   const empty = emptyText(state, narrowedOtherwise);
   const allPct = currentPct(stats.current, stats.devices);
@@ -507,8 +520,10 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
             <button
               type="button"
               className="btn"
-              onClick={() => void scan(scannable)}
-              disabled={busy}
+              onClick={() => {
+                if (!busy) void scan(scannable);
+              }}
+              aria-disabled={busy || undefined}
               title="Fordert bei allen verbundenen Geräten der Liste eine Update-Prüfung an"
             >
               <IconRestart size={14} /> {fmt.format(scannable.length)} {scannable.length === 1 ? 'Gerät' : 'Geräte'} prüfen
@@ -609,6 +624,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
             <div className="pt-search">
               <IconSearch size={15} />
               <input
+                ref={searchRef}
                 type="search"
                 className="input"
                 value={q}
@@ -672,6 +688,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
 
           {bulkOpen && (
             <PatchBulkBar
+              ref={bulkRef}
               count={selectedDevices.length}
               hidden={hiddenSelected}
               withSecurity={withSecurity}
@@ -690,7 +707,10 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
               <button
                 type="button"
                 className="link-btn"
-                onClick={() => setSelected((prev) => new Set([...prev, ...shown.map((d) => d.id)]))}
+                onClick={() => {
+                  setSelected((prev) => new Set([...prev, ...shown.map((d) => d.id)]));
+                  bulkRef.current?.focus();
+                }}
               >
                 Alle {fmt.format(shown.length)} Treffer auswählen
               </button>
