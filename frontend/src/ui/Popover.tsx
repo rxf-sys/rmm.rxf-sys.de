@@ -3,6 +3,9 @@ import { createPortal } from 'react-dom';
 import { PopoverCloseContext } from './popoverContext';
 import { useAnchoredPosition, type Placement } from './useAnchoredPosition';
 
+const TABBABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export interface TriggerProps {
   ref: Ref<HTMLButtonElement>;
   'aria-expanded': boolean;
@@ -37,9 +40,15 @@ export function Popover({ trigger, children, label, placement = 'bottom-end', cl
     if (returnFocus) triggerRef.current?.focus();
   }, []);
 
+  // Focus goes in once the panel is placed: until then it has visibility:
+  // hidden, and a browser ignores focus() on such an element.
+  const visible = style.visibility !== 'hidden';
+  useEffect(() => {
+    if (open && visible) panelRef.current?.focus();
+  }, [open, visible]);
+
   useEffect(() => {
     if (!open) return;
-    panelRef.current?.focus();
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
       if (panelRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
@@ -48,6 +57,27 @@ export function Popover({ trigger, children, label, placement = 'bottom-end', cl
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
+        close(true);
+      } else if (e.key === 'Tab') {
+        leaveByTab(e);
+      }
+    };
+    // The panel sits at the end of <body> (portal), so the browser's Tab out
+    // of it would go on from there, back to the top of the page. Leaving past
+    // the last control puts focus on the button first, so Tab moves on to
+    // what follows it; Shift+Tab from the start stops on the button the
+    // panel logically follows.
+    const leaveByTab = (e: KeyboardEvent) => {
+      const panel = panelRef.current;
+      const active = document.activeElement;
+      if (!panel || !(active instanceof Node) || !panel.contains(active)) return;
+      const tabbables = Array.from(panel.querySelectorAll<HTMLElement>(TABBABLE));
+      const atStart = active === panel || active === tabbables[0];
+      const atEnd = tabbables.length === 0 || active === tabbables[tabbables.length - 1];
+      if (e.shiftKey && atStart) {
+        e.preventDefault();
+        close(true);
+      } else if (!e.shiftKey && atEnd) {
         close(true);
       }
     };
@@ -60,6 +90,7 @@ export function Popover({ trigger, children, label, placement = 'bottom-end', cl
   }, [open, close]);
 
   const closeFromContent = useCallback(() => close(true), [close]);
+
 
   return (
     <>
