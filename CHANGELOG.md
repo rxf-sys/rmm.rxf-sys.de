@@ -35,6 +35,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   alle Personen — „Alle quittieren" quittierte dann die Alarme der ganzen
   Flotte, „Geräte prüfen" prüfte alle Geräte. Der Filter hält sich jetzt an
   die ID aus der Adresse und nennt die Person bis dahin „Person 4".
+- **Updates-Reiter zeigte nach einer Sammel-Installation alten Stand.** Wer
+  unter „Patches" eine Installation startete und gleich das Gerät öffnete,
+  bekam aus dem Zwischenspeicher noch „Installieren" angeboten — ein Klick
+  endete mit „Es läuft bereits eine Installation". Prüfung und Installation
+  markieren jetzt Updates und Aufträge der betroffenen Geräte als veraltet.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

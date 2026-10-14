@@ -352,8 +352,14 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
     });
 
   // ---- actions ----
-  const refreshFleet = () => {
+  /** After a scan or an installation: the fleet figures, and the device
+   *  pages of the devices it touched. Starting a job sends no fleet hint,
+   *  so a device's cached Updates tab would otherwise still offer
+   *  "Installieren" while one runs. Nothing on this page reads those, so
+   *  they are only marked stale and load when a device page opens. */
+  const refreshFleet = (touched: Device[]) => {
     void qc.invalidateQueries({ queryKey: qk.patchSummary });
+    for (const d of touched) void qc.invalidateQueries({ queryKey: qk.device(d.id) });
     onRefresh();
   };
 
@@ -383,8 +389,8 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
       await api.scanPatches(d.id);
     });
     setBusy(false);
-    refreshFleet();
-    setTimeout(refreshFleet, LATE_REFRESH_MS);
+    refreshFleet(plan.targets);
+    setTimeout(() => refreshFleet(plan.targets), LATE_REFRESH_MS);
     if (res.ok.length > 0) {
       const skipped = plan.skipped.length > 0 ? ` Übersprungen: ${skippedText(plan.skipped)}.` : '';
       notify.info(
@@ -439,7 +445,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
     });
     setBusy(false);
     trackJobs(started, 'Update-Installation');
-    refreshFleet();
+    refreshFleet(plan.targets);
     reportFailures('Installation', res, n);
   }
 

@@ -302,6 +302,28 @@ describe('PatchesPage Auswahl', () => {
     expect(onRefresh).toHaveBeenCalled();
   });
 
+  it('markiert die Updates und Aufträge der Zielgeräte als veraltet', async () => {
+    // The device page caches its update list for a while; without this the
+    // Updates tab would still offer "Installieren" on a device that is busy
+    // installing, and the server would answer with a 409.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(qk.devicePatches(1), { patches: [], installing_job: null });
+    client.setQueryData(qk.deviceJobs(1), []);
+    client.setQueryData(qk.devicePatches(3), { patches: [], installing_job: null });
+    show({ isOperator: true, client });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'buero-pc auswählen' }));
+    await userEvent.click(within(screen.getByRole('region', { name: 'Auswahl' })).getByRole('button', { name: /Sicherheitsupdates installieren/ }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Installation starten' }));
+    await waitFor(() => expect(trackJobsMock).toHaveBeenCalled());
+    expect(client.getQueryState(qk.devicePatches(1))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(qk.deviceJobs(1))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(qk.devicePatches(3))?.isInvalidated).toBe(false);
+
+    await userEvent.click(screen.getByRole('button', { name: 'laptop jetzt prüfen' }));
+    await waitFor(() => expect(scanMock).toHaveBeenCalledWith(3));
+    await waitFor(() => expect(client.getQueryState(qk.devicePatches(3))?.isInvalidated).toBe(true));
+  });
+
   it('startet nichts, wenn die Bestätigung abgebrochen wird', async () => {
     show({ isOperator: true });
     await userEvent.click(screen.getByRole('checkbox', { name: 'buero-pc auswählen' }));
