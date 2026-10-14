@@ -358,6 +358,47 @@ describe('AdminPage', () => {
     expect(within(panel).getByRole('button', { name: 'Abschalten …' })).toHaveFocus();
   });
 
+  it('drops the backup codes when the second factor is switched off again', async () => {
+    m.totpSetup.mockResolvedValue({ secret: 'ABCDEFGHIJKLMNOP', otpauth_uri: 'otpauth://totp/Vulpexa:admin?secret=ABCDEFGHIJKLMNOP' });
+    m.totpConfirm.mockResolvedValue({ ok: true, backup_codes: ['1111-2222', '3333-4444'] });
+    m.totpDisable.mockResolvedValue({ ok: true });
+    show();
+    const panel = (await screen.findByRole('heading', { name: 'Zwei-Faktor-Anmeldung' })).closest('section')!;
+    await userEvent.click(within(panel).getByRole('button', { name: 'Einrichten' }));
+    await userEvent.type(await within(panel).findByLabelText('Sechsstelliger Code aus der App'), '123456');
+    await userEvent.click(within(panel).getByRole('button', { name: 'Aktivieren' }));
+    expect(await within(panel).findByText('1111-2222')).toBeInTheDocument();
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'Abschalten …' }));
+    await userEvent.type(within(panel).getByLabelText('Code aus der App oder ein Backup-Code'), '654321');
+    await userEvent.click(within(panel).getByRole('button', { name: 'Zwei-Faktor abschalten' }));
+    await waitFor(() => expect(m.totpDisable).toHaveBeenCalledWith('654321'));
+    // The server deleted them with the second factor; offering to copy them would hand out dead codes.
+    await waitFor(() => expect(within(panel).queryByRole('region', { name: 'Backup-Codes' })).not.toBeInTheDocument());
+    expect(within(panel).getByRole('button', { name: 'Einrichten' })).toBeInTheDocument();
+  });
+
+  it('closes the disable form when the own second factor is reset from the account list', async () => {
+    const meOn = { ...me, totp_enabled: true };
+    m.accounts.mockResolvedValue({ accounts: [meOn, bob, carla] });
+    show({ ...meOn });
+    const panel = (await screen.findByRole('heading', { name: 'Zwei-Faktor-Anmeldung' })).closest('section')!;
+    await userEvent.click(await within(panel).findByRole('button', { name: 'Abschalten …' }));
+    expect(within(panel).getByRole('form', { name: 'Zwei-Faktor abschalten' })).toBeInTheDocument();
+
+    const menu = await openMenu('admin');
+    await userEvent.click(within(menu).getByRole('menuitem', { name: /Zwei-Faktor zurücksetzen/ }));
+    m.accounts.mockResolvedValue({ accounts: [me, bob, carla] });
+    const dialog = screen.getByRole('dialog', { name: 'Zwei-Faktor von „admin“ zurücksetzen?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Zwei-Faktor zurücksetzen' }));
+
+    // Submitting the old form would only earn "2FA ist nicht aktiv".
+    await waitFor(() => expect(within(panel).queryByRole('form', { name: 'Zwei-Faktor abschalten' })).not.toBeInTheDocument());
+    expect(within(panel).getByRole('button', { name: 'Einrichten' })).toBeInTheDocument();
+    // The change came from the account row; focus stays there.
+    expect(screen.getByRole('button', { name: 'Aktionen für admin' })).toHaveFocus();
+  });
+
   it('saves ntfy only after a change, and tests what is stored', async () => {
     m.updateNtfy.mockResolvedValue({ base: 'https://ntfy.sh', topic: 'neu', has_token: false, source: 'ui' });
     m.testNtfy.mockResolvedValue({ ok: true });

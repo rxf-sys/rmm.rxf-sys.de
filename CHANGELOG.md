@@ -34,6 +34,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   ein Emoji als zwei Zeichen und bot deshalb zu kurze Passwörter zum
   Speichern an, die der Server ablehnte — die Ablehnung ließ die Seite
   abstürzen. Gezählt wird jetzt wie auf dem Server.
+- **Zwei-Faktor-Bereich zeigte Veraltetes.** Wer direkt nach dem
+  Einrichten wieder abschaltete, bekam die gelöschten Backup-Codes weiter
+  zum Kopieren angeboten; wer die eigene Zwei-Faktor-Anmeldung über die
+  Kontenliste zurücksetzte, behielt ein offenes Abschalt-Formular, das nur
+  noch „2FA ist nicht aktiv“ meldete. Beides verschwindet jetzt mit dem
+  zweiten Faktor.
 - **RustDesk-ID ließ sich nicht korrigieren.** Das Eingabefeld erschien nur,
   solange gar keine ID hinterlegt war. Der Reiter „Fernzugriff" bietet jetzt
   „ID ändern" an; eine ungültige hinterlegte ID (etwa eine alte Eingabe mit
