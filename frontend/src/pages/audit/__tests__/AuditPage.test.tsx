@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type AuditQuery } from '../../../api/client';
 import type { AuditEvent, AuditPage as AuditPageData, Device, Script } from '../../../types';
@@ -69,6 +69,22 @@ function Location() {
   return <output data-testid="location">{l.search}</output>;
 }
 
+/** What the rail's Audit-Log link, the "g l" shortcut and the browser's
+ *  Back button do: navigate while the page stays mounted. */
+function Nav() {
+  const navigate = useNavigate();
+  return (
+    <>
+      <button type="button" onClick={() => navigate('/audit')}>
+        Zum Audit-Log
+      </button>
+      <button type="button" onClick={() => navigate(-1)}>
+        Zurück
+      </button>
+    </>
+  );
+}
+
 function show(route = '/audit', devices: Device[] = [nas]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -76,6 +92,7 @@ function show(route = '/audit', devices: Device[] = [nas]) {
       <MemoryRouter initialEntries={[route]}>
         <AuditPage devices={devices} />
         <Location />
+        <Nav />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -164,8 +181,11 @@ describe('AuditPage', () => {
   it('searches after typing pauses, with the text in the address', async () => {
     show();
     await screen.findByRole('region', { name: 'Heute' });
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Audit-Log durchsuchen' }), 'flushdns');
+    const box = screen.getByRole('searchbox', { name: 'Audit-Log durchsuchen' });
+    await userEvent.type(box, 'flushdns');
     await waitFor(() => expect(lastQuery().q).toBe('flushdns'));
+    // Each keystroke rewrites the address; none of them may undo another.
+    expect(box).toHaveValue('flushdns');
     // One request for the whole word, not one per keystroke.
     expect(auditMock.mock.calls.filter(([p]) => p.q !== undefined)).toHaveLength(1);
     expect(new URLSearchParams(search()).get('q')).toBe('flushdns');
@@ -192,6 +212,29 @@ describe('AuditPage', () => {
     );
     show();
     expect(await screen.findByRole('alert')).toHaveTextContent('Ungültige Eingabe (q: höchstens 200 Zeichen)');
+  });
+
+  it('follows the address when the page is opened again without a search', async () => {
+    show('/audit?q=foo&actor=bob');
+    await screen.findByRole('region', { name: 'Heute' });
+    expect(lastQuery()).toMatchObject({ q: 'foo', actor: 'bob' });
+    await userEvent.click(screen.getByRole('button', { name: 'Zum Audit-Log' }));
+    await waitFor(() => expect(lastQuery()).toMatchObject({ q: undefined, actor: undefined }));
+    expect(screen.getByRole('searchbox', { name: 'Audit-Log durchsuchen' })).toHaveValue('');
+  });
+
+  it('brings back the search of the entry the Back button returns to', async () => {
+    show('/audit?q=foo&actor=bob');
+    await screen.findByRole('region', { name: 'Heute' });
+    await userEvent.click(screen.getByRole('button', { name: 'Zum Audit-Log' }));
+    const box = screen.getByRole('searchbox', { name: 'Audit-Log durchsuchen' });
+    await userEvent.type(box, 'bar');
+    await waitFor(() => expect(lastQuery().q).toBe('bar'));
+    expect(new URLSearchParams(search()).get('q')).toBe('bar');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Zurück' }));
+    await waitFor(() => expect(lastQuery()).toMatchObject({ q: 'foo', actor: 'bob' }));
+    expect(box).toHaveValue('foo');
   });
 
   it('narrows to security events and explains what that covers', async () => {

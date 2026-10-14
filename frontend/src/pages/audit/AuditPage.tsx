@@ -1,7 +1,7 @@
 import './audit.css';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, NavigationType, useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
 import { ApiError, api } from '../../api/client';
 import { qk } from '../../api/queryClient';
 import { auditCategoryLabel, auditNamesFrom, describeAudit, type AuditNames } from '../../auditText';
@@ -164,6 +164,22 @@ export function AuditPage({ devices }: Props) {
   // the URL drops keystrokes when someone types fast.
   const [q, setQ] = useState(() => readSearch(params));
   const [search, setSearch] = useState(() => q.trim());
+  // The page stays mounted when the address changes under it (the rail's
+  // Audit-Log link, "g l", Back). Those navigations push or pop; the page's
+  // own writes replace. Only the former set the box from the address —
+  // syncing on our own replaces would undo keystrokes whose URL update is
+  // still in its transition.
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  const [seenKey, setSeenKey] = useState(location.key);
+  if (location.key !== seenKey) {
+    setSeenKey(location.key);
+    if (navigationType !== NavigationType.Replace) {
+      const fromUrl = readSearch(params);
+      setQ(fromUrl);
+      setSearch(fromUrl);
+    }
+  }
   useEffect(() => {
     const t = setTimeout(() => setSearch(q.trim()), SEARCH_DELAY_MS);
     return () => clearTimeout(t);

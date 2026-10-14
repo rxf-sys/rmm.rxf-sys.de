@@ -15,6 +15,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Das Suchfeld nimmt jetzt höchstens 200 Zeichen an, eine längere Suche aus
   einem Link wird gekürzt, und abgelehnte Eingaben erscheinen überall als
   Meldung wie „Ungültige Eingabe (password: mindestens 8 Zeichen)“.
+- **Audit-Log: Suchfeld folgte der Adresse nicht.** Wer das Audit-Log über
+  die Navigation oder „g l“ erneut öffnete oder mit „Zurück“ zu einer
+  früheren Suche ging, sah im Feld und in der Liste weiter die alte Suche,
+  während die Adresse etwas anderes sagte. Feld und Liste übernehmen jetzt
+  die Suche der Adresse.
 - **RustDesk-ID ließ sich nicht korrigieren.** Das Eingabefeld erschien nur,
   solange gar keine ID hinterlegt war. Der Reiter „Fernzugriff" bietet jetzt
   „ID ändern" an; eine ungültige hinterlegte ID (etwa eine alte Eingabe mit
