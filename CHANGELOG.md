@@ -50,6 +50,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Geräte nur offline sind — der Filter „Mit Befund" blendete genau diese
   aber aus. Symbol und Filter folgen jetzt derselben Regel; wie viele Geräte
   online sind, steht weiterhin in der Zeile.
+- Personen: Die Löschbestätigung behauptete „Ein verknüpftes
+  Betrachter-Konto wird mitgelöscht", solange die Kontenliste nicht geladen
+  war — auch wenn es gar kein oder ein Techniker-Konto gab. Sie sagt dann
+  jetzt, was geschehen würde, und nennt sonst jedes verknüpfte Konto statt
+  nur des ersten.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

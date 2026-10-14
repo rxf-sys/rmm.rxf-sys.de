@@ -142,6 +142,12 @@ export function accountFor(accounts: Account[] | undefined, personId: number): A
   return accounts?.find((a) => a.person_id === personId) ?? null;
 }
 
+/** Every account linked to the person. Deleting the person acts on all of
+ *  them (users_for_person in routers/persons.py), not just the first. */
+export function accountsOf(accounts: Account[], personId: number): Account[] {
+  return accounts.filter((a) => a.person_id === personId);
+}
+
 /** An event belongs to a person if their account did it, or if it happened
  *  on one of their devices. */
 export function personActivity(events: AuditEvent[], account: Account | null, devices: Device[], limit = 8): AuditEvent[] {

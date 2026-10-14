@@ -233,6 +233,27 @@ describe('PersonsPage', () => {
     await waitFor(() => expect(screen.getByTestId('where')).toBeEmptyDOMElement());
   });
 
+  it('does not state an account deletion as fact while the accounts are unknown', async () => {
+    accountsMock.mockReturnValue(new Promise(() => {}));
+    show({ route: '/personen?person=2' });
+    await userEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Person löschen …' }));
+    const confirm = screen.getByRole('dialog', { name: 'Martina Fuchs löschen?' });
+    expect(confirm).not.toHaveTextContent('wird mitgelöscht');
+    expect(confirm).toHaveTextContent('Ein Betrachter-Konto würde mitgelöscht, ein Konto mit höherer Rolle nur von ihr gelöst.');
+  });
+
+  it('names every account linked to the person before deleting', async () => {
+    accountsMock.mockResolvedValue({ accounts: [account(), account({ id: 6, username: 'm.technik', role: 'techniker' })] });
+    show({ route: '/personen?person=2' });
+    await screen.findByText('martina');
+    await userEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Person löschen …' }));
+    const confirm = screen.getByRole('dialog', { name: 'Martina Fuchs löschen?' });
+    expect(confirm).toHaveTextContent('Das Betrachter-Konto „martina“ wird mitgelöscht');
+    expect(confirm).toHaveTextContent('Das Konto „m.technik“ (Techniker) bleibt bestehen');
+  });
+
   it('deletes nothing when the confirmation is cancelled', async () => {
     show({ route: '/personen?person=3' });
     await userEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }));

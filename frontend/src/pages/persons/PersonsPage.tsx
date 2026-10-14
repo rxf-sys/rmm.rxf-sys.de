@@ -18,6 +18,7 @@ import {
   EMPTY_DRAFT,
   accountFate,
   accountFor,
+  accountsOf,
   draftBody,
   explainError,
   initial,
@@ -139,8 +140,9 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
 
   const remove = async (row: PersonRow) => {
     const p = row.person;
-    const account = accountFor(accounts, p.id);
-    const fate = accountFate(account);
+    // Unknown while the admin-only list loads or after it failed: then the
+    // dialog can only say what would happen, not what will.
+    const linked = accounts ? accountsOf(accounts, p.id) : null;
     const n = row.devices.length;
     const ok = await ask({
       title: `${p.name} löschen?`,
@@ -159,13 +161,22 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
               </>
             )}
           </p>
-          {fate === 'deleted' && <p>Das Betrachter-Konto „{account!.username}“ wird mitgelöscht; mit ihm kann sich danach niemand mehr anmelden.</p>}
-          {fate === 'unlinked' && (
+          {linked === null ? (
             <p>
-              Das Konto „{account!.username}“ ({roleLabel(account!.role)}) bleibt bestehen und wird nur von der Person gelöst.
+              Welche Konten mit der Person verknüpft sind, ließ sich gerade nicht prüfen. Ein Betrachter-Konto würde mitgelöscht, ein
+              Konto mit höherer Rolle nur von ihr gelöst.
             </p>
+          ) : (
+            linked.map((a) =>
+              accountFate(a) === 'deleted' ? (
+                <p key={a.id}>Das Betrachter-Konto „{a.username}“ wird mitgelöscht; mit ihm kann sich danach niemand mehr anmelden.</p>
+              ) : (
+                <p key={a.id}>
+                  Das Konto „{a.username}“ ({roleLabel(a.role)}) bleibt bestehen und wird nur von der Person gelöst.
+                </p>
+              ),
+            )
           )}
-          {fate === null && accounts === undefined && <p>Ein verknüpftes Betrachter-Konto wird mitgelöscht.</p>}
         </>
       ),
       confirmLabel: 'Person löschen',
