@@ -107,6 +107,25 @@ describe('MobileDeviceForm', () => {
     expect(onCreated).not.toHaveBeenCalled();
   });
 
+  it('stops each field where the server would refuse it', () => {
+    show();
+    expect(screen.getByLabelText('Bezeichnung')).toHaveAttribute('maxLength', '255');
+    expect(screen.getByLabelText('Version (optional)')).toHaveAttribute('maxLength', '200');
+    expect(screen.getByLabelText('Modell (optional)')).toHaveAttribute('maxLength', '120');
+    expect(screen.getByLabelText('Seriennummer (optional)')).toHaveAttribute('maxLength', '80');
+    expect(screen.getByLabelText('IMEI (optional)')).toHaveAttribute('maxLength', '40');
+    expect(screen.getByLabelText('Notiz (optional)')).toHaveAttribute('maxLength', '2000');
+  });
+
+  it('names the field the server rejected instead of an unknown error', async () => {
+    const tooLong = { type: 'string_too_long', loc: ['body', 'serial'], msg: 'String should have at most 80 characters', ctx: { max_length: 80 } };
+    createDeviceMock.mockRejectedValueOnce(new ApiError(422, JSON.stringify({ detail: [tooLong] })));
+    const { user } = show();
+    await user.type(screen.getByLabelText('Bezeichnung'), 'iPhone');
+    await user.click(screen.getByRole('button', { name: 'Gerät anlegen' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('„Seriennummer“ ist zu lang — höchstens 80 Zeichen.');
+  });
+
   it('hides the person picker from a role that may not list persons', async () => {
     personsMock.mockRejectedValueOnce(new ApiError(403, JSON.stringify({ detail: 'forbidden' })));
     const { user } = show();

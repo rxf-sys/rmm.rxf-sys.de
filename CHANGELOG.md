@@ -40,6 +40,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Installationsbefehl samt „Gültig bis …" stehen, als wäre er noch nutzbar —
   ausgeführt endete er mit „Enrollment-Token ungültig oder abgelaufen". Der
   Dialog kehrt jetzt zum Formular für ein neues Token zurück.
+- Im Formular für Telefone und Tablets endete eine zu lange Angabe (etwa eine
+  IMEI über 40 Zeichen oder eine Notiz über 2000) in „Unbekannter Fehler",
+  ohne Hinweis auf das Feld. Die Felder hören jetzt dort auf, wo der Server
+  ablehnt, und eine abgelehnte Angabe wird mit Feldnamen und Höchstlänge
+  genannt.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

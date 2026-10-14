@@ -29,4 +29,26 @@ describe('enrollErrorText', () => {
   it('passes the server sentence through otherwise', () => {
     expect(enrollErrorText(new ApiError(404, JSON.stringify({ detail: 'Token nicht gefunden' })))).toBe('Token nicht gefunden');
   });
+
+  // FastAPI's validation detail is a list of objects, not a sentence.
+  const invalid = (detail: unknown) => new ApiError(422, JSON.stringify({ detail }));
+
+  it('names the field a validation error is about, and its limit', () => {
+    const tooLong = { type: 'string_too_long', loc: ['body', 'imei'], msg: 'String should have at most 40 characters', ctx: { max_length: 40 } };
+    expect(enrollErrorText(invalid([tooLong]))).toBe('„IMEI“ ist zu lang — höchstens 40 Zeichen.');
+    expect(enrollErrorText(invalid([{ type: 'greater_than_equal', loc: ['body', 'ttl_hours'], msg: '…' }]))).toBe(
+      '„Gültigkeit“ hat ein ungültiges Format.',
+    );
+  });
+
+  it('never hands a validation list on as text', () => {
+    expect(enrollErrorText(invalid([{ type: 'missing', loc: ['body'], msg: 'Field required' }]))).toBe(
+      'Eine Angabe hat ein ungültiges Format.',
+    );
+    expect(enrollErrorText(invalid({ unexpected: true }))).toBe('Eine Angabe hat ein ungültiges Format.');
+  });
+
+  it('passes a 422 the server worded itself through', () => {
+    expect(enrollErrorText(invalid('Person nicht gefunden'))).toBe('Person nicht gefunden');
+  });
 });
