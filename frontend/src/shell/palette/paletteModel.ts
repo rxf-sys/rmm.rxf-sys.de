@@ -86,8 +86,9 @@ const PAGE_KEYWORDS: Record<PageId, string[]> = {
 };
 
 const QUICK: { tab: QuickTab; label: string; operatorOnly: boolean }[] = [
-  // Viewers see the remote tab (it carries the RustDesk id), but the
-  // terminal in it is operator work — offering it would lead to a refusal.
+  // The remote tab is operator-only on the device page (deviceTabs.ts), so
+  // visibleTabs already keeps it from viewers. The flag stays as a guard:
+  // the terminal is operator work even if that tab ever opens up to them.
   { tab: 'remote', label: 'Terminal', operatorOnly: true },
   { tab: 'patches', label: 'Updates', operatorOnly: false },
   // Job output can hold secrets; the API serves it to operators only.
