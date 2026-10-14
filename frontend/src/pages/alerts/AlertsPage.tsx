@@ -213,7 +213,11 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
   const rawTab = params.get('tab');
   const tab: Tab = isTab(rawTab) ? rawTab : 'offen';
   const rawPerson = params.get('person');
-  const personFilter = rawPerson !== null && persons.some((p) => String(p.id) === rawPerson) ? Number(rawPerson) : null;
+  // The id from the URL counts on its own, not only once the persons are
+  // there: they load separately and can be missing for a while, and a
+  // filter that silently fell away would widen "Alle quittieren" to every
+  // person's alerts. An unknown id shows an empty list with a way back.
+  const personFilter = rawPerson !== null && /^[1-9]\d*$/.test(rawPerson) ? Number(rawPerson) : null;
   const setParam = (patch: Record<string, string | null>) =>
     setParams(
       (prev) => {
@@ -239,6 +243,7 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
   const deviceById = useMemo(() => new Map(devices.map((d) => [d.id, d])), [devices]);
   const personName = useMemo(() => new Map(persons.map((p) => [p.id, p.name])), [persons]);
   const hostOf = (id: number) => deviceById.get(id)?.hostname ?? `Gerät ${id}`;
+  const personLabel = personFilter === null ? null : (personName.get(personFilter) ?? `Person ${personFilter}`);
 
   // The person narrows what the tabs count, so each number says what a click
   // would show.
@@ -318,7 +323,7 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
   const ackAll = async () => {
     // Exactly what the dialog names: the open alerts the filter shows now.
     const targets = shown;
-    const who = personFilter !== null ? ` auf Geräten von ${personName.get(personFilter)}` : '';
+    const who = personLabel !== null ? ` auf Geräten von ${personLabel}` : '';
     const { head, rest } = preview(targets, CONFIRM_NAMED);
     const ok = await ask({
       title: `${targets.length} offene Alarme${who} quittieren?`,
@@ -403,7 +408,7 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
             label="Alarme filtern"
           />
         </div>
-        {persons.length > 0 && (
+        {(persons.length > 0 || personFilter !== null) && (
           <select
             className={personFilter === null ? 'input al-person' : 'input al-person is-set'}
             value={personFilter ?? ''}
@@ -416,6 +421,8 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
                 {p.name}
               </option>
             ))}
+            {/* A filter whose person is not (yet) known still says that it is on. */}
+            {personFilter !== null && !personName.has(personFilter) && <option value={personFilter}>{personLabel}</option>}
           </select>
         )}
       </div>
@@ -454,7 +461,7 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
           ) : shown.length === 0 ? (
             <Empty
               tab={tab}
-              person={personFilter === null ? null : (personName.get(personFilter) ?? null)}
+              person={personLabel}
               acked={counts.quittiert}
               onShowAcked={() => setParam({ tab: 'quittiert' })}
               onAllPersons={() => setParam({ person: null })}

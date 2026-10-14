@@ -241,7 +241,12 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
   const rawConn = params.get('conn');
   const conn: ConnFilter = isConnFilter(rawConn) ? rawConn : 'alle';
   const rawPerson = params.get('person');
-  const personFilter = rawPerson !== null && persons.some((p) => String(p.id) === rawPerson) ? Number(rawPerson) : null;
+  // The id from the URL counts on its own, not only once the persons are
+  // there: they load separately and can be missing for a while, and a
+  // filter that silently fell away would widen "Geräte prüfen" and "Alle
+  // Treffer auswählen" to the whole fleet. An unknown id shows an empty
+  // list with a way back.
+  const personFilter = rawPerson !== null && /^[1-9]\d*$/.test(rawPerson) ? Number(rawPerson) : null;
   // Component state, only mirrored into the URL: an input controlled by the
   // URL drops keystrokes, because the router applies changes in a transition.
   const [q, setQ] = useState(() => params.get('q') ?? '');
@@ -609,7 +614,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
                 aria-label="Geräte durchsuchen"
               />
             </div>
-            {persons.length > 0 && (
+            {(persons.length > 0 || personFilter !== null) && (
               <select
                 className={personFilter === null ? 'input pt-select' : 'input pt-select is-set'}
                 value={personFilter ?? ''}
@@ -622,6 +627,10 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
                     {p.name}
                   </option>
                 ))}
+                {/* A filter whose person is not (yet) known still says that it is on. */}
+                {personFilter !== null && !personNames.has(personFilter) && (
+                  <option value={personFilter}>Person {personFilter}</option>
+                )}
               </select>
             )}
             <select

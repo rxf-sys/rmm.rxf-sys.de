@@ -339,6 +339,21 @@ describe('AlertsPage', () => {
       expect(ackMock.mock.calls.map(([id]) => id).sort()).toEqual([12, 16]);
     });
 
+    it('keeps the person filter while the persons are missing', async () => {
+      // The persons arrive after the alerts, or a poll of them failed: the
+      // link still says person 4, and "Alle quittieren" must not widen to
+      // every person's alerts.
+      const otherLaptop = alert({ id: 16, device_id: 2, rule: 'disk', message: 'Disk C: zu 85 % belegt' });
+      show({ alerts: [freshOutage, oldOutage, otherLaptop], persons: [], route: '/alarme?person=4' });
+      expect(hosts()).toEqual(['lisa-laptop', 'lisa-laptop']);
+      expect(screen.getByRole('combobox', { name: 'Nach Person filtern' })).toHaveDisplayValue('Person 4');
+      await userEvent.click(screen.getByRole('button', { name: 'Alle quittieren' }));
+      const dialog = screen.getByRole('dialog', { name: '2 offene Alarme auf Geräten von Person 4 quittieren?' });
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Alle quittieren' }));
+      await waitFor(() => expect(notifyMock.success).toHaveBeenCalled());
+      expect(ackMock.mock.calls.map(([id]) => id).sort()).toEqual([12, 16]);
+    });
+
     it('hands the focus to the next alert once one has left the list', async () => {
       function Live() {
         const [alerts, setAlerts] = useState([freshOutage, oldOutage, fullDisk]);

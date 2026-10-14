@@ -29,6 +29,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Alarm-Sturm erzeugte Abruf-Sturm.** Jeder ausgelöste Alarm schickte einen
   eigenen Fleet-Hinweis. Fallen viele Geräte gleichzeitig aus, bündelt der
   Server die Hinweise jetzt in ein Fenster von 0,5 s.
+- **Personenfilter fiel unbemerkt weg.** Im Alarm-Center und unter
+  „Patches" galt `?person=` nur, solange die Personenliste geladen war. Kam
+  sie verspätet oder schlug ein Abruf fehl, zeigten beide Seiten stillschweigend
+  alle Personen — „Alle quittieren" quittierte dann die Alarme der ganzen
+  Flotte, „Geräte prüfen" prüfte alle Geräte. Der Filter hält sich jetzt an
+  die ID aus der Adresse und nennt die Person bis dahin „Person 4".
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

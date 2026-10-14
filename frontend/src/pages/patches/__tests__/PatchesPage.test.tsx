@@ -74,7 +74,9 @@ const fleet: Device[] = [
 const summary: PatchSummary = { '1': { pending: 5, security: 2 }, '2': { pending: 1, security: 1 } };
 const persons: Person[] = [{ id: 9, name: 'Lisa', email: '', phone: '', notes: '', created_at: 0, device_count: 1 }];
 
-function show(opts: { devices?: Device[]; summary?: PatchSummary; isOperator?: boolean; route?: string; client?: QueryClient } = {}) {
+function show(
+  opts: { devices?: Device[]; summary?: PatchSummary; persons?: Person[]; isOperator?: boolean; route?: string; client?: QueryClient } = {},
+) {
   const client = opts.client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const onRefresh = vi.fn();
   const onOpenDevice = vi.fn();
@@ -84,7 +86,7 @@ function show(opts: { devices?: Device[]; summary?: PatchSummary; isOperator?: b
         <PatchesPage
           devices={opts.devices ?? fleet}
           patchSummary={opts.summary ?? summary}
-          persons={persons}
+          persons={opts.persons ?? persons}
           onOpenDevice={onOpenDevice}
           onRefresh={onRefresh}
           isOperator={opts.isOperator ?? false}
@@ -203,6 +205,17 @@ describe('PatchesPage Filter', () => {
     expect(hostnames()).toEqual(['buero-pc', 'laptop', 'neu']);
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Nach Person filtern' }), '9');
     expect(hostnames()).toEqual(['buero-pc']);
+  });
+
+  it('hält den Personenfilter, solange die Personen fehlen', async () => {
+    // The persons arrive after the devices, or a poll of them failed: the
+    // link still says person 9, and the scan must not widen to the fleet.
+    show({ route: '/patches?person=9', persons: [], isOperator: true });
+    expect(hostnames()).toEqual(['buero-pc']);
+    expect(screen.getByRole('combobox', { name: 'Nach Person filtern' })).toHaveDisplayValue('Person 9');
+    await userEvent.click(screen.getByRole('button', { name: '1 Gerät prüfen' }));
+    await waitFor(() => expect(scanMock).toHaveBeenCalledTimes(1));
+    expect(scanMock).toHaveBeenCalledWith(1);
   });
 
   it('findet über die Suche', async () => {
