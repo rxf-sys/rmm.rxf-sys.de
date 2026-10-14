@@ -45,6 +45,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   ohne Hinweis auf das Feld. Die Felder hören jetzt dort auf, wo der Server
   ablehnt, und eine abgelehnte Angabe wird mit Feldnamen und Höchstlänge
   genannt.
+- Lehnte der Server im zweiten Schritt der Anmeldung das Passwort ab — etwa
+  weil es zwischen den Schritten neu gesetzt oder das Konto deaktiviert
+  wurde —, meldete die Seite „Der Code stimmt nicht", und jeder weitere Code
+  zählte bis zur Sperre als Fehlversuch. Sie führt jetzt zurück zu
+  Benutzername und Passwort und sagt, dass diese nicht mehr angenommen
+  werden.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist
