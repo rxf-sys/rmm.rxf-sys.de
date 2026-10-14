@@ -75,6 +75,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Geräteseite „Bearbeiten" speicherte, machte die Zuweisung unbemerkt
   rückgängig — die Geräteseite hielt noch den alten Stand. Sie bekommt die
   Änderung jetzt sofort mit.
+- Personen auf schmalen Bildschirmen: „Alle Personen" legte einen neuen
+  Verlaufseintrag an, sodass die Zurück-Geste des Telefons die eben
+  verlassene Person wieder öffnete statt die Seite zu verlassen. Der Knopf
+  geht jetzt im Verlauf zurück. Danach — und nach dem Löschen einer Person —
+  steht der Tastaturfokus auf der verlassenen Person in der Liste bzw. auf
+  der Suche, statt auf den Seitenanfang zu fallen.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

@@ -1,7 +1,7 @@
 import './persons.css';
 import { useQueryClient } from '@tanstack/react-query';
-import { useId, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { qk } from '../../api/queryClient';
 import { FilterBar, type FilterOption } from '../../components/FilterBar';
@@ -47,6 +47,13 @@ interface Props {
 /** Below this the list and the detail no longer fit side by side. */
 const STACKED = '(max-width: 1000px)';
 
+/** History state of an entry pushed by picking a person while no person was
+ *  open: the entry before it is the list. */
+interface FromList {
+  personsList: true;
+}
+const isFromList = (state: unknown): state is FromList => (state as FromList | null)?.personsList === true;
+
 /**
  * People and their devices as list and detail: pick a person on the left,
  * see their devices, alerts, updates and account on the right. The
@@ -57,6 +64,8 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
   const qc = useQueryClient();
   const { ask, dialog: confirmDialog } = useConfirm();
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const selectedId = Number(params.get('person')) || null;
   const rawFilter = params.get('filter');
   const filter: PersonFilter = isPersonFilter(rawFilter) ? rawFilter : 'alle';
@@ -70,7 +79,7 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
   const loading = useFirstPersonsLoad();
   const accountsQ = useAccounts(isAdmin);
 
-  const setParam = (patch: Record<string, string | null>, replace: boolean) =>
+  const setParam = (patch: Record<string, string | null>, replace: boolean, state?: FromList) =>
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -80,10 +89,27 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
         }
         return next;
       },
-      { replace },
+      { replace, state },
     );
   // Selecting pushes a history entry, so "back" on a phone returns to the list.
-  const select = (id: number | null) => setParam({ person: id === null ? null : String(id) }, false);
+  const select = (id: number) => setParam({ person: String(id) }, false, selectedId === null ? { personsList: true } : undefined);
+
+  // Where focus goes once the list is back: the person just left, or the
+  // search when that person is gone. Leaving the detail removes the focused
+  // control, and without this focus would fall to <body>.
+  const refocus = useRef<number | 'search' | null>(null);
+  const listRef = useRef<HTMLElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  /** Close the open person. If its entry was pushed from the list, go back
+   *  to that entry: pushing the list again would leave the detail behind
+   *  the phone's own back gesture. A person opened by a link has no list
+   *  entry before it, so the address is replaced instead. */
+  const leaveDetail = (focus: number | 'search') => {
+    refocus.current = focus;
+    if (isFromList(location.state)) void navigate(-1);
+    else setParam({ person: null }, true);
+  };
 
   const rows = useMemo(() => personRows(persons, devices, alerts), [persons, devices, alerts]);
   const visible = rows.filter((r) => matchesPerson(r, q, filter));
@@ -96,6 +122,17 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
   const chosen = rows.find((r) => r.person.id === selectedId) ?? null;
   // Side by side, the detail is never blank while the list shows someone.
   const shown = chosen ?? (stacked ? null : (visible[0] ?? null));
+  const listShown = !(stacked && chosen);
+
+  // Runs after every render: the list comes back a render or more after the
+  // click (going back is asynchronous), and the request waits until then.
+  useEffect(() => {
+    const target = refocus.current;
+    if (target === null || !listShown) return;
+    refocus.current = null;
+    const item = target === 'search' ? null : listRef.current?.querySelector<HTMLElement>(`[data-person="${target}"]`);
+    (item ?? searchRef.current)?.focus();
+  });
 
   const accounts = accountsQ.data;
   const assigned = devices.filter((d) => d.person_id !== null).length;
@@ -186,7 +223,8 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
     try {
       await api.deletePerson(p.id);
       qc.setQueryData<Person[]>(qk.persons, (old) => old?.filter((x) => x.id !== p.id));
-      if (selectedId === p.id) setParam({ person: null }, true);
+      if (selectedId === p.id) leaveDetail('search');
+      else refocus.current = 'search';
       notify.success('Person gelöscht', p.name);
       afterChange();
     } catch (e) {
@@ -232,14 +270,15 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
         </EmptyState>
       ) : (
         <div className="pn-layout">
-          {!(stacked && chosen) && (
-            <section className="pn-list" aria-label="Personenliste">
+          {listShown && (
+            <section className="pn-list" aria-label="Personenliste" ref={listRef}>
               <div className="pn-search">
                 <IconSearch size={14} />
                 <label htmlFor={searchId} className="sr-only">
                   Personen durchsuchen
                 </label>
                 <input
+                  ref={searchRef}
                   id={searchId}
                   type="search"
                   className="input"
@@ -282,6 +321,7 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
                           type="button"
                           className={active ? 'pn-item is-active' : 'pn-item'}
                           aria-current={active ? 'true' : undefined}
+                          data-person={p.id}
                           onClick={() => select(p.id)}
                         >
                           <span className="pn-avatar" aria-hidden>
@@ -322,7 +362,7 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
                     setEditing({ id, name, email, phone, notes });
                   }}
                   onDelete={() => void remove(shown)}
-                  onBack={() => select(null)}
+                  onBack={() => leaveDetail(shown.person.id)}
                   onOpenDevice={onOpenDevice}
                   onChanged={onRefresh}
                 />

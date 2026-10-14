@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
 import { qk } from '../../../api/queryClient';
@@ -47,19 +47,31 @@ function Where() {
   return <output data-testid="where">{useLocation().search}</output>;
 }
 
+/** The browser's or the phone's own back, outside the page. */
+function SystemBack() {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  return (
+    <button type="button" data-path={pathname} onClick={() => void navigate(-1)}>
+      System zurück
+    </button>
+  );
+}
+
 function show({
   route = '/personen',
+  before = [],
   isAdmin = true,
   persons = [martina, bernd],
   alerts = [],
   client,
-}: { route?: string; isAdmin?: boolean; persons?: Person[]; alerts?: Alert[]; client?: QueryClient } = {}) {
+}: { route?: string; before?: string[]; isAdmin?: boolean; persons?: Person[]; alerts?: Alert[]; client?: QueryClient } = {}) {
   const qc = client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const onRefresh = vi.fn();
   const onOpenDevice = vi.fn();
   render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[route]}>
+      <MemoryRouter initialEntries={[...before, route]} initialIndex={before.length}>
         <PersonsPage
           persons={persons}
           devices={[laptop, tablet, nas]}
@@ -70,6 +82,7 @@ function show({
           onRefresh={onRefresh}
         />
         <Where />
+        <SystemBack />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -146,6 +159,44 @@ describe('PersonsPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Alle Personen' }));
     expect(list()).toBeInTheDocument();
+  });
+
+  it('returns to the list by going back, so the system back then leaves the page', async () => {
+    stackedScreen();
+    show({ before: ['/start'] });
+    await userEvent.click(within(list()).getByRole('button', { name: /Martina Fuchs/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Alle Personen' }));
+    expect(list()).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'System zurück' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'System zurück' })).toHaveAttribute('data-path', '/start'));
+  });
+
+  it('closes a linked person without adding a history entry', async () => {
+    stackedScreen();
+    show({ before: ['/start'], route: '/personen?person=2' });
+    await userEvent.click(screen.getByRole('button', { name: 'Alle Personen' }));
+    await waitFor(() => expect(screen.getByTestId('where')).toBeEmptyDOMElement());
+    await userEvent.click(screen.getByRole('button', { name: 'System zurück' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'System zurück' })).toHaveAttribute('data-path', '/start'));
+  });
+
+  it('puts focus back on the person just left when the list returns', async () => {
+    stackedScreen();
+    show();
+    await userEvent.click(within(list()).getByRole('button', { name: /Martina Fuchs/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Alle Personen' }));
+    await waitFor(() => expect(within(list()).getByRole('button', { name: /Martina Fuchs/ })).toHaveFocus());
+  });
+
+  it('puts focus on the search after deleting the open person', async () => {
+    stackedScreen();
+    deleteMock.mockResolvedValue({ ok: true });
+    show({ route: '/personen?person=2' });
+    await screen.findByText('martina');
+    await userEvent.click(screen.getByRole('button', { name: 'Weitere Aktionen' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Person löschen …' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Person löschen' }));
+    await waitFor(() => expect(within(list()).getByRole('searchbox', { name: 'Personen durchsuchen' })).toHaveFocus());
   });
 
   it('looks like loading, not like an empty page, while the list is on its way', () => {
