@@ -128,11 +128,12 @@ async def ack(alert_id: int, username: str) -> dict[str, Any] | None:
     first acker wins the byline. Returns the row, or None for unknown/
     resolved alerts (acking history makes no sense)."""
     async with _connect() as db:
-        await db.execute(
+        cur = await db.execute(
             "UPDATE alerts SET acked_at = ?, acked_by = ?"
             " WHERE id = ? AND resolved_at IS NULL AND acked_at IS NULL",
             (int(time.time()), username, alert_id),
         )
+        acked_now = cur.rowcount == 1
         await db.commit()
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -141,7 +142,11 @@ async def ack(alert_id: int, username: str) -> dict[str, Any] | None:
             row = await cur.fetchone()
     if row is None:
         return None
-    await audit_record("alert.acked", user=username, device_id=int(row["device_id"]))
+    # Only the acknowledgement that took effect is audited. A repeat (a
+    # colleague whose list was a poll behind) changes nothing, and an entry
+    # under that name would contradict the byline the alert keeps.
+    if acked_now:
+        await audit_record("alert.acked", user=username, device_id=int(row["device_id"]))
     return _row_to_dict(row)
 
 

@@ -50,6 +50,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Zeile scharf. Ging der Fokus danach aus anderem Grund verloren, zog die
   nächste Aktualisierung ihn samt Scrollposition zu einem
   „Quittieren"-Knopf. Die Übergabe endet jetzt mit der Runde.
+- **„Alle quittieren" quittierte Quittiertes noch einmal.** Alarme, die ein
+  Kollege quittierte, während der Dialog offen stand, und einer, dessen
+  eigenes „Quittieren" noch lief, wurden erneut gesendet; der Server trug
+  dann eine zweite Quittierung unter falschem Namen ins Audit-Log ein. Das
+  Alarm-Center sendet jetzt nur, was beim Bestätigen noch offen ist, und
+  sagt im Toast, was schon quittiert oder behoben war. Der Server
+  protokolliert nur noch die Quittierung, die tatsächlich gegriffen hat.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist
