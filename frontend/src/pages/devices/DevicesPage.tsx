@@ -226,7 +226,12 @@ export function DevicesPage({ devices, patchSummary, persons, loading, loadError
   const rawSort = params.get('sort');
   const sort = useMemo(() => parseSort(rawSort), [rawSort]);
   const rawPerson = params.get('person');
-  const personFilter = rawPerson !== null && persons.some((p) => String(p.id) === rawPerson) ? Number(rawPerson) : null;
+  // The id from the URL counts on its own, not only once the persons are
+  // there: they load separately and can be missing for a while, and a
+  // filter that silently fell away would widen "Alle Geräte dieser Seite"
+  // and every bulk action after it to the whole fleet. An unknown id shows
+  // an empty list with a way back.
+  const personFilter = rawPerson !== null && /^[1-9]\d*$/.test(rawPerson) ? Number(rawPerson) : null;
 
   const setParam = (patch: Record<string, string | null>) =>
     setParams(
@@ -415,7 +420,7 @@ export function DevicesPage({ devices, patchSummary, persons, loading, loadError
                 aria-label="Geräte durchsuchen"
               />
             </div>
-            {persons.length > 0 && (
+            {(persons.length > 0 || personFilter !== null) && (
               <select
                 className={personFilter === null ? 'input dl-person' : 'input dl-person is-set'}
                 value={personFilter ?? ''}
@@ -423,6 +428,10 @@ export function DevicesPage({ devices, patchSummary, persons, loading, loadError
                 aria-label="Nach Person filtern"
               >
                 <option value="">Alle Personen</option>
+                {/* A filter whose person is not (yet) known still says that it is on. */}
+                {personFilter !== null && !persons.some((p) => p.id === personFilter) && (
+                  <option value={personFilter}>Person {personFilter}</option>
+                )}
                 {persons.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}

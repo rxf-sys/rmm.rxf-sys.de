@@ -186,6 +186,22 @@ describe('DevicesPage Suche und Person', () => {
     expect(hostnames()).toEqual(['buero-pc']);
     expect(screen.getByRole('combobox', { name: 'Nach Person filtern' })).toHaveValue('9');
   });
+
+  it('hält den Personenfilter, solange die Personen fehlen', async () => {
+    // The persons arrive after the devices, or a poll of them failed: the
+    // link still says person 9, and a bulk action must not widen to the fleet.
+    show('/devices?person=9', [device({ person_id: 9 }), device({ id: 4, hostname: 'fremd' })], { canOperate: true });
+    expect(hostnames()).toEqual(['buero-pc']);
+    expect(screen.getByRole('combobox', { name: 'Nach Person filtern' })).toHaveDisplayValue('Person 9');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Alle Geräte dieser Seite auswählen' }));
+    expect(screen.getByRole('region', { name: 'Auswahl' })).toHaveTextContent('1 ausgewählt');
+  });
+
+  it('nimmt keine Person aus einer Adresse, die keine ID ist', () => {
+    show('/devices?person=abc', [device({ person_id: 9 }), device({ id: 4, hostname: 'fremd' })]);
+    expect(hostnames()).toHaveLength(2);
+    expect(screen.queryByRole('combobox', { name: 'Nach Person filtern' })).not.toBeInTheDocument();
+  });
 });
 
 describe('DevicesPage Auswahl', () => {

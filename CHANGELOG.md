@@ -230,12 +230,14 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   geht jetzt im Verlauf zurück. Danach — und nach dem Löschen einer Person —
   steht der Tastaturfokus auf der verlassenen Person in der Liste bzw. auf
   der Suche, statt auf den Seitenanfang zu fallen.
-- **Personenfilter fiel unbemerkt weg.** Im Alarm-Center und unter
-  „Patches" galt `?person=` nur, solange die Personenliste geladen war. Kam
-  sie verspätet oder schlug ein Abruf fehl, zeigten beide Seiten stillschweigend
-  alle Personen — „Alle quittieren" quittierte dann die Alarme der ganzen
-  Flotte, „Geräte prüfen" prüfte alle Geräte. Der Filter hält sich jetzt an
-  die ID aus der Adresse und nennt die Person bis dahin „Person 4".
+- **Personenfilter fiel unbemerkt weg.** Im Alarm-Center, unter „Patches"
+  und in der Geräteliste galt `?person=` nur, solange die Personenliste
+  geladen war. Kam sie verspätet oder schlug ein Abruf fehl, zeigten die
+  Seiten stillschweigend alle Personen — „Alle quittieren" quittierte dann
+  die Alarme der ganzen Flotte, „Geräte prüfen" prüfte alle Geräte, und eine
+  Massenaktion auf „Alle Geräte dieser Seite" traf fremde Geräte. Der Filter
+  hält sich jetzt an die ID aus der Adresse und nennt die Person bis dahin
+  „Person 4".
 - **Updates-Reiter zeigte nach einer Sammel-Installation alten Stand.** Wer
   unter „Patches" eine Installation startete und gleich das Gerät öffnete,
   bekam aus dem Zwischenspeicher noch „Installieren" angeboten — ein Klick
