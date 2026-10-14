@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { Link, MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
 import { qk } from '../../../api/queryClient';
@@ -70,16 +71,37 @@ function show(
   route: string,
   role: { isAdmin: boolean; isOperator: boolean },
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  /** Rendered next to the page, inside the router (e.g. a toast's link). */
+  beside?: ReactNode,
 ) {
   const onDeleted = vi.fn();
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[route]}>
         <DevicePage deviceId={7} favorite={false} onToggleFavorite={() => {}} onDeleted={onDeleted} {...role} />
+        {beside}
       </MemoryRouter>
     </QueryClientProvider>,
   );
   return { client, onDeleted };
+}
+
+function job(id: number, command: string): Job {
+  return {
+    id,
+    device_id: 7,
+    kind: 'shell',
+    command,
+    shell: 'bash',
+    script_id: null,
+    script_name: '',
+    status: 'done',
+    exit_code: 0,
+    created_by: 'robin',
+    created_at: Math.floor(Date.now() / 1000) - 60,
+    started_at: null,
+    finished_at: null,
+  };
 }
 
 const viewer = { isAdmin: false, isOperator: false };
@@ -148,31 +170,31 @@ describe('DevicePage', () => {
   });
 
   it('opens a job linked from a toast', async () => {
-    jobsMock.mockResolvedValue({
-      jobs: [
-        {
-          id: 42,
-          device_id: 7,
-          kind: 'shell',
-          command: 'df -h',
-          shell: 'bash',
-          script_id: null,
-          script_name: '',
-          status: 'done',
-          exit_code: 0,
-          created_by: 'robin',
-          created_at: Math.floor(Date.now() / 1000) - 60,
-          started_at: null,
-          finished_at: null,
-        },
-      ],
-    });
+    jobsMock.mockResolvedValue({ jobs: [job(42, 'df -h')] });
     show('/devices/7?tab=jobs&job=42', admin);
     const toggle = await screen.findByRole('button', { name: /df -h/ });
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Auftrag #42')).toBeInTheDocument();
     await userEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('opens a job linked while the activity tab is already open', async () => {
+    // A toast's "Ausgabe" or the notification centre, clicked on this tab:
+    // only the query changes, so the tab stays mounted.
+    jobsMock.mockResolvedValue({ jobs: [job(43, 'uptime'), job(42, 'df -h')] });
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    const user = userEvent.setup();
+    show('/devices/7?tab=jobs&job=42', admin, undefined, <Link to="/devices/7?tab=jobs&job=43">Ausgabe</Link>);
+    expect(await screen.findByRole('button', { name: /df -h/ })).toHaveAttribute('aria-expanded', 'true');
+    // Narrowed to alerts, the linked job would not even be on the page.
+    await user.click(within(screen.getByRole('tablist', { name: 'Aktivität filtern' })).getByRole('tab', { name: /Alarme/ }));
+
+    await user.click(screen.getByRole('link', { name: 'Ausgabe' }));
+    const linked = await screen.findByRole('button', { name: /uptime/ });
+    expect(linked).toHaveAttribute('aria-expanded', 'true');
+    expect(scroll.mock.contexts.at(-1)).toBe(document.getElementById('job-43'));
+    scroll.mockRestore();
   });
 
   it('says plainly when the device is gone', async () => {

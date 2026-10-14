@@ -8,6 +8,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **„Ausgabe" öffnete den Auftrag nicht, wenn „Aktivität" schon offen war.**
+  Ein Klick auf „Ausgabe" im Toast oder in der Benachrichtigungszentrale
+  führte zwar auf den Reiter, klappte den Auftrag aber nicht auf und rollte
+  nicht zu ihm, sobald der Reiter bereits zu sehen war. Jetzt öffnet jeder
+  Link seinen Auftrag; ein Filter, der ihn verbergen würde, wird aufgehoben.
 - **Gelöschte Geräte blieben auf ihrer Seite stehen.** Wurde ein Gerät
   gelöscht (auch von einem anderen Admin) oder einem Betrachter entzogen,
   zeigte seine geöffnete Seite es weiter als „online" mit allen Aktionen, die

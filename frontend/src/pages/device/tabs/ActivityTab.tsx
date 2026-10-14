@@ -93,6 +93,17 @@ export function ActivityTab({ deviceId, isAdmin }: { deviceId: number; isAdmin: 
   const linked = Number(params.get('job')) || null;
   const [openJob, setOpenJob] = useState<number | null>(linked);
   const [show, setShow] = useState<Show>('all');
+  // A new link can arrive while the tab is open (a toast's "Ausgabe" for
+  // this device): only the query changes, the tab stays mounted. Open that
+  // job then too, and drop a filter that would hide it.
+  const [seenLink, setSeenLink] = useState(linked);
+  if (linked !== seenLink) {
+    setSeenLink(linked);
+    if (linked) {
+      setOpenJob(linked);
+      setShow('all');
+    }
+  }
 
   const jobs = useQuery({
     queryKey: qk.deviceJobs(deviceId),
@@ -117,11 +128,12 @@ export function ActivityTab({ deviceId, isAdmin }: { deviceId: number; isAdmin: 
   const filtered = show === 'all' ? entries : entries.filter((e) => e.kind === show);
   const groups = byDay(filtered, auditDayLabel);
 
-  // Bring a linked job into view once it is on the page.
-  const scrolled = useRef(false);
+  // Bring each linked job into view once it is on the page, once: the 10 s
+  // poll must not pull the page back while someone reads further down.
+  const scrolledTo = useRef<number | null>(null);
   useEffect(() => {
-    if (!linked || scrolled.current || !jobs.data) return;
-    scrolled.current = true;
+    if (!linked || scrolledTo.current === linked || !jobs.data) return;
+    scrolledTo.current = linked;
     document.getElementById(`job-${linked}`)?.scrollIntoView({ block: 'start' });
   }, [linked, jobs.data]);
 
