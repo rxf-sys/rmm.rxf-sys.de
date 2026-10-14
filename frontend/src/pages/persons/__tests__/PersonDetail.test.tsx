@@ -89,6 +89,16 @@ describe('PersonDetail', () => {
     expect(screen.getByText('Ruft bei Problemen abends an.')).toBeInTheDocument();
   });
 
+  it('percent-encodes the address in the mail link', () => {
+    show({ person: person({ email: 'info?team@firma.de' }) });
+    expect(screen.getByRole('link', { name: 'info?team@firma.de' })).toHaveAttribute('href', 'mailto:info%3Fteam@firma.de');
+  });
+
+  it('shows an email field that is no address as text', () => {
+    show({ person: person({ email: 'über Tochter' }) });
+    expect(screen.getByText('über Tochter').closest('a')).toBeNull();
+  });
+
   it('dials only the first of two numbers and links no free text', () => {
     show({ person: person({ phone: '0711 123456 / 0171 9876543' }) });
     expect(screen.getByRole('link', { name: '0711 123456' })).toHaveAttribute('href', 'tel:0711123456');

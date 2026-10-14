@@ -207,6 +207,19 @@ describe('PersonsPage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('saves a person whose stored email is free text, not one address', async () => {
+    // The server stores any text; data from before the redesign has such
+    // values, and the form must not block an unrelated change over them.
+    const family = person({ email: 'mama@web.de, papa@web.de' });
+    updateMock.mockResolvedValue({ person: family });
+    show({ route: '/personen?person=2', persons: [family, bernd] });
+    await userEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }));
+    const dialog = screen.getByRole('dialog', { name: 'Martina Fuchs bearbeiten' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /Telefon/ }), '9');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    expect(updateMock).toHaveBeenCalledWith(2, expect.objectContaining({ email: 'mama@web.de, papa@web.de', phone: '+49 170 00000009' }));
+  });
+
   it('keeps the dialog open and explains a refused save', async () => {
     updateMock.mockRejectedValue(new ApiError(403, '{"detail":"admin privileges required"}'));
     show({ route: '/personen?person=2' });

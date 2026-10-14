@@ -25,6 +25,26 @@ export function formatDay(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+/** One address: no spaces and exactly one @. Deliberately loose — this
+ *  decides only whether to offer a link, not whether the value is valid. */
+const ADDRESS = /^[^\s@]+@[^\s@]+$/;
+
+/**
+ * A mailto: link for the email field, or null when the field holds no
+ * address list to write to („über Tochter“). The field is free text on the
+ * server, so the check happens here. RFC 6068 wants ?, #, % and & in an
+ * address percent-encoded; raw, the mail client reads them as headers or a
+ * fragment and writes to someone else.
+ */
+export function mailtoHref(email: string): string | null {
+  const parts = email
+    .split(/[,;]/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length === 0 || !parts.every((p) => ADDRESS.test(p))) return null;
+  return `mailto:${parts.map((p) => encodeURIComponent(p).replace(/%40/g, '@')).join(',')}`;
+}
+
 /** A number as people write one: an optional plus or opening bracket, a
  *  digit, then digits with spaces, brackets, slashes, dots and dashes. */
 const NUMBER_RUN = /\+?\(?\d[\d\s()/.\-–]*/g;

@@ -56,10 +56,17 @@ export function PersonDialog({ draft, onSave, onClose }: { draft: Draft; onSave:
             <label className="field-label" htmlFor={`${id}-email`}>
               E-Mail <span className="pn-optional">optional</span>
             </label>
+            {/* Plain text on purpose: the server stores any text here, and
+                type="email" would refuse every save of a person whose stored
+                value is not one address („mama@…, papa@…“, a note, an umlaut
+                local part) — even when only the phone number changed. */}
             <input
               id={`${id}-email`}
               className="input"
-              type="email"
+              type="text"
+              inputMode="email"
+              autoCapitalize="none"
+              spellCheck={false}
               autoComplete="off"
               value={d.email}
               maxLength={LIMITS.email}

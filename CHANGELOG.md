@@ -60,6 +60,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   im Feld wurden zu einer verschmolzen, und Text ohne Ziffern („nur abends")
   wurde zu einem leeren Link. Jetzt wird nur die erste Nummer verlinkt und
   richtig gewählt; Text ohne Nummer bleibt Text.
+- Personen: Wer eine Person bearbeitete, deren gespeicherte E-Mail keine
+  einzelne Adresse ist (etwa „mama@…, papa@…" oder eine Notiz aus der Zeit
+  vor der Neugestaltung), konnte nicht mehr speichern — auch wenn nur die
+  Telefonnummer geändert wurde. Das Feld nimmt wieder jeden Text, wie der
+  Server. Der Mail-Link kodiert die Adresse jetzt (`?`, `#`, `%`, `&`) und
+  erscheint nur noch, wenn im Feld Adressen stehen.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

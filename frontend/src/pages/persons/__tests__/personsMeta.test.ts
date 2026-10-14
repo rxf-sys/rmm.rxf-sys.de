@@ -5,6 +5,7 @@ import {
   accountFate,
   explainError,
   initial,
+  mailtoHref,
   matchesPerson,
   nameList,
   openAlertsOn,
@@ -118,6 +119,22 @@ describe('wording', () => {
     expect(phoneLink('0170 1234')?.href).toBe('tel:01701234');
     expect(phoneLink('0711 / 123456')?.href).toBe('tel:0711123456');
     expect(phoneLink('(0711) 123456')?.href).toBe('tel:0711123456');
+  });
+
+  it('encodes an address for mailto, so ? # % & stay part of it', () => {
+    expect(mailtoHref('martina@example.de')).toBe('mailto:martina@example.de');
+    expect(mailtoHref('info?team@firma.de')).toBe('mailto:info%3Fteam@firma.de');
+    expect(mailtoHref('a#b%c&d@x.de')).toBe('mailto:a%23b%25c%26d@x.de');
+    expect(mailtoHref('jürgen@web.de')).toBe('mailto:j%C3%BCrgen@web.de');
+    expect(mailtoHref(' mama@web.de; papa@web.de ')).toBe('mailto:mama@web.de,papa@web.de');
+  });
+
+  it('links no email field that is not a list of addresses', () => {
+    expect(mailtoHref('über Tochter')).toBeNull();
+    expect(mailtoHref('Tochter: anna@web.de')).toBeNull();
+    // Would add a hidden CC for whoever clicks it.
+    expect(mailtoHref('x@y.de?cc=other@z.de')).toBeNull();
+    expect(mailtoHref('')).toBeNull();
   });
 
   it('drops the bracketed trunk zero after a country code', () => {

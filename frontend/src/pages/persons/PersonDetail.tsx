@@ -19,6 +19,7 @@ import {
   explainError,
   formatDay,
   initial,
+  mailtoHref,
   openAlertsOn,
   personActivity,
   personFacts,
@@ -179,7 +180,8 @@ export function PersonDetail({
   const seenAt = (d: Device) => (isAgent(d) ? d.last_seen_at : d.checked_at);
 
   const contactRows: [string, ReactNode][] = [];
-  if (person.email) contactRows.push(['E-Mail', <a href={`mailto:${person.email}`}>{person.email}</a>]);
+  const mailto = mailtoHref(person.email);
+  if (person.email) contactRows.push(['E-Mail', mailto ? <a href={mailto}>{person.email}</a> : person.email]);
   const tel = phoneLink(person.phone);
   if (person.phone)
     contactRows.push([
