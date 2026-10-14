@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { Link, MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { DevicesPage } from '../DevicesPage';
 import type { Device, Person } from '../../../types';
@@ -58,11 +58,29 @@ const fullDisk = device({
   heartbeat: { cpu_pct: 5, mem_pct: 20, disks: [{ mount: '/', used_pct: 95, total_b: 1 }] },
 });
 
+/** Where the router is, and what the rail's "Geräte" (or "g d") and the
+ *  browser's Back do: navigate while the page stays mounted. */
+function Rail() {
+  const { pathname, search } = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <p data-testid="location">{pathname + search}</p>
+      <Link to="/devices">Geräte in der Leiste</Link>
+      <button type="button" onClick={() => navigate(-1)}>
+        Zurück
+      </button>
+    </>
+  );
+}
+const location = () => screen.getByTestId('location').textContent;
+
 function show(route: string, devices: Device[], opts: { canOperate?: boolean; persons?: Person[] } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[route]}>
+        <Rail />
         <DevicesPage
           devices={devices}
           patchSummary={{}}
@@ -129,6 +147,30 @@ describe('DevicesPage Suche und Person', () => {
     show('/devices', [device({ hostname: 'srv-a' }), device({ id: 4, hostname: 'laptop' })]);
     const box = screen.getByRole('searchbox', { name: 'Geräte durchsuchen' });
     await userEvent.type(box, 'srv', { delay: null });
+    expect(box).toHaveValue('srv');
+    expect(hostnames()).toEqual(['srv-a']);
+    await waitFor(() => expect(location()).toBe('/devices?q=srv'));
+  });
+
+  it('übernimmt die Suche aus der Adresse, wenn die Leiste die Seite neu öffnet', async () => {
+    show('/devices?q=srv&filter=online', [device({ hostname: 'srv-a' }), device({ id: 4, hostname: 'laptop' })]);
+    const box = screen.getByRole('searchbox', { name: 'Geräte durchsuchen' });
+    expect(hostnames()).toEqual(['srv-a']);
+    await userEvent.click(screen.getByRole('link', { name: 'Geräte in der Leiste' }));
+    expect(location()).toBe('/devices');
+    expect(box).toHaveValue('');
+    expect(hostnames()).toHaveLength(2);
+  });
+
+  it('bringt mit „Zurück" die Suche des früheren Eintrags zurück', async () => {
+    show('/devices?q=srv', [device({ hostname: 'srv-a' }), device({ id: 4, hostname: 'laptop' })]);
+    await userEvent.click(screen.getByRole('link', { name: 'Geräte in der Leiste' }));
+    const box = screen.getByRole('searchbox', { name: 'Geräte durchsuchen' });
+    await userEvent.type(box, 'lap', { delay: null });
+    await waitFor(() => expect(location()).toBe('/devices?q=lap'));
+    expect(hostnames()).toEqual(['laptop']);
+    await userEvent.click(screen.getByRole('button', { name: 'Zurück' }));
+    expect(location()).toBe('/devices?q=srv');
     expect(box).toHaveValue('srv');
     expect(hostnames()).toEqual(['srv-a']);
   });

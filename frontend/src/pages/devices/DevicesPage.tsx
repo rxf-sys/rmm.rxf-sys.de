@@ -8,6 +8,7 @@ import { deviceStatusKind, deviceStatusLabel, loadLevel, type LoadKind } from '.
 import { formatAgo, formatDateTime, osLabel } from '../../format';
 import { usePagination } from '../../hooks/usePagination';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { useAddressNavigation } from '../../hooks/useAddressNavigation';
 import {
   IconChevronDown,
   IconChevronUp,
@@ -218,8 +219,10 @@ export function DevicesPage({ devices, patchSummary, persons, loading, loadError
   const filter: Filter = isFilter(rawFilter) ? rawFilter : 'alle';
   // The search text is component state and only written to the URL: React
   // Router applies URL changes in a transition, so an input controlled by
-  // the URL drops keystrokes when someone types fast.
+  // the URL drops keystrokes when someone types fast. The rail's link, "g d"
+  // and Back move the address under the mounted page; the box follows.
   const [q, setQ] = useState(() => params.get('q') ?? '');
+  useAddressNavigation(() => setQ(params.get('q') ?? ''));
   const rawSort = params.get('sort');
   const sort = useMemo(() => parseSort(rawSort), [rawSort]);
   const rawPerson = params.get('person');

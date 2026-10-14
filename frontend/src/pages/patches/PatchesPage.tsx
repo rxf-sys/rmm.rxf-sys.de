@@ -1,12 +1,13 @@
 import './patches.css';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import { Link, NavigationType, useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { qk } from '../../api/queryClient';
 import { FilterBar, type FilterOption } from '../../components/FilterBar';
 import { Pagination } from '../../components/Pagination';
 import { formatAgo, formatDateTime, osLabel } from '../../format';
+import { useAddressNavigation } from '../../hooks/useAddressNavigation';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useNow } from '../../hooks/useNow';
@@ -256,19 +257,10 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
   const personFilter = rawPerson !== null && /^[1-9]\d*$/.test(rawPerson) ? Number(rawPerson) : null;
   // Component state, only mirrored into the URL: an input controlled by the
   // URL drops keystrokes, because the router applies changes in a transition.
+  // The rail's Patches link, "g p" and Back move the address under the
+  // mounted page; the filters read from the URL follow, and so does the box.
   const [q, setQ] = useState(() => params.get('q') ?? '');
-  // The page stays mounted when the address changes under it (the rail's
-  // Patches link, "g p", Back), and the filters read from the URL follow;
-  // the search has to be taken over. Those navigations push or pop, the
-  // page's own writes replace. Syncing on our own replaces would undo
-  // keystrokes whose URL update is still in its transition.
-  const { key: locationKey } = useLocation();
-  const navigationType = useNavigationType();
-  const [seenKey, setSeenKey] = useState(locationKey);
-  if (locationKey !== seenKey) {
-    setSeenKey(locationKey);
-    if (navigationType !== NavigationType.Replace) setQ(params.get('q') ?? '');
-  }
+  useAddressNavigation(() => setQ(params.get('q') ?? ''));
   const rawSort = params.get('sort');
   const sort = useMemo(() => parseSort(rawSort), [rawSort]);
 
