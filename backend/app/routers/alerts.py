@@ -1,5 +1,6 @@
-"""Alert history for the dashboard (open first, then recent resolved).
-Viewer accounts only see (and ack) alerts of their own devices."""
+"""Alert history for the dashboard: every unresolved alert, then the most
+recently resolved ones. Viewer accounts only see (and ack) alerts of their
+own devices."""
 
 from __future__ import annotations
 
@@ -16,12 +17,11 @@ async def list_alerts(
     limit: int = Query(default=50, ge=1, le=200),
     user: dict = Depends(verify_session),
 ) -> dict:
-    items = await alerts.list_recent(limit)
-    scope = person_scope(user)
-    if scope is not None:
-        visible = await devices.device_ids_for_person(scope)
-        items = [a for a in items if a["device_id"] in visible]
-    return {"alerts": items}
+    """``limit`` bounds the resolved history only; open and acknowledged
+    alerts all come back. ``resolved_truncated`` says that older resolved
+    alerts exist, so the dashboard can say it shows only the latest."""
+    items, truncated = await alerts.list_for_dashboard(limit, person_scope(user))
+    return {"alerts": items, "resolved_limit": limit, "resolved_truncated": truncated}
 
 
 @router.post("/{alert_id}/ack")

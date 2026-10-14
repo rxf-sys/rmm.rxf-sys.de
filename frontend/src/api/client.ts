@@ -122,6 +122,10 @@ export function apiErrorMessage(e: unknown): string {
   return e instanceof Error ? e.message : 'Unbekannter Fehler';
 }
 
+/** The server's upper bound for the resolved history (routers/alerts.py).
+ *  Without a limit it stopped at 50 rows. */
+const RESOLVED_ALERTS_MAX = 200;
+
 export const api = {
   login: (username: string, password: string, totpCode?: string) =>
     post<{ user: Account }>('/api/auth/login', {
@@ -150,8 +154,11 @@ export const api = {
     getChecked(DeviceDetailResponse, `/api/devices/${id}`, signal),
   deviceHistory: (id: number, hours: number, signal?: AbortSignal) =>
     get<{ samples: MetricSample[] }>(`/api/devices/${id}/history?hours=${hours}`, signal),
-  alerts: (signal?: AbortSignal): Promise<{ alerts: Alert[] }> =>
-    getChecked(AlertsResponse, '/api/alerts', signal),
+  /** Every open and acknowledged alert, and as many of the most recently
+   *  resolved as the server hands out; `resolved_truncated` says older
+   *  resolved ones were left out. */
+  alerts: (signal?: AbortSignal): Promise<{ alerts: Alert[]; resolved_limit: number; resolved_truncated: boolean }> =>
+    getChecked(AlertsResponse, `/api/alerts?limit=${RESOLVED_ALERTS_MAX}`, signal),
   ackAlert: (id: number) => post<{ alert: Alert }>(`/api/alerts/${id}/ack`),
   createDevice: (body: NewDevice) => post<{ device: Device }>('/api/devices', body),
   updateDevice: (

@@ -134,11 +134,26 @@ Bestandsskripte bekommen `sonstiges` und `danger = false`.
 
 | Methode | Pfad | Auth | Zweck |
 |---|---|---|---|
-| GET | `/api/alerts` | Session | Offene und geschlossene Alarme, Viewer-gefiltert |
+| GET | `/api/alerts` | Session | Offene und geschlossene Alarme, Viewer-gefiltert — siehe unten |
 | POST | `/api/alerts/{alert_id}/ack` | Session | Alarm quittieren; Scope wird vorher geprüft |
 | GET | `/api/inventory/search` | Session | Flottenweite Softwaresuche (`?q=`) |
 | GET | `/api/audit` | Admin | Audit-Log, gefiltert und seitenweise — siehe unten |
 | GET | `/api/audit/meta` | Admin | Bekannte Kategorien und alle je aufgetretenen Akteure, für die Filter-Auswahl |
+
+### `GET /api/alerts`
+
+Liefert **alle** nicht behobenen Alarme (offen und quittiert, neueste zuerst)
+und danach die zuletzt behobenen, sortiert nach `resolved_at`. Für
+Betrachter-Konten filtert die Datenbankabfrage selbst auf die Geräte der
+verknüpften Person, bevor begrenzt wird.
+
+| Parameter | Typ | Zweck |
+|---|---|---|
+| `limit` | 1–200, Default 50 | Höchstzahl der **behobenen** Alarme; offene und quittierte zählen nicht mit |
+
+Antwort: `{"alerts": [...], "resolved_limit": 50, "resolved_truncated": true}` —
+`resolved_truncated` heißt, dass es ältere behobene Alarme gibt, die nicht
+mitgeliefert wurden.
 
 ### `GET /api/audit`
 

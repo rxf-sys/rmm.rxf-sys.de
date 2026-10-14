@@ -111,6 +111,20 @@ describe('useFleet', () => {
     expect(vi.mocked(api.devices)).toHaveBeenCalledTimes(1);
   });
 
+  it('says how many resolved alerts the server kept when it left older ones out', async () => {
+    vi.mocked(api.alerts).mockResolvedValueOnce({ alerts: [], resolved_limit: 200, resolved_truncated: true });
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.resolvedAlertsCap).toBe(200);
+  });
+
+  it('reports no cut when the history is complete', async () => {
+    vi.mocked(api.alerts).mockResolvedValueOnce({ alerts: [], resolved_limit: 200, resolved_truncated: false });
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.resolvedAlertsCap).toBeNull();
+  });
+
   it('refetches on an explicit refresh', async () => {
     const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));

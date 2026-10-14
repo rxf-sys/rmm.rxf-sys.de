@@ -345,6 +345,7 @@ export default function App() {
                 <AlertsPage
                   persons={fleet.persons}
                   alerts={fleet.alerts}
+                  resolvedCap={fleet.resolvedAlertsCap}
                   devices={fleet.devices}
                   onOpenDevice={openDevice}
                   onRefresh={fleet.refresh}

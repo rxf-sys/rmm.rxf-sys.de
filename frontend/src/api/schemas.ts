@@ -102,7 +102,12 @@ export const AlertSchema = z.looseObject({
   acked_by: str(),
 });
 
-export const AlertsResponse = z.object({ alerts: z.array(AlertSchema) });
+export const AlertsResponse = z.object({
+  alerts: z.array(AlertSchema),
+  // Older servers send neither; their list then reads as complete.
+  resolved_limit: num(),
+  resolved_truncated: bool(),
+});
 
 export const PatchSummaryResponse = z.object({
   summary: z.catch(

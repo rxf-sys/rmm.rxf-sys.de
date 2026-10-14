@@ -8,6 +8,14 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **Alarm-Center zeigte höchstens 50 Alarme.** Die Liste kam ohne Limit und
+  der Server schnitt bei 50 Zeilen ab — vor dem Filter auf die Geräte eines
+  Betrachters. Ab 50 offenen Alarmen fehlten die ältesten im Reiter „Offen"
+  und ließen sich nicht quittieren, ein Betrachter sah seinen Alarm unter
+  Umständen gar nicht, und „Behoben" wählte nach Auslösezeit statt nach
+  Behebung aus. Jetzt kommen alle offenen und quittierten Alarme, der Filter
+  greift in der Datenbankabfrage, und von den behobenen die 200 zuletzt
+  behobenen; sind es mehr, sagt der Reiter das.
 - **RustDesk-ID ließ sich nicht korrigieren.** Das Eingabefeld erschien nur,
   solange gar keine ID hinterlegt war. Der Reiter „Fernzugriff" bietet jetzt
   „ID ändern" an; eine ungültige hinterlegte ID (etwa eine alte Eingabe mit

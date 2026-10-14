@@ -7,6 +7,10 @@ import type { Alert, Device, PatchSummary, Person } from '../types';
 export interface Fleet {
   devices: Device[];
   alerts: Alert[];
+  /** How many resolved alerts the server listed when it left older ones
+   *  out; null when the history is complete. Open and acknowledged alerts
+   *  always arrive in full. */
+  resolvedAlertsCap: number | null;
   patchSummary: PatchSummary;
   persons: Person[];
   loading: boolean;
@@ -151,6 +155,12 @@ function useFleetSocket(enabled: boolean): void {
   }, [enabled, qc]);
 }
 
+/** The alert list as the fleet query caches it. */
+export interface AlertList {
+  alerts: Alert[];
+  resolvedCap: number | null;
+}
+
 const EMPTY_DEVICES: Device[] = [];
 const EMPTY_ALERTS: Alert[] = [];
 const EMPTY_SUMMARY: PatchSummary = {};
@@ -174,7 +184,8 @@ export function useFleet(enabled: boolean): Fleet {
   const alerts = useQuery({
     ...common,
     queryKey: qk.alerts,
-    queryFn: ({ signal }) => api.alerts(signal).then((r) => r.alerts),
+    queryFn: ({ signal }): Promise<AlertList> =>
+      api.alerts(signal).then((r) => ({ alerts: r.alerts, resolvedCap: r.resolved_truncated ? r.resolved_limit : null })),
   });
   // Both are decoration on the fleet view: a failure leaves them empty
   // rather than turning the whole dashboard into an error page.
@@ -208,7 +219,8 @@ export function useFleet(enabled: boolean): Fleet {
 
   return {
     devices: devices.data ?? EMPTY_DEVICES,
-    alerts: alerts.data ?? EMPTY_ALERTS,
+    alerts: alerts.data?.alerts ?? EMPTY_ALERTS,
+    resolvedAlertsCap: alerts.data?.resolvedCap ?? null,
     patchSummary: patchSummary.data ?? EMPTY_SUMMARY,
     persons: persons.data ?? EMPTY_PERSONS,
     loading: enabled && (devices.isPending || alerts.isPending),

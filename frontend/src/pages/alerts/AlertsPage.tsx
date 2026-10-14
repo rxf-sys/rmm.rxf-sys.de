@@ -38,6 +38,9 @@ import { useCachedQueryState } from '../../hooks/useCachedQueryState';
 
 interface Props {
   alerts: Alert[];
+  /** The server listed only this many resolved alerts; null or absent when
+   *  the history is complete. */
+  resolvedCap?: number | null;
   devices: Device[];
   persons: Person[];
   onOpenDevice: (id: number) => void;
@@ -202,7 +205,7 @@ function Empty({
  * as much as at a desk. Acknowledging is open to every role for the devices
  * it can see; the server checks each alert on its own.
  */
-export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }: Props) {
+export function AlertsPage({ alerts, resolvedCap = null, devices, persons, onOpenDevice, onRefresh }: Props) {
   const qc = useQueryClient();
   const now = useNow();
   const { ask, dialog: confirmDialog } = useConfirm();
@@ -227,7 +230,7 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
       { replace: true },
     );
 
-  const cached = useCachedQueryState<Alert[]>(qk.alerts);
+  const cached = useCachedQueryState(qk.alerts);
   const state = listState(alerts.length, devices.length, cached);
   // Only for the origin line ("which rule raised this?"). Without the rules a
   // row still names its device and message, and a server that is down is
@@ -551,6 +554,13 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
             </div>
           )}
           <Pagination {...pager} label="Alarme" />
+          {/* "Noch nichts behoben" or a short list must not pass for the
+              whole history when the server cut it. */}
+          {tab === 'behoben' && ready && resolvedCap !== null && (
+            <p className="al-pad muted">
+              Gezeigt werden nur die {resolvedCap.toLocaleString('de-DE')} zuletzt behobenen Alarme.
+            </p>
+          )}
         </div>
       </Panel>
     </div>

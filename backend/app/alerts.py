@@ -290,6 +290,45 @@ async def list_recent(limit: int = 50) -> list[dict[str, Any]]:
     return [_row_to_dict(r) for r in rows]
 
 
+# A NULL person matches every device, so one fixed query serves both the
+# full fleet and a viewer's scope.
+_UNRESOLVED_SQL = (
+    "SELECT * FROM alerts WHERE resolved_at IS NULL"
+    " AND (? IS NULL OR device_id IN (SELECT id FROM devices WHERE person_id = ?))"
+    " ORDER BY fired_at DESC, id DESC"
+)
+_RESOLVED_SQL = (
+    "SELECT * FROM alerts WHERE resolved_at IS NOT NULL"
+    " AND (? IS NULL OR device_id IN (SELECT id FROM devices WHERE person_id = ?))"
+    " ORDER BY resolved_at DESC, id DESC LIMIT ?"
+)
+
+
+async def list_for_dashboard(
+    resolved_limit: int, person_id: int | None = None
+) -> tuple[list[dict[str, Any]], bool]:
+    """What the Alarm-Center shows: every unresolved alert (open and
+    acknowledged), newest first, then the ``resolved_limit`` most recently
+    resolved ones. Returns the rows and whether older resolved ones exist.
+
+    Unresolved alerts are never cut: each one is something to act on, and a
+    window that drops some made them impossible to see or acknowledge. Only
+    the history is bounded, and it is picked by when an alert cleared, not
+    when it fired. ``person_id`` narrows both parts to that person's devices
+    (viewer scope) in SQL, so the bound counts only rows the caller may see.
+    """
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(_UNRESOLVED_SQL, (person_id, person_id)) as cur:
+            unresolved = await cur.fetchall()
+        # One row past the bound tells whether the history was cut.
+        async with db.execute(_RESOLVED_SQL, (person_id, person_id, resolved_limit + 1)) as cur:
+            resolved = await cur.fetchall()
+    truncated = len(resolved) > resolved_limit
+    rows = [*unresolved, *resolved[:resolved_limit]]
+    return [_row_to_dict(r) for r in rows], truncated
+
+
 async def for_device(device_id: int, limit: int = 30) -> list[dict[str, Any]]:
     """A device's alert history, newest first."""
     async with _connect() as db:

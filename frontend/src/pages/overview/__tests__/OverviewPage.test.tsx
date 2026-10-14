@@ -71,6 +71,7 @@ function fleet(over: Partial<Fleet> = {}): Fleet {
   return {
     devices: [device()],
     alerts: [],
+    resolvedAlertsCap: null,
     patchSummary: {},
     persons: [],
     loading: false,
