@@ -217,6 +217,14 @@ describe('DocsPage', () => {
     expect(spy.mock.contexts[0]).toBe(document.getElementById('rustdesk'));
   });
 
+  it('survives a malformed fragment from a hand-edited link', async () => {
+    const spy = vi.spyOn(Element.prototype, 'scrollIntoView');
+    show('/doku#100%');
+    await act(() => new Promise<void>((done) => requestAnimationFrame(() => done())));
+    expect(screen.getByRole('heading', { level: 1, name: 'Dokumentation' })).toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('ignores a fragment that names no section', async () => {
     const spy = vi.spyOn(Element.prototype, 'scrollIntoView');
     show('/doku#nirgends');

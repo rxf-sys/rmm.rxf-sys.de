@@ -29,6 +29,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Alarm-Sturm erzeugte Abruf-Sturm.** Jeder ausgelöste Alarm schickte einen
   eigenen Fleet-Hinweis. Fallen viele Geräte gleichzeitig aus, bündelt der
   Server die Hinweise jetzt in ein Fenster von 0,5 s.
+- **Dokumentation: kaputter Link legte die Seite lahm.** Ein von Hand
+  verändertes oder abgeschnittenes Sprungziel wie `/doku#100%` ersetzte die
+  ganze Seite durch die Fehleransicht. Ein unbekanntes Ziel wird jetzt
+  einfach ignoriert.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist
