@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
@@ -113,5 +113,26 @@ describe('OverviewPage when data is missing', () => {
     expect(stats).not.toHaveTextContent('alles aktuell');
     expect(stats).not.toHaveTextContent('nichts offen');
     expect(stats).toHaveTextContent('nicht geladen');
+  });
+});
+
+describe('OverviewPage activity', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    auditMock.mockResolvedValue({ events: [], total: 0 });
+  });
+
+  it.each<Role>(['techniker', 'viewer'])('never asks the admin-only audit log as %s', async (role) => {
+    show({}, role);
+    // Let a request that would have started settle.
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Flottenlast' })).toBeInTheDocument());
+    expect(auditMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: 'Letzte Aktivität' })).not.toBeInTheDocument();
+  });
+
+  it('shows the latest activity to an admin', async () => {
+    show({}, 'admin');
+    await waitFor(() => expect(auditMock).toHaveBeenCalled());
+    expect(screen.getByRole('heading', { name: 'Letzte Aktivität' })).toBeInTheDocument();
   });
 });

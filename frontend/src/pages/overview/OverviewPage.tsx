@@ -117,15 +117,19 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
     return () => clearInterval(t);
   }, []);
 
-  // Aktivität ist Admin-Sache: für alle anderen antwortet der Endpunkt mit
-  // 403 — dann fehlt die Karte, statt „Keine Ereignisse" zu behaupten.
+  // The audit log is admin-only. Other roles never ask: the endpoint answers
+  // them with 403 and the interval would repeat the refusal every minute. A
+  // 403 despite the admin role (role changed meanwhile) hides the card too,
+  // instead of claiming "Keine Ereignisse".
+  const isAdmin = user.role === 'admin';
   const activity = useQuery({
     queryKey: ['overview', 'activity'],
     queryFn: ({ signal }) => api.audit({ limit: 6 }, signal).then((r) => r.events),
+    enabled: isAdmin,
     refetchInterval: 60_000,
     retry: false,
   });
-  const activityHidden = activity.error instanceof ApiError && activity.error.status === 403;
+  const activityHidden = !isAdmin || (activity.error instanceof ApiError && activity.error.status === 403);
   const metrics = useQuery({
     queryKey: ['fleet-metrics', CHART_HOURS],
     queryFn: ({ signal }) => api.fleetMetrics(CHART_HOURS, signal).then((r) => r.samples),
