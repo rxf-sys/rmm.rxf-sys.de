@@ -18,7 +18,7 @@
 # Backend wird neu gestartet, damit es das Manifest lädt.
 set -euo pipefail
 
-GO_IMAGE="golang:1.25-alpine"
+GO_IMAGE="golang:1.26-alpine"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 OUT="$HERE/agent-releases"
