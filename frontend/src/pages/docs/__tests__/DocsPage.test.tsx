@@ -92,15 +92,23 @@ describe('DocsPage', () => {
     }
   });
 
+  it('names each copy button after the command it copies', async () => {
+    show();
+    expect(await section('rustdesk').findByRole('button', { name: 'Kopieren: Linux und macOS' })).toBeInTheDocument();
+    expect(section('windows-agent').getByRole('button', { name: 'Kopieren: PowerShell als Administrator' })).toBeInTheDocument();
+    expect(section('rustdesk').getByRole('button', { name: 'Kopieren: Windows' })).toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { name: 'Kopieren' })).toHaveLength(0);
+  });
+
   it('puts this server into the one-liner and copies it exactly', async () => {
     const user = userEvent.setup();
     show();
     const windows = section('windows-agent');
-    await user.click(windows.getAllByRole('button', { name: 'Kopieren' })[0]!);
+    await user.click(windows.getByRole('button', { name: 'Kopieren: PowerShell als Administrator' }));
     expect(await navigator.clipboard.readText()).toBe(
       `irm -Headers @{'X-Enroll-Token'='<TOKEN>'} '${window.location.origin}/api/agent/setup/windows' | iex`,
     );
-    expect(windows.getByRole('button', { name: 'Kopiert' })).toBeInTheDocument();
+    expect(windows.getByRole('button', { name: 'Kopiert: PowerShell als Administrator' })).toBeInTheDocument();
     expect(windows.getByText('In die Zwischenablage kopiert')).toBeInTheDocument();
   });
 
@@ -120,11 +128,11 @@ describe('DocsPage', () => {
     vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'));
     show();
     const errors = section('windows-fehler');
-    await user.click(errors.getAllByRole('button', { name: 'Kopieren' })[0]!);
+    await user.click(errors.getByRole('button', { name: 'Kopieren: PowerShell' }));
     await waitFor(() => expect(notify.warning).toHaveBeenCalledWith('Nicht kopiert', expect.stringContaining('markiert')));
     const pre = errors.getByText(/SecurityProtocol = /).closest('pre');
     expect(window.getSelection()?.anchorNode).toBe(pre);
-    expect(errors.queryByRole('button', { name: 'Kopiert' })).not.toBeInTheDocument();
+    expect(errors.queryByRole('button', { name: /^Kopiert/ })).not.toBeInTheDocument();
   });
 
   it('shows the live relay, key and ready-to-paste RustDesk commands', async () => {
