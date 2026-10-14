@@ -47,7 +47,10 @@ export default defineConfig({
           },
         },
         {
-          command: 'npm run build && npx vite preview --port 4173 --strictPort',
+          // The host is spelled out: by default Vite listens on whatever
+          // "localhost" resolves to first, which is ::1 on a GitHub runner,
+          // and the wait for 127.0.0.1 would never end.
+          command: 'npm run build && npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
           url: BASE,
           reuseExistingServer: false,
           timeout: 180_000,
