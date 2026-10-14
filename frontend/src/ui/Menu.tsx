@@ -74,9 +74,17 @@ export function Menu({ trigger, items, label, placement = 'bottom-end' }: Props)
     if (returnFocus) triggerRef.current?.focus();
   }, []);
 
+  // Focus goes in once the menu is placed: until then it has visibility:
+  // hidden, and a browser ignores focus() on such an element. On the first
+  // open of each menu that left focus on the button, with arrow keys and
+  // Escape dead and Tab leaving the menu open behind.
+  const visible = style.visibility !== 'hidden';
+  useEffect(() => {
+    if (open && visible) focusAt(0);
+  }, [open, visible, focusAt]);
+
   useEffect(() => {
     if (!open) return;
-    focusAt(0);
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
       if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
@@ -84,7 +92,7 @@ export function Menu({ trigger, items, label, placement = 'bottom-end' }: Props)
     };
     document.addEventListener('pointerdown', onDown);
     return () => document.removeEventListener('pointerdown', onDown);
-  }, [open, close, focusAt]);
+  }, [open, close]);
 
   const onMenuKey = (e: ReactKeyboardEvent) => {
     const els = itemEls();
@@ -106,7 +114,12 @@ export function Menu({ trigger, items, label, placement = 'bottom-end' }: Props)
       e.stopPropagation();
       close(true);
     } else if (e.key === 'Tab') {
-      close(false);
+      // The menu sits at the end of <body> (portal), so the browser's Tab
+      // would go on from there, back to the top of the page. Put focus on
+      // the button first: Tab then moves on to what follows it, and
+      // Shift+Tab, with the menu logically after the button, stops on it.
+      if (e.shiftKey) e.preventDefault();
+      close(true);
     }
   };
 
