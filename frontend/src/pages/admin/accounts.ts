@@ -1,5 +1,5 @@
 import { ApiError } from '../../api/client';
-import type { Account, Role } from '../../types';
+import type { Account, Person, Role } from '../../types';
 
 /** Query keys of this page. Not under 'fleet': the fleet socket has nothing
  *  to say about accounts, sessions or settings. */
@@ -7,6 +7,9 @@ export const adminKeys = {
   accounts: ['admin', 'accounts'] as const,
   sessions: ['admin', 'sessions'] as const,
   ntfy: ['admin', 'ntfy'] as const,
+  // Not the fleet's persons query: that one turns any failure into an empty
+  // list, and the person picker would then say "no persons yet".
+  persons: ['admin', 'persons'] as const,
 };
 
 /** Same floor as the server (MIN_PASSWORD_LEN in backend/app/accounts.py). */
@@ -39,14 +42,21 @@ export const explain = (e: unknown): unknown => (isForbidden(e) ? new Error(FORB
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+/** A viewer only sees the devices of its person (person_scope in
+ *  backend/app/auth.py); without one it signs in to an empty dashboard. */
+export const seesNothing = (a: Account): boolean => a.role === 'viewer' && a.person_id == null;
+
 /** The panel's one-line reading: how many, and what needs a look. */
 export function accountSummary(list: Account[]): string {
   const parts = [plural(list.length, 'Konto', 'Konten')];
   const off = list.filter((a) => a.disabled).length;
-  // A disabled account cannot sign in, so its missing second factor is no risk.
+  // A disabled account cannot sign in: neither a missing second factor nor
+  // a missing person matters for it.
   const open = list.filter((a) => !a.disabled && !a.totp_enabled).length;
+  const blind = list.filter((a) => !a.disabled && seesNothing(a)).length;
   if (off > 0) parts.push(`${off} deaktiviert`);
   if (open > 0) parts.push(`${open} ohne Zwei-Faktor`);
+  if (blind > 0) parts.push(`${blind} Betrachter ohne Person`);
   return parts.join(' · ');
 }
 
@@ -126,9 +136,12 @@ export interface AccountDraft {
   password: string;
   role: Role;
   email: string;
+  /** The person a viewer sees; null while none is chosen. */
+  personId: number | null;
 }
 
-export const EMPTY_DRAFT: AccountDraft = { username: '', password: '', role: 'viewer', email: '' };
+/** Viewer first, the fewest rights — which is why it needs its person. */
+export const EMPTY_DRAFT: AccountDraft = { username: '', password: '', role: 'viewer', email: '', personId: null };
 
 /** The server compares names without case (COLLATE NOCASE). */
 export function nameTaken(name: string, accounts: Account[]): boolean {
@@ -148,8 +161,24 @@ export function passwordHint(pw: string): string {
 }
 
 export function draftReady(d: AccountDraft, accounts: Account[]): boolean {
-  return d.username.trim() !== '' && !nameTaken(d.username, accounts) && passwordShortfall(d.password) === 0;
+  return (
+    d.username.trim() !== '' &&
+    !nameTaken(d.username, accounts) &&
+    passwordShortfall(d.password) === 0 &&
+    (d.role !== 'viewer' || (d.personId ?? 0) > 0)
+  );
 }
+
+/** The person list as a picker needs it: still loading, failed, or there. */
+export interface PersonChoices {
+  list: Person[] | undefined;
+  error: unknown;
+  retry: () => void;
+}
+
+/** Persons in the order a picker offers them. */
+export const byPersonName = (list: Person[]): Person[] =>
+  [...list].sort((a, b) => a.name.localeCompare(b.name, 'de', { sensitivity: 'base' }));
 
 /** An authenticator code: six digits, whatever else was pasted with it. */
 export const totpCode = (raw: string): string => raw.replace(/\D/g, '').slice(0, 6);

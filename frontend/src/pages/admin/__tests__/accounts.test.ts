@@ -87,9 +87,18 @@ describe('sorting', () => {
 
 describe('accountSummary', () => {
   it('counts, and names only what needs a look', () => {
-    expect(accountSummary([acc(1, 'a', { totp_enabled: true })])).toBe('1 Konto');
+    expect(accountSummary([acc(1, 'a', { totp_enabled: true, person_id: 4 })])).toBe('1 Konto');
     // A disabled account without a second factor cannot sign in; no risk.
-    expect(accountSummary(list)).toBe('4 Konten · 1 deaktiviert · 2 ohne Zwei-Faktor');
+    expect(accountSummary(list)).toBe('4 Konten · 1 deaktiviert · 2 ohne Zwei-Faktor · 1 Betrachter ohne Person');
+  });
+
+  it('counts a viewer without a person as needing a look, unless it cannot sign in', () => {
+    const on = { totp_enabled: true };
+    expect(accountSummary([acc(1, 'a', { ...on, person_id: 4 })])).toBe('1 Konto');
+    expect(accountSummary([acc(1, 'a', on), acc(2, 'b', { ...on, person_id: null })])).toBe('2 Konten · 2 Betrachter ohne Person');
+    expect(accountSummary([acc(1, 'a', { ...on, disabled: true })])).toBe('1 Konto · 1 deaktiviert');
+    // Only a viewer's sight hangs on the person.
+    expect(accountSummary([acc(1, 'a', { ...on, role: 'techniker' })])).toBe('1 Konto');
   });
 });
 
@@ -118,10 +127,21 @@ describe('account form', () => {
   });
 
   it('is ready with a free name and a long enough password', () => {
-    expect(draftReady(EMPTY_DRAFT, list)).toBe(false);
-    expect(draftReady({ ...EMPTY_DRAFT, username: 'erik', password: 'geheim123' }, list)).toBe(true);
-    expect(draftReady({ ...EMPTY_DRAFT, username: 'anna', password: 'geheim123' }, list)).toBe(false);
-    expect(draftReady({ ...EMPTY_DRAFT, username: 'erik', password: 'kurz' }, list)).toBe(false);
+    const tech = { ...EMPTY_DRAFT, role: 'techniker' as const };
+    expect(draftReady(tech, list)).toBe(false);
+    expect(draftReady({ ...tech, username: 'erik', password: 'geheim123' }, list)).toBe(true);
+    expect(draftReady({ ...tech, username: 'anna', password: 'geheim123' }, list)).toBe(false);
+    expect(draftReady({ ...tech, username: 'erik', password: 'kurz' }, list)).toBe(false);
+  });
+
+  it('makes a viewer ready only together with its person', () => {
+    // Without one the server scopes it to nothing: an account that sees no device.
+    const viewer = { ...EMPTY_DRAFT, username: 'erik', password: 'geheim123' };
+    expect(viewer.role).toBe('viewer');
+    expect(viewer.personId).toBeNull();
+    expect(draftReady(viewer, list)).toBe(false);
+    expect(draftReady({ ...viewer, personId: 7 }, list)).toBe(true);
+    expect(draftReady({ ...viewer, role: 'techniker' }, list)).toBe(true);
   });
 });
 

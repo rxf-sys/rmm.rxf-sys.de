@@ -49,6 +49,16 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   ändern“ ließen den Browser Adressen wie „jürgen@firma.de“ zurückweisen,
   die der Server problemlos speichert. Die Felder prüft jetzt nur noch der
   Server.
+- **Betrachter-Konten aus der Administration sahen nichts.** Ein
+  Betrachter sieht nur die Geräte seiner Person, doch „Konto anlegen“ bot
+  keine Person an (und schlug ausgerechnet „Betrachter“ vor), und ein
+  herabgestuftes Konto ließ sich nirgends verknüpfen — es meldete sich an
+  einem leeren Dashboard an. „Konto anlegen“ verlangt für Betrachter jetzt
+  eine Person, das Menü jeder Betrachter-Zeile bietet „Person zuordnen …“
+  bzw. „Person ändern …“, und wer ein Konto ohne Person zum Betrachter
+  macht, wird vorher gefragt. Die Kontenliste nennt die Person unter der
+  Rolle und markiert Betrachter ohne Person. Die Verknüpfung landet im
+  Audit-Log; `POST /api/accounts` nimmt dafür `person_id` an.
 - **RustDesk-ID ließ sich nicht korrigieren.** Das Eingabefeld erschien nur,
   solange gar keine ID hinterlegt war. Der Reiter „Fernzugriff" bietet jetzt
   „ID ändern" an; eine ungültige hinterlegte ID (etwa eine alte Eingabe mit

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
-import type { Account, NtfyConfig, SessionInfo } from '../../../types';
+import type { Account, NtfyConfig, Person, SessionInfo } from '../../../types';
 import { AdminPage } from '../AdminPage';
 import { FORBIDDEN_TEXT, SELF_LOCK, adminKeys } from '../accounts';
 
@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   createAccount: vi.fn<(body: unknown) => Promise<{ account: Account }>>(),
   updateAccount: vi.fn<(id: number, body: unknown) => Promise<{ account: Account }>>(),
   deleteAccount: vi.fn<(id: number) => Promise<{ ok: boolean }>>(),
+  persons: vi.fn<() => Promise<{ persons: Person[] }>>(),
   sessions: vi.fn<() => Promise<{ sessions: SessionInfo[] }>>(),
   revokeSession: vi.fn<(prefix: string) => Promise<{ ok: boolean }>>(),
   revokeOtherSessions: vi.fn<() => Promise<{ ok: boolean; revoked: number }>>(),
@@ -32,6 +33,7 @@ vi.mock('../../../api/client', async () => {
       createAccount: (body: unknown) => m.createAccount(body),
       updateAccount: (id: number, body: unknown) => m.updateAccount(id, body),
       deleteAccount: (id: number) => m.deleteAccount(id),
+      persons: () => m.persons(),
       sessions: () => m.sessions(),
       revokeSession: (prefix: string) => m.revokeSession(prefix),
       revokeOtherSessions: () => m.revokeOtherSessions(),
@@ -63,6 +65,9 @@ const acc = (id: number, username: string, over: Partial<Account> = {}): Account
 const me = acc(1, 'admin', { role: 'admin', email: 'admin@example.org', last_login_at: 1_700_000_000 });
 const bob = acc(2, 'bob', { role: 'techniker', totp_enabled: true });
 const carla = acc(3, 'carla', { role: 'viewer', disabled: true });
+const person = (id: number, name: string): Person => ({ id, name, email: '', phone: '', notes: '', created_at: 0, device_count: 0 });
+const anna = person(10, 'Anna');
+const ben = person(11, 'Ben');
 
 function show(user: Account = me) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -87,6 +92,7 @@ describe('AdminPage', () => {
     m.accounts.mockResolvedValue({ accounts: [me, bob, carla] });
     m.updateAccount.mockResolvedValue({ account: bob });
     m.deleteAccount.mockResolvedValue({ ok: true });
+    m.persons.mockResolvedValue({ persons: [ben, anna] });
     m.sessions.mockResolvedValue({
       sessions: [
         { token_prefix: 'aaaa1111', created_at: 1_700_000_000, expires_at: 1_800_000_000, last_seen_at: 1_700_000_100, current: true },
@@ -245,8 +251,118 @@ describe('AdminPage', () => {
     const dialog = screen.getByRole('dialog', { name: 'Konto anlegen' });
     await userEvent.type(within(dialog).getByLabelText('Benutzername'), 'erik');
     await userEvent.type(within(dialog).getByLabelText('Passwort'), 'geheim123');
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Techniker' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Konto anlegen' }));
     expect(await within(dialog).findByText(FORBIDDEN_TEXT)).toBeInTheDocument();
+  });
+
+  it('creates a viewer only together with the person whose devices it sees', async () => {
+    m.createAccount.mockResolvedValue({ account: acc(9, 'erik', { person_id: 10 }) });
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Konto anlegen' }));
+    const dialog = screen.getByRole('dialog', { name: 'Konto anlegen' });
+    const submit = within(dialog).getByRole('button', { name: 'Konto anlegen' });
+    await userEvent.type(within(dialog).getByLabelText('Benutzername'), 'erik');
+    await userEvent.type(within(dialog).getByLabelText('Passwort'), 'geheim123');
+    // Betrachter is the default; without a person it would see nothing at all.
+    expect(within(dialog).getByRole('radio', { name: 'Betrachter' })).toBeChecked();
+    expect(submit).toBeDisabled();
+    const select = await within(dialog).findByRole('combobox', { name: 'Person' });
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Person wählen …', 'Anna', 'Ben']);
+    await userEvent.selectOptions(select, 'Anna');
+    await userEvent.click(submit);
+    await waitFor(() =>
+      expect(m.createAccount).toHaveBeenCalledWith({ username: 'erik', password: 'geheim123', role: 'viewer', email: undefined, person_id: 10 }),
+    );
+  });
+
+  it('sends no person for a role that sees every device', async () => {
+    m.createAccount.mockResolvedValue({ account: acc(9, 'erik', { role: 'techniker' }) });
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Konto anlegen' }));
+    const dialog = screen.getByRole('dialog', { name: 'Konto anlegen' });
+    await userEvent.type(within(dialog).getByLabelText('Benutzername'), 'erik');
+    await userEvent.type(within(dialog).getByLabelText('Passwort'), 'geheim123');
+    await userEvent.selectOptions(await within(dialog).findByRole('combobox', { name: 'Person' }), 'Anna');
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Techniker' }));
+    expect(within(dialog).queryByRole('combobox', { name: 'Person' })).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Konto anlegen' }));
+    await waitFor(() => expect(m.createAccount).toHaveBeenCalledWith(expect.objectContaining({ role: 'techniker', person_id: undefined })));
+  });
+
+  it('says where viewers come from when there is no person yet', async () => {
+    m.persons.mockResolvedValue({ persons: [] });
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Konto anlegen' }));
+    const dialog = screen.getByRole('dialog', { name: 'Konto anlegen' });
+    expect(await within(dialog).findByText(/Noch keine Personen/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('link', { name: 'Personen' })).toHaveAttribute('href', '/personen');
+  });
+
+  it('does not mistake a failed person list for an empty one', async () => {
+    m.persons.mockRejectedValue(new TypeError('Failed to fetch'));
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Konto anlegen' }));
+    const dialog = screen.getByRole('dialog', { name: 'Konto anlegen' });
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Server nicht erreichbar');
+    expect(within(dialog).queryByText(/Noch keine Personen/)).not.toBeInTheDocument();
+  });
+
+  it('links a viewer to a person from its row, which then says whose devices it sees', async () => {
+    const dora = acc(4, 'dora');
+    m.accounts.mockResolvedValue({ accounts: [me, bob, dora] });
+    m.updateAccount.mockResolvedValue({ account: { ...dora, person_id: 10 } });
+    show();
+    await screen.findByRole('table');
+    const row = () => screen.getByRole('button', { name: 'Aktionen für dora' }).closest('tr')!;
+    expect(within(row()).getByText('keine Person')).toBeInTheDocument();
+    expect(screen.getByText(/1 Betrachter ohne Person/)).toBeInTheDocument();
+    // Techniker see every device; nothing to link for bob.
+    const bobMenu = await openMenu('bob');
+    expect(within(bobMenu).queryByRole('menuitem', { name: /Person/ })).not.toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+
+    const menu = await openMenu('dora');
+    await userEvent.click(within(menu).getByRole('menuitem', { name: /Person zuordnen/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Person für „dora“' });
+    const save = within(dialog).getByRole('button', { name: 'Speichern' });
+    expect(save).toBeDisabled();
+    await userEvent.selectOptions(await within(dialog).findByRole('combobox', { name: 'Person' }), 'Anna');
+    m.accounts.mockResolvedValue({ accounts: [me, bob, { ...dora, person_id: 10 }] });
+    await userEvent.click(save);
+    await waitFor(() => expect(m.updateAccount).toHaveBeenCalledWith(4, { person_id: 10 }));
+    expect(t.success).toHaveBeenCalledWith('Person zugeordnet', '„dora“ sieht jetzt die Geräte von „Anna“.');
+    await waitFor(() => expect(within(row()).getByText('für Anna')).toBeInTheDocument());
+    expect(screen.queryByText(/ohne Person/)).not.toBeInTheDocument();
+  });
+
+  it('unlinks a person only after saying what the viewer loses', async () => {
+    const eva = acc(5, 'eva', { person_id: 10 });
+    m.accounts.mockResolvedValue({ accounts: [me, eva] });
+    show();
+    const menu = await openMenu('eva');
+    await userEvent.click(within(menu).getByRole('menuitem', { name: /Person ändern/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Person für „eva“' });
+    const select = await within(dialog).findByRole('combobox', { name: 'Person' });
+    expect(select).toHaveValue('10');
+    await userEvent.selectOptions(select, 'Keine Person');
+    expect(within(dialog).getByText('Ohne Person sieht „eva“ keine Geräte mehr.')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(m.updateAccount).toHaveBeenCalledWith(5, { person_id: 0 }));
+    expect(t.success).toHaveBeenCalledWith('Person gelöst', '„eva“ ist mit keiner Person mehr verknüpft.');
+  });
+
+  it('asks before making a viewer of an account without a person', async () => {
+    show();
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Rolle von bob' }), 'viewer');
+    const dialog = screen.getByRole('dialog', { name: '„bob“ zum Betrachter machen?' });
+    expect(dialog).toHaveTextContent('sieht danach keine Geräte');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Zum Betrachter machen' }));
+    await waitFor(() => expect(m.updateAccount).toHaveBeenCalledWith(2, { role: 'viewer' }));
   });
 
   it('sets a password for the account the menu belongs to', async () => {

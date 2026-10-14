@@ -1,10 +1,25 @@
 import { useId, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { Modal } from '../../components/Modal';
 import { roleLabel } from '../../format';
 import { IconEye } from '../../icons';
+import { PAGE_PATH } from '../../routes';
 import type { Account } from '../../types';
-import { ErrorNote } from '../../ui';
-import { EMPTY_DRAFT, MIN_PASSWORD, ROLES, ROLE_HINT, draftReady, explain, nameTaken, passwordHint, passwordShortfall, type AccountDraft } from './accounts';
+import { ErrorNote, SkeletonRows } from '../../ui';
+import {
+  EMPTY_DRAFT,
+  MIN_PASSWORD,
+  ROLES,
+  ROLE_HINT,
+  byPersonName,
+  draftReady,
+  explain,
+  nameTaken,
+  passwordHint,
+  passwordShortfall,
+  type AccountDraft,
+  type PersonChoices,
+} from './accounts';
 
 /** Submit state shared by the dialogs: a failed request keeps the dialog
  *  open with the server's reason, so nothing typed is lost. */
@@ -72,12 +87,75 @@ function PasswordField({ label, value, onChange, hint }: { label: string; value:
   );
 }
 
+/**
+ * The person whose devices an account sees. `value` is null while none is
+ * chosen and 0 for "no person". A list that failed to load says so rather
+ * than passing for an empty one; an empty one says where persons come from.
+ */
+function PersonField({
+  persons,
+  value,
+  onChange,
+  allowNone,
+  hint,
+}: {
+  persons: PersonChoices;
+  value: number | null;
+  onChange: (id: number) => void;
+  allowNone: boolean;
+  hint?: string;
+}) {
+  const id = useId();
+  if (!persons.list) return persons.error ? <ErrorNote error={explain(persons.error)} onRetry={persons.retry} /> : <SkeletonRows rows={1} />;
+  if (persons.list.length === 0 && !allowNone)
+    return (
+      <p className="field-hint">
+        Noch keine Personen. Ein Betrachter sieht nur die Geräte seiner Person — wer unter <Link to={PAGE_PATH.persons}>Personen</Link> angelegt
+        wird, bekommt sein Betrachter-Konto gleich mit.
+      </p>
+    );
+  return (
+    <div className="field">
+      <label className="field-label" htmlFor={id}>
+        Person
+      </label>
+      <select
+        id={id}
+        className="input"
+        required
+        value={value === null ? '' : String(value)}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-describedby={hint ? `${id}-hint` : undefined}
+      >
+        {value === null && (
+          <option value="" disabled>
+            Person wählen …
+          </option>
+        )}
+        {byPersonName(persons.list).map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+        {allowNone && <option value="0">Keine Person</option>}
+      </select>
+      {hint && (
+        <span className="field-hint" id={`${id}-hint`}>
+          {hint}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function CreateAccountDialog({
   accounts,
+  persons,
   onCreate,
   onClose,
 }: {
   accounts: Account[];
+  persons: PersonChoices;
   onCreate: (d: AccountDraft) => Promise<void>;
   onClose: () => void;
 }) {
@@ -152,6 +230,11 @@ export function CreateAccountDialog({
             {ROLE_HINT[d.role]}
           </span>
         </div>
+        {/* Only a viewer's sight hangs on a person (person_scope on the
+            server); without one it would sign in to an empty dashboard. */}
+        {d.role === 'viewer' && (
+          <PersonField persons={persons} value={d.personId} onChange={(personId) => setD({ ...d, personId })} allowNone={false} />
+        )}
         <ErrorNote error={error} />
         <Actions onClose={onClose} label="Konto anlegen" disabled={busy || !draftReady(d, accounts)} />
       </form>
@@ -213,6 +296,44 @@ export function EmailDialog({ account, onSave, onClose }: { account: Account; on
             Leer lassen, um die Adresse zu entfernen.
           </span>
         </div>
+        <ErrorNote error={error} />
+        <Actions onClose={onClose} label="Speichern" disabled={busy || unchanged} />
+      </form>
+    </Modal>
+  );
+}
+
+/** Link an account to a person, move it, or (if it has one) remove it. */
+export function PersonDialog({
+  account,
+  persons,
+  onSave,
+  onClose,
+}: {
+  account: Account;
+  persons: PersonChoices;
+  onSave: (personId: number) => Promise<void>;
+  onClose: () => void;
+}) {
+  const linked = account.person_id ?? null;
+  const [personId, setPersonId] = useState<number | null>(linked);
+  const { busy, error, submit } = useSubmit(onSave);
+  const unchanged = personId === null || personId === (linked ?? 0);
+  const name = `„${account.username}“`;
+  const hint =
+    account.role !== 'viewer'
+      ? `Als ${roleLabel(account.role)} sieht ${name} ohnehin alle Geräte; die Person zeigt das Konto nur auf ihrer Seite.`
+      : personId === 0
+        ? `Ohne Person sieht ${name} keine Geräte mehr.`
+        : `${name} sieht nur die Geräte der gewählten Person.`;
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (personId !== null && !unchanged && !busy) void submit(personId);
+  };
+  return (
+    <Modal title={`Person für ${name}`} onClose={onClose}>
+      <form className="form-stack" onSubmit={onSubmit}>
+        <PersonField persons={persons} value={personId} onChange={setPersonId} allowNone={linked !== null} hint={hint} />
         <ErrorNote error={error} />
         <Actions onClose={onClose} label="Speichern" disabled={busy || unchanged} />
       </form>

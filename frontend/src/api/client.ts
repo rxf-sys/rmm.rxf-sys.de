@@ -248,11 +248,12 @@ export const api = {
 
   // Accounts (admin panel)
   accounts: (signal?: AbortSignal) => get<{ accounts: Account[] }>('/api/accounts', signal),
-  createAccount: (body: { username: string; password: string; role: string; email?: string }) =>
+  createAccount: (body: { username: string; password: string; role: string; email?: string; person_id?: number }) =>
     post<{ account: Account }>('/api/accounts', body),
+  /** `person_id: 0` unlinks the person; leaving it out keeps the link. */
   updateAccount: (
     id: number,
-    body: { role?: string; disabled?: boolean; password?: string; email?: string; reset_totp?: boolean },
+    body: { role?: string; disabled?: boolean; password?: string; email?: string; reset_totp?: boolean; person_id?: number },
   ) => patch<{ account: Account }>(`/api/accounts/${id}`, body),
   deleteAccount: (id: number) => del<{ ok: boolean }>(`/api/accounts/${id}`),
   deleteDevice: (id: number) => del<{ ok: boolean }>(`/api/devices/${id}`),

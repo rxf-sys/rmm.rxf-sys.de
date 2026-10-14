@@ -120,6 +120,20 @@
   gap: 2px;
   font-weight: 600;
 }
+/* Whose devices the account sees, under its role. */
+.ad-person {
+  display: block;
+  max-width: 160px;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ad-card-facts .ad-person {
+  max-width: 100%;
+}
 
 .ad-foot {
   display: flex;
