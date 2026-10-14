@@ -6,6 +6,11 @@ when an agent connects or disconnects, when an alert fires or resolves, and
 when a patch scan updates — not on every heartbeat. Hints carry no
 payload — the client re-reads the REST endpoints it already knows, which
 keeps this hub trivial and authorization in one place (the REST layer).
+
+Hints are coalesced: everything broadcast within ``coalesce_s`` goes out as
+one message. An alert storm (a site losing its uplink takes hundreds of
+devices offline within a minute) otherwise sent one hint per alert, and every
+open dashboard answered each with a full refetch of the device list.
 """
 
 from __future__ import annotations
@@ -26,6 +31,12 @@ class FleetHub:
         # strong one here a broadcast can be garbage-collected mid-send and
         # the hint silently disappears.
         self._tasks: set[asyncio.Task[None]] = set()
+        self._pending: set[str] = set()
+        # The flush waiting out the coalescing window. Kept as the task, not
+        # as a flag: a flush that dies with its event loop or is cancelled
+        # never resets a flag, and the hub would then send nothing ever again.
+        self._flush_task: asyncio.Task[None] | None = None
+        self.coalesce_s = 0.5
 
     async def subscribe(self, ws: WebSocket) -> None:
         async with self._lock:
@@ -37,14 +48,34 @@ class FleetHub:
 
     def broadcast(self, kind: str) -> None:
         """Fire-and-forget a refresh hint to every subscriber. Safe to call
-        from sync code paths — schedules the async send on the running loop."""
+        from sync code paths — schedules the async send on the running loop.
+        Calls within ``coalesce_s`` of the first one share a single send."""
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
-        task = loop.create_task(self._broadcast(kind))
+        flush = self._flush_task
+        if flush is not None and not flush.done() and flush.get_loop() is loop:
+            self._pending.add(kind)
+            return
+        if flush is not None:
+            # That flush never sent its kinds and never will. Hints only say
+            # "re-read now"; this one does that for them.
+            self._pending.clear()
+        self._pending.add(kind)
+        task = loop.create_task(self._flush_later())
+        self._flush_task = task
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+
+    async def _flush_later(self) -> None:
+        await asyncio.sleep(self.coalesce_s)
+        kinds, self._pending = self._pending, set()
+        # Hints arriving while this one is sent start the next window.
+        self._flush_task = None
+        # One kind keeps its name; a mixed burst only says "batch" — clients
+        # refetch either way.
+        await self._broadcast(next(iter(kinds)) if len(kinds) == 1 else "batch")
 
     async def _broadcast(self, kind: str) -> None:
         if not self._subs:
@@ -65,6 +96,9 @@ class FleetHub:
         for task in self._tasks:
             task.cancel()
         self._tasks.clear()
+        self._pending.clear()
+        self._flush_task = None
+        self.coalesce_s = 0.5
 
 
 hub = FleetHub()
