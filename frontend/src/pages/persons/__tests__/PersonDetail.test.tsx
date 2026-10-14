@@ -5,7 +5,8 @@ import type { ComponentProps } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
-import type { Account, AuditEvent } from '../../../types';
+import { qk } from '../../../api/queryClient';
+import type { Account, AuditEvent, DeviceDetail } from '../../../types';
 import { PersonDetail } from '../PersonDetail';
 import { account, alert, device, event, person } from './fixtures';
 
@@ -29,8 +30,9 @@ vi.mock('../../../api/client', async () => {
 const own = device();
 const other = device({ id: 12, hostname: 'drucker', person_id: null });
 
-function show(over: Partial<ComponentProps<typeof PersonDetail>> = {}) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+function show(over: Partial<ComponentProps<typeof PersonDetail>> = {}, client = newClient()) {
   const props: ComponentProps<typeof PersonDetail> = {
     person: person(),
     devices: [own],
@@ -64,7 +66,11 @@ describe('PersonDetail', () => {
     vi.clearAllMocks();
     accountsMock.mockResolvedValue({ accounts: [account()] });
     auditMock.mockResolvedValue({ events: [event()], total: 1 });
-    updateDeviceMock.mockResolvedValue({});
+    // Answers like the server: the device as it is after the PATCH.
+    updateDeviceMock.mockImplementation((id, body) => {
+      const d = [own, other].find((x) => x.id === id)!;
+      return Promise.resolve({ device: { ...d, person_id: (body as { person_id: number }).person_id || null } });
+    });
   });
 
   it('sums the fleet state of that person alone', () => {
@@ -189,6 +195,29 @@ describe('PersonDetail', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Zuweisung lösen' }));
     expect(updateDeviceMock).toHaveBeenCalledWith(11, { person_id: 0 });
     expect(props.onChanged).toHaveBeenCalled();
+  });
+
+  it('updates the device page’s own copy after assigning, so its edit dialog does not undo it', async () => {
+    const client = newClient();
+    client.setQueryData<DeviceDetail>(qk.device(12), { device: other, inventory: {} });
+    show({}, client);
+    await userEvent.click(screen.getByRole('button', { name: /Gerät zuweisen/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Gerät Martina Fuchs zuweisen' });
+    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: 'Gerät' }), 'drucker');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Zuweisen' }));
+    expect(client.getQueryData<DeviceDetail>(qk.device(12))?.device.person_id).toBe(2);
+    expect(client.getQueryState(qk.device(12))?.isInvalidated).toBe(true);
+  });
+
+  it('updates the device page’s own copy after releasing', async () => {
+    const client = newClient();
+    client.setQueryData<DeviceDetail>(qk.device(11), { device: own, inventory: {} });
+    show({}, client);
+    await screen.findByText('martina');
+    await userEvent.click(screen.getByRole('button', { name: 'laptop-mama von Martina Fuchs lösen' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Zuweisung lösen' }));
+    expect(client.getQueryData<DeviceDetail>(qk.device(11))?.device.person_id).toBeNull();
+    expect(client.getQueryState(qk.device(11))?.isInvalidated).toBe(true);
   });
 
   it('opens a device when its row is clicked', async () => {

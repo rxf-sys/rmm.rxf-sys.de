@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, api } from '../../api/client';
+import { qk } from '../../api/queryClient';
 import { auditNamesFrom, describeAudit } from '../../auditText';
 import { isAgent } from '../../deviceClass';
 import { alertStatusKind, deviceStatusKind, deviceStatusLabel } from '../../deviceStatus';
@@ -10,7 +11,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useNow } from '../../hooks/useNow';
 import { IconChevronLeft, IconMore, IconPlus, OsIcon } from '../../icons';
 import { devicePath } from '../../routes';
-import type { Account, Alert, Device, PatchSummary, Person } from '../../types';
+import type { Account, Alert, Device, DeviceDetail, PatchSummary, Person } from '../../types';
 import { ErrorNote, KeyValue, Menu, Panel, SkeletonRows, StatusBadge } from '../../ui';
 import { notify } from '../../ui/toast';
 import { AssignDialog, PasswordDialog } from './PersonDialogs';
@@ -107,13 +108,23 @@ export function PersonDetail({
   const events = personActivity(auditQ.data ?? [], account, devices);
   const byId = (id: number) => allDevices.find((d) => d.id === id);
 
+  // The device page keeps its own copy under qk.device(id), and this PATCH
+  // sends no fleet hint that would refresh it. Left alone, a fresh copy
+  // still holds the old person, and the device's edit dialog — which always
+  // sends person_id — would quietly undo the change with its next save.
+  const deviceChanged = (device: Device) => {
+    qc.setQueryData<DeviceDetail>(qk.device(device.id), (old) => (old ? { ...old, device } : old));
+    void qc.invalidateQueries({ queryKey: qk.device(device.id) });
+    onChanged();
+    void qc.invalidateQueries({ queryKey: RECENT_AUDIT_KEY });
+  };
+
   const assign = async (d: Device) => {
     try {
-      await api.updateDevice(d.id, { person_id: person.id });
+      const r = await api.updateDevice(d.id, { person_id: person.id });
       setAssigning(false);
       notify.success('Gerät zugewiesen', `${d.hostname} gehört jetzt zu ${person.name}.`);
-      onChanged();
-      void qc.invalidateQueries({ queryKey: RECENT_AUDIT_KEY });
+      deviceChanged(r.device);
     } catch (e) {
       notify.error('Nicht zugewiesen', explainError(e, 'Geräte zuweisen dürfen nur Administratoren und Techniker.'));
     }
@@ -133,10 +144,9 @@ export function PersonDetail({
     });
     if (!ok) return;
     try {
-      await api.updateDevice(d.id, { person_id: 0 });
+      const r = await api.updateDevice(d.id, { person_id: 0 });
       notify.success('Zuweisung gelöst', d.hostname);
-      onChanged();
-      void qc.invalidateQueries({ queryKey: RECENT_AUDIT_KEY });
+      deviceChanged(r.device);
     } catch (e) {
       notify.error('Zuweisung nicht gelöst', explainError(e, 'Zuweisungen lösen dürfen nur Administratoren und Techniker.'));
     }

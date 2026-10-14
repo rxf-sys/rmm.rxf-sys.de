@@ -71,6 +71,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   einem zweiten Enter nach dem Anlegen. Solange es nicht kopiert ist, fragt
   der Dialog jetzt nach, und der Fokus steht auf „Kopieren" statt auf
   „Fertig".
+- Personen: Wer ein Gerät zuwies oder löste und kurz danach auf der
+  Geräteseite „Bearbeiten" speicherte, machte die Zuweisung unbemerkt
+  rückgängig — die Geräteseite hielt noch den alten Stand. Sie bekommt die
+  Änderung jetzt sofort mit.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist
