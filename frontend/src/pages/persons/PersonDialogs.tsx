@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import { Modal } from '../../components/Modal';
+import { useConfirm } from '../../hooks/useConfirm';
 import { IconCheck, IconCopy } from '../../icons';
 import type { Device, Person } from '../../types';
 import { KeyValue, StatusBadge } from '../../ui';
@@ -239,6 +240,26 @@ export function PasswordDialog({ username, onSave, onClose }: { username: string
  *  exactly once, so this dialog is the only place it can be read. */
 export function CredentialsDialog({ name, username, password, onClose }: { name: string; username: string; password: string; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
+  const { ask, dialog } = useConfirm();
+  // Escape, the backdrop and the X close a dialog in passing; here that
+  // would lose the only copy of the password, so they ask until it has been
+  // copied. „Fertig“ is deliberate and closes at once — the admin may have
+  // written the password down by hand.
+  const dismiss = async () => {
+    if (copied) return onClose();
+    const ok = await ask({
+      title: 'Passwort verwerfen?',
+      body: (
+        <p>
+          Das Passwort für „{username}“ wird nur dieses eine Mal angezeigt. Danach lässt sich nur über „Passwort zurücksetzen“ ein
+          neues vergeben.
+        </p>
+      ),
+      confirmLabel: 'Verwerfen',
+      danger: true,
+    });
+    if (ok) onClose();
+  };
   const copy = () => {
     const text = `Benutzername: ${username}\nPasswort: ${password}`;
     const write = navigator.clipboard?.writeText(text) ?? Promise.reject(new Error('Keine Zwischenablage verfügbar.'));
@@ -248,29 +269,34 @@ export function CredentialsDialog({ name, username, password, onClose }: { name:
     );
   };
   return (
-    <Modal title="Betrachter-Konto angelegt" onClose={onClose}>
-      <p className="pn-dialog-text">
-        Für <b>{name}</b> gibt es jetzt ein Konto. Es sieht nur die Geräte, die dieser Person zugewiesen sind, und kann nichts ändern.
-      </p>
-      <div className="pn-creds">
-        <KeyValue
-          rows={[
-            ['Benutzername', <span className="pn-secret">{username}</span>],
-            ['Passwort', <span className="pn-secret">{password}</span>],
-          ]}
-        />
-      </div>
-      <p className="pn-once">
-        <StatusBadge kind="warn" plain label="Das Passwort wird nur dieses eine Mal angezeigt — jetzt weitergeben oder notieren." />
-      </p>
-      <div className="modal-actions">
-        <button type="button" className="btn" onClick={copy}>
-          {copied ? <IconCheck size={14} /> : <IconCopy size={14} />} {copied ? 'Kopiert' : 'Kopieren'}
-        </button>
-        <button type="button" className="btn btn-primary" onClick={onClose} data-autofocus="">
-          Fertig
-        </button>
-      </div>
-    </Modal>
+    <>
+      {dialog}
+      <Modal title="Betrachter-Konto angelegt" onClose={() => void dismiss()}>
+        <p className="pn-dialog-text">
+          Für <b>{name}</b> gibt es jetzt ein Konto. Es sieht nur die Geräte, die dieser Person zugewiesen sind, und kann nichts ändern.
+        </p>
+        <div className="pn-creds">
+          <KeyValue
+            rows={[
+              ['Benutzername', <span className="pn-secret">{username}</span>],
+              ['Passwort', <span className="pn-secret">{password}</span>],
+            ]}
+          />
+        </div>
+        <p className="pn-once">
+          <StatusBadge kind="warn" plain label="Das Passwort wird nur dieses eine Mal angezeigt — jetzt weitergeben oder notieren." />
+        </p>
+        <div className="modal-actions">
+          {/* Focus starts here, not on „Fertig“: the Enter that submitted the
+              form can repeat into this dialog, and it must not close it. */}
+          <button type="button" className="btn" onClick={copy} data-autofocus="">
+            {copied ? <IconCheck size={14} /> : <IconCopy size={14} />} {copied ? 'Kopiert' : 'Kopieren'}
+          </button>
+          <button type="button" className="btn btn-primary" onClick={onClose}>
+            Fertig
+          </button>
+        </div>
+      </Modal>
+    </>
   );
 }

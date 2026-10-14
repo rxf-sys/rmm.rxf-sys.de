@@ -66,6 +66,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Telefonnummer geändert wurde. Das Feld nimmt wieder jeden Text, wie der
   Server. Der Mail-Link kodiert die Adresse jetzt (`?`, `#`, `%`, `&`) und
   erscheint nur noch, wenn im Feld Adressen stehen.
+- Personen: Das einmalig angezeigte Passwort eines neuen Betrachter-Kontos
+  verschwand ohne Rückfrage mit Escape, einem Klick neben den Dialog oder
+  einem zweiten Enter nach dem Anlegen. Solange es nicht kopiert ist, fragt
+  der Dialog jetzt nach, und der Fokus steht auf „Kopieren" statt auf
+  „Fertig".
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist
