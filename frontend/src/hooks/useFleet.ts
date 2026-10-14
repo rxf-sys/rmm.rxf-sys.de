@@ -21,6 +21,69 @@ const REFRESH_MS = 30_000;
 // that stays down has every open tab knocking twelve times a minute, forever.
 const WS_RETRY_MIN_MS = 2_000;
 const WS_RETRY_MAX_MS = 60_000;
+// Floor between two fleet loads triggered by socket hints. An alert storm
+// (a site losing its uplink takes hundreds of devices offline at once) used
+// to turn every single `alert.fired` into a full refetch of the device list.
+export const MIN_REFRESH_GAP_MS = 2_000;
+
+export interface RefreshScheduler {
+  /** Ask for a load. Throttled to one start per `minGapMs`; `immediate`
+   *  skips the throttle (an explicit user or login refresh). A request while
+   *  a load is in flight queues exactly one follow-up load. */
+  request: (opts?: { immediate?: boolean }) => void;
+  cancel: () => void;
+}
+
+/** One load at a time, at most one queued, at most one start per gap. */
+export function createRefreshScheduler(load: () => Promise<void>, minGapMs: number): RefreshScheduler {
+  let inFlight = false;
+  let queued = false;
+  let lastStart = Number.NEGATIVE_INFINITY;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancelled = false;
+
+  const run = () => {
+    if (cancelled) return;
+    if (inFlight) {
+      queued = true;
+      return;
+    }
+    inFlight = true;
+    lastStart = Date.now();
+    void load().finally(() => {
+      inFlight = false;
+      if (queued) {
+        queued = false;
+        request();
+      }
+    });
+  };
+
+  const request = (opts?: { immediate?: boolean }) => {
+    if (cancelled) return;
+    if (opts?.immediate) {
+      clearTimeout(timer);
+      timer = undefined;
+      run();
+      return;
+    }
+    if (timer !== undefined) return;
+    const wait = Math.max(0, lastStart + minGapMs - Date.now());
+    timer = setTimeout(() => {
+      timer = undefined;
+      run();
+    }, wait);
+  };
+
+  return {
+    request,
+    cancel: () => {
+      cancelled = true;
+      clearTimeout(timer);
+      timer = undefined;
+    },
+  };
+}
 
 /**
  * Polls the fleet-wide snapshot (devices + alerts + patch summary) used by the
@@ -37,7 +100,7 @@ export function useFleet(): Fleet {
   const [error, setError] = useState<string | null>(null);
   const [loadedAt, setLoadedAt] = useState<number | null>(null);
 
-  const load = useCallback((signal?: AbortSignal) => {
+  const load = useCallback((signal: AbortSignal): Promise<void> => {
     return Promise.all([
       api.devices(signal),
       api.alerts(signal),
@@ -54,30 +117,39 @@ export function useFleet(): Fleet {
         setLoading(false);
       })
       .catch((e) => {
-        if (!signal?.aborted) {
+        if (!signal.aborted) {
           setError(apiErrorMessage(e));
           setLoading(false);
         }
       });
   }, []);
 
-  // Live fleet events (device online/offline, alert, patches) trigger an
-  // immediate refetch; the interval is the fallback when the socket is down.
-  const wsRef = useRef<WebSocket | null>(null);
+  // Live fleet events (device online/offline, alert, patches) trigger a
+  // throttled refetch; the interval is the fallback when the socket is down.
+  // Nothing polls while the tab is hidden — a phone in a pocket has no reader.
+  const schedulerRef = useRef<RefreshScheduler | null>(null);
   useEffect(() => {
     const ctrl = new AbortController();
-    void load(ctrl.signal);
-    const timer = setInterval(() => void load(ctrl.signal), REFRESH_MS);
+    const scheduler = createRefreshScheduler(() => load(ctrl.signal), MIN_REFRESH_GAP_MS);
+    schedulerRef.current = scheduler;
+    scheduler.request({ immediate: true });
+    const timer = setInterval(() => {
+      if (document.visibilityState !== 'hidden') scheduler.request();
+    }, REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') scheduler.request();
+    };
+    document.addEventListener('visibilitychange', onVisible);
 
     let closed = false;
-    let debounce: ReturnType<typeof setTimeout> | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let delay = WS_RETRY_MIN_MS;
+    let ws: WebSocket | null = null;
     const connect = () => {
       if (closed) return;
-      let ws: WebSocket;
+      let sock: WebSocket;
       try {
-        ws = openFleetSocket();
+        sock = openFleetSocket();
       } catch {
         // Constructing the socket threw (bad URL, blocked scheme). Retrying
         // on the same schedule beats giving up silently for the tab's life.
@@ -85,42 +157,44 @@ export function useFleet(): Fleet {
         delay = Math.min(delay * 2, WS_RETRY_MAX_MS);
         return;
       }
-      wsRef.current = ws;
-      ws.onopen = () => {
+      ws = sock;
+      sock.onopen = () => {
         delay = WS_RETRY_MIN_MS;
       };
-      ws.onmessage = (ev) => {
+      sock.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
-          if (msg.type === 'refresh') {
-            // Coalesce bursts (e.g. many agents reconnecting after a restart).
-            clearTimeout(debounce);
-            debounce = setTimeout(() => void load(), 300);
-          }
+          if (msg.type === 'refresh') scheduler.request();
         } catch {
-          /* ignore */
+          // A frame that is not JSON carries no hint; the poll still runs.
         }
       };
-      ws.onclose = () => {
-        wsRef.current = null;
+      sock.onclose = () => {
+        ws = null;
         if (closed) return;
         retry = setTimeout(connect, delay);
         // Jitter-free is fine here: one browser tab, not a fleet of agents.
         delay = Math.min(delay * 2, WS_RETRY_MAX_MS);
       };
-      ws.onerror = () => ws.close();
+      sock.onerror = () => sock.close();
     };
     connect();
 
     return () => {
       closed = true;
+      schedulerRef.current = null;
+      scheduler.cancel();
       clearInterval(timer);
-      clearTimeout(debounce);
       clearTimeout(retry);
-      wsRef.current?.close();
+      document.removeEventListener('visibilitychange', onVisible);
+      ws?.close();
       ctrl.abort();
     };
   }, [load]);
+
+  // Stable identity: App re-runs an effect whenever this changes, and a fresh
+  // closure per render turned that effect into an endless refetch loop.
+  const refresh = useCallback(() => schedulerRef.current?.request({ immediate: true }), []);
 
   return {
     devices,
@@ -130,6 +204,6 @@ export function useFleet(): Fleet {
     loading,
     error,
     loadedAt,
-    refresh: () => void load(),
+    refresh,
   };
 }
