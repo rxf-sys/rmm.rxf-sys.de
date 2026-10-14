@@ -1,7 +1,6 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
@@ -135,6 +134,53 @@ function show(opts: ShowOptions = {}) {
   return s;
 }
 
+/**
+ * The page as the app runs it: the alerts come from the fleet query, and the
+ * server behind it records each acknowledgement, so a refetch brings the
+ * acknowledged alerts back as "quittiert". `fail` lists alerts whose
+ * acknowledgement breaks.
+ */
+function live(initial: Alert[], opts: { fail?: number[] } = {}) {
+  let server = initial;
+  const fetchAlerts = vi.fn(async () => server);
+  ackMock.mockImplementation(async (id) => {
+    if (opts.fail?.includes(id)) throw new TypeError('Failed to fetch');
+    server = server.map((a) => (a.id === id ? { ...a, acked_at: NOW, acked_by: 'anna' } : a));
+    return {};
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidate = vi.spyOn(client, 'invalidateQueries');
+  function Page() {
+    const q = useQuery({ queryKey: qk.alerts, queryFn: fetchAlerts });
+    return (
+      <AlertsPage
+        alerts={q.data ?? []}
+        devices={DEVICES}
+        persons={[]}
+        onOpenDevice={() => {}}
+        onRefresh={() => void client.invalidateQueries({ queryKey: qk.fleet })}
+      />
+    );
+  }
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <Page />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  return {
+    client,
+    fetchAlerts,
+    invalidate,
+    /** Change what the server holds and let the next poll bring it. */
+    poll: async (change: (list: Alert[]) => Alert[]) => {
+      server = change(server);
+      await client.invalidateQueries({ queryKey: qk.alerts });
+    },
+  };
+}
+
 const bodyRows = () => screen.getAllByRole('row').slice(1);
 const hosts = () => bodyRows().map((r) => within(r).getByRole('link').textContent);
 const tab = (name: string) => screen.getByRole('tab', { name: new RegExp(`^${name}`) });
@@ -263,9 +309,22 @@ describe('AlertsPage', () => {
       const s = show({ alerts: [oldOutage] });
       await userEvent.click(screen.getByRole('button', { name: /^Quittieren: Gerät meldet sich nicht, lisa-laptop/ }));
       expect(ackMock).toHaveBeenCalledWith(12);
-      await waitFor(() => expect(s.onRefresh).toHaveBeenCalled());
+      await waitFor(() => expect(notifyMock.success).toHaveBeenCalledWith('Alarm quittiert', 'lisa-laptop: Gerät meldet sich nicht'));
       expect(s.invalidate).toHaveBeenCalledWith({ queryKey: qk.alerts });
-      expect(notifyMock.success).toHaveBeenCalledWith('Alarm quittiert', 'lisa-laptop: Gerät meldet sich nicht');
+    });
+
+    it('fetches the alerts once and marks the device pages stale', async () => {
+      const s = live([oldOutage, fullDisk]);
+      s.client.setQueryData(qk.deviceAlerts(2), []);
+      s.client.setQueryData(qk.deviceAlerts(3), []);
+      await userEvent.click(await screen.findByRole('button', { name: /^Quittieren: .*, lisa-laptop/ }));
+      await waitFor(() => expect(notifyMock.success).toHaveBeenCalled());
+      // One fetch on load, one for the acknowledgement — not a second one
+      // for the whole fleet right behind it.
+      expect(s.fetchAlerts).toHaveBeenCalledTimes(2);
+      // The device's own alert list ("quittiert von …") is cached apart.
+      expect(s.client.getQueryState(qk.deviceAlerts(2))?.isInvalidated).toBe(true);
+      expect(s.client.getQueryState(qk.deviceAlerts(3))?.isInvalidated).toBe(false);
     });
 
     it('is busy while the request runs and takes no second click', async () => {
@@ -355,30 +414,8 @@ describe('AlertsPage', () => {
     });
 
     it('hands the focus to the next alert once one has left the list', async () => {
-      function Live() {
-        const [alerts, setAlerts] = useState([freshOutage, oldOutage, fullDisk]);
-        const client = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }))[0];
-        return (
-          <QueryClientProvider client={client}>
-            <MemoryRouter>
-              <AlertsPage
-                alerts={alerts}
-                devices={DEVICES}
-                persons={[]}
-                onOpenDevice={() => {}}
-                // What the next poll would bring: the acknowledged alerts moved on.
-                onRefresh={() =>
-                  setAlerts((list) =>
-                    list.map((a) => (ackMock.mock.calls.some(([id]) => id === a.id) ? { ...a, acked_at: NOW, acked_by: 'anna' } : a)),
-                  )
-                }
-              />
-            </MemoryRouter>
-          </QueryClientProvider>
-        );
-      }
-      render(<Live />);
-      await userEvent.click(screen.getByRole('button', { name: /^Quittieren: .*, lisa-laptop/ }));
+      live([freshOutage, oldOutage, fullDisk]);
+      await userEvent.click(await screen.findByRole('button', { name: /^Quittieren: .*, lisa-laptop/ }));
       await waitFor(() => expect(hosts()).toEqual(['nas', 'buero-pc']));
       expect(screen.getByRole('button', { name: /^Quittieren: .*, buero-pc/ })).toHaveFocus();
       expect(tab('Quittiert')).toHaveTextContent('1');

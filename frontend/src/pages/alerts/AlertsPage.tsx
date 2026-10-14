@@ -304,10 +304,14 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
     const outcome = await runBulk(list, async (a) => {
       await api.ackAlert(a.id);
     });
-    // Wait for the fresh list, so a row leaves as its button stops being
-    // busy instead of flashing back to "Quittieren" first.
+    // An acknowledgement changes the alerts and nothing else in the fleet,
+    // so only they are fetched again — the whole fleet would fetch them a
+    // second time. Wait for the fresh list, so a row leaves as its button
+    // stops being busy instead of flashing back to "Quittieren" first. A
+    // device page keeps its own alert list ("quittiert von …"); nothing
+    // here shows it, so it is only marked stale.
+    for (const id of new Set(list.map((a) => a.device_id))) void qc.invalidateQueries({ queryKey: qk.deviceAlerts(id) });
     await qc.invalidateQueries({ queryKey: qk.alerts });
-    onRefresh();
     setBusy((prev) => {
       const next = new Set(prev);
       for (const id of ids) next.delete(id);

@@ -40,6 +40,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   bekam aus dem Zwischenspeicher noch „Installieren" angeboten — ein Klick
   endete mit „Es läuft bereits eine Installation". Prüfung und Installation
   markieren jetzt Updates und Aufträge der betroffenen Geräte als veraltet.
+- **Quittieren lud die Alarme doppelt.** Nach jeder Quittierung holte das
+  Alarm-Center die Alarmliste und gleich danach die ganze Flotte samt
+  Alarmen noch einmal. Jetzt kommt nur die Alarmliste neu; dafür zeigt die
+  Aktivität des Geräts das „quittiert von …" sofort statt erst nach einer
+  Viertelminute.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist
