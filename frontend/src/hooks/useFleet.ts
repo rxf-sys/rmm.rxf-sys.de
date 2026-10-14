@@ -187,25 +187,21 @@ export function useFleet(enabled: boolean): Fleet {
     queryFn: ({ signal }): Promise<AlertList> =>
       api.alerts(signal).then((r) => ({ alerts: r.alerts, resolvedCap: r.resolved_truncated ? r.resolved_limit : null })),
   });
-  // Both are decoration on the fleet view: a failure leaves them empty
-  // rather than turning the whole dashboard into an error page.
+  // A failure here is an error like any other, not an empty answer: an
+  // empty summary reads as "every device up to date" and an empty persons
+  // list as "nobody yet". As errors, a failed refresh keeps the last good
+  // data and is retried, and the pages that need them tell "failed" from
+  // "empty" through the cache (fleetLoading.ts, personsQueries.ts). The
+  // shell's badges and pickers fall back to empty until something arrives.
   const patchSummary = useQuery({
     ...common,
     queryKey: qk.patchSummary,
-    queryFn: ({ signal }) =>
-      api
-        .patchSummary(signal)
-        .then((r) => r.summary)
-        .catch(() => EMPTY_SUMMARY),
+    queryFn: ({ signal }) => api.patchSummary(signal).then((r) => r.summary),
   });
   const persons = useQuery({
     ...common,
     queryKey: qk.persons,
-    queryFn: ({ signal }) =>
-      api
-        .persons(signal)
-        .then((r) => r.persons)
-        .catch(() => EMPTY_PERSONS),
+    queryFn: ({ signal }) => api.persons(signal).then((r) => r.persons),
   });
 
   useFleetSocket(enabled);

@@ -8,6 +8,14 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **Ein Aussetzer machte die Flotte „aktuell" und die Personen leer.**
+  Schlug ein Abruf des Update-Stands fehl (Neustart beim Deploy, kurzer
+  Netzausfall, 5xx), galt das als leere Antwort: die Patch-Seite meldete
+  „Sicherheitsupdates 0 – nichts offen" und „100 %", das Abzeichen in der
+  Seitenleiste fiel auf 0, und die Personen-Seite zeigte „Noch keine
+  Personen" samt „Person anlegen". Ein Fehler bleibt jetzt ein Fehler: der
+  letzte gute Stand bleibt stehen, der Abruf wird wiederholt, und kam noch
+  nie etwas an, sagen beide Seiten, dass das Laden fehlgeschlagen ist.
 - **Auftragsergebnisse überlebten die Abmeldung.** Lief beim Abmelden noch
   eine Abfrage für eine Massenaktion, landeten ihre Ergebnisse danach in der
   Benachrichtigungszentrale — beim nächsten Konto im selben Tab, auch bei

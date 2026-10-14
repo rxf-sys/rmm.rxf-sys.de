@@ -1,7 +1,8 @@
 /** Data the persons page loads beyond the fleet props. */
-import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsFetching, useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { qk } from '../../api/queryClient';
+import { useCachedQueryState } from '../../hooks/useCachedQueryState';
 
 export const ACCOUNTS_KEY = ['accounts'] as const;
 /** The newest slice of the audit log; each person's activity is filtered
@@ -28,13 +29,17 @@ export function useRecentAudit(enabled: boolean) {
 }
 
 /**
- * Is the fleet's persons list still on its first load? The page gets the
- * list as a prop without a loading flag, and an empty array would otherwise
- * read as "no persons yet". `useIsFetching` subscribes, so the page renders
- * again when the load ends.
+ * Where the fleet's persons list stands. The page gets the list as a prop
+ * without a status, and an empty array would otherwise read as "no persons
+ * yet" while the first load runs or after it failed. Once a list has
+ * arrived, a failed refresh keeps showing it.
  */
-export function useFirstPersonsLoad(): boolean {
-  const qc = useQueryClient();
+export function usePersonsLoad(): { loading: boolean; error: unknown } {
   const fetching = useIsFetching({ queryKey: qk.persons });
-  return fetching > 0 && qc.getQueryState(qk.persons)?.status === 'pending';
+  // Subscribes to the cache entry, so the page renders again when it fails.
+  const state = useCachedQueryState(qk.persons);
+  return {
+    loading: fetching > 0 && state?.status === 'pending',
+    error: state?.status === 'error' && state.data === undefined ? state.error : null,
+  };
 }

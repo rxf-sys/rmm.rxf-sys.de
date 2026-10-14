@@ -10,7 +10,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { IconPlus, IconSearch, IconUsers } from '../../icons';
 import type { Alert, Device, PatchSummary, Person } from '../../types';
-import { EmptyState, PageHeader, SkeletonRows, StatusBadge } from '../../ui';
+import { EmptyState, ErrorNote, PageHeader, SkeletonRows, StatusBadge } from '../../ui';
 import { notify } from '../../ui/toast';
 import { PersonDetail } from './PersonDetail';
 import { CredentialsDialog, PersonDialog } from './PersonDialogs';
@@ -30,7 +30,7 @@ import {
   type PersonFilter,
   type PersonRow,
 } from './personsMeta';
-import { ACCOUNTS_KEY, RECENT_AUDIT_KEY, useAccounts, useFirstPersonsLoad } from './personsQueries';
+import { ACCOUNTS_KEY, RECENT_AUDIT_KEY, useAccounts, usePersonsLoad } from './personsQueries';
 
 interface Props {
   persons: Person[];
@@ -65,7 +65,7 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
   const [created, setCreated] = useState<{ name: string; username: string; password: string } | null>(null);
   const searchId = useId();
   const stacked = useMediaQuery(STACKED);
-  const loading = useFirstPersonsLoad();
+  const { loading, error: loadError } = usePersonsLoad();
   const accountsQ = useAccounts(isAdmin);
 
   const setParam = (patch: Record<string, string | null>, replace: boolean) =>
@@ -202,6 +202,8 @@ export function PersonsPage({ persons, devices, alerts, patchSummary, isAdmin, o
 
       {loading ? (
         <SkeletonRows rows={5} />
+      ) : loadError ? (
+        <ErrorNote error={loadError} onRetry={onRefresh} />
       ) : persons.length === 0 ? (
         <EmptyState
           icon={<IconUsers size={22} />}

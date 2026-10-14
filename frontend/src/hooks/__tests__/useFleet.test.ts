@@ -2,8 +2,9 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../../api/client';
-import { createQueryClient } from '../../api/queryClient';
+import { ApiError, api } from '../../api/client';
+import { createQueryClient, qk } from '../../api/queryClient';
+import type { QueryClient } from '@tanstack/react-query';
 import { createRefreshScheduler, useFleet } from '../useFleet';
 
 vi.mock('../../api/client', async () => {
@@ -76,8 +77,7 @@ describe('createRefreshScheduler', () => {
 });
 
 /** One client per test; a client per render would itself change identities. */
-function makeWrapper() {
-  const client = createQueryClient();
+function makeWrapper(client: QueryClient = createQueryClient()) {
   return function Wrapper({ children }: { children: ReactNode }) {
     return createElement(QueryClientProvider, { client }, children);
   };
@@ -123,6 +123,35 @@ describe('useFleet', () => {
     const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.resolvedAlertsCap).toBeNull();
+  });
+
+  it('keeps the last patch summary when a refresh fails, and lets the retry policy see the error', async () => {
+    // A failure used to resolve to an empty summary: every device read as
+    // up to date, and nothing retried.
+    vi.mocked(api.patchSummary)
+      .mockResolvedValueOnce({ summary: { '1': { pending: 12, security: 12 } } })
+      .mockRejectedValue(new ApiError(502, 'Bad Gateway'));
+    const client = createQueryClient();
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper(client) });
+    await waitFor(() => expect(result.current.patchSummary['1']?.pending).toBe(12));
+    act(() => result.current.refresh());
+    await waitFor(() => expect(client.getQueryState(qk.patchSummary)?.fetchFailureCount).toBeGreaterThan(0));
+    expect(result.current.patchSummary['1']?.pending).toBe(12);
+    await client.cancelQueries();
+  });
+
+  it('keeps the last persons list when a refresh fails', async () => {
+    const anna = { id: 1, name: 'Anna', email: '', phone: '', notes: '', created_at: 0, device_count: 0 };
+    vi.mocked(api.persons)
+      .mockResolvedValueOnce({ persons: [anna] })
+      .mockRejectedValue(new ApiError(502, 'Bad Gateway'));
+    const client = createQueryClient();
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper(client) });
+    await waitFor(() => expect(result.current.persons).toEqual([anna]));
+    act(() => result.current.refresh());
+    await waitFor(() => expect(client.getQueryState(qk.persons)?.fetchFailureCount).toBeGreaterThan(0));
+    expect(result.current.persons).toEqual([anna]);
+    await client.cancelQueries();
   });
 
   it('refetches on an explicit refresh', async () => {

@@ -506,7 +506,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
         }
       />
 
-      {devices.length === 0 && loadError ? (
+      {loadError ? (
         <ErrorNote error={loadError} onRetry={onRefresh} />
       ) : devices.length === 0 && !loading ? (
         <EmptyState

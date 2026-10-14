@@ -4,8 +4,15 @@ import { useCachedQueryState } from '../../hooks/useCachedQueryState';
 export interface FleetLoad {
   /** The device list or the patch summary is still on its first load. */
   loading: boolean;
-  /** The device list failed before it ever arrived; null otherwise. */
+  /** The device list or the patch summary failed before it ever arrived;
+   *  null otherwise. Without the summary every device would count as up to
+   *  date, so the page has nothing honest to show. */
   error: unknown;
+}
+
+/** The error of a query that failed before any data arrived. */
+function firstLoadError(state: { status: string; data: unknown; error: unknown } | undefined): unknown {
+  return state?.status === 'error' && state.data === undefined ? state.error : null;
 }
 
 /**
@@ -21,8 +28,8 @@ export function useFleetLoad(): FleetLoad {
   const summary = useCachedQueryState(qk.patchSummary);
   return {
     loading: devices?.status === 'pending' || summary?.status === 'pending',
-    // Once a list has arrived, a failed refresh keeps showing it; the shell's
+    // Once data has arrived, a failed refresh keeps showing it; the shell's
     // connection banner says that the data is getting old.
-    error: devices?.status === 'error' && devices.data === undefined ? devices.error : null,
+    error: firstLoadError(devices) ?? firstLoadError(summary),
   };
 }
