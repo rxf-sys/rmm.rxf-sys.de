@@ -171,6 +171,29 @@ describe('AuditPage', () => {
     expect(new URLSearchParams(search()).get('q')).toBe('flushdns');
   });
 
+  it('keeps an over-long search from a shared link within what the server accepts', async () => {
+    // backend/app/routers/audit.py: q has max_length=200; one more is a 422.
+    show(`/audit?q=${'x'.repeat(250)}`);
+    await screen.findByRole('region', { name: 'Heute' });
+    expect(lastQuery().q).toBe('x'.repeat(200));
+    const box = screen.getByRole('searchbox', { name: 'Audit-Log durchsuchen' });
+    expect(box).toHaveValue('x'.repeat(200));
+    expect(box).toHaveAttribute('maxlength', '200');
+  });
+
+  it('says what the server refused instead of crashing the page', async () => {
+    auditMock.mockRejectedValue(
+      new ApiError(
+        422,
+        JSON.stringify({
+          detail: [{ type: 'string_too_long', loc: ['query', 'q'], msg: 'String should have at most 200 characters', ctx: { max_length: 200 } }],
+        }),
+      ),
+    );
+    show();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Ungültige Eingabe (q: höchstens 200 Zeichen)');
+  });
+
   it('narrows to security events and explains what that covers', async () => {
     show('/audit?category=job');
     await screen.findByRole('region', { name: 'Heute' });

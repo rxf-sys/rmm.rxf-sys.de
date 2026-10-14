@@ -81,6 +81,19 @@ export function readFilters(params: URLSearchParams): AuditFilters {
   };
 }
 
+/** The server refuses a longer search with a 422 (q: max_length=200 in
+ *  backend/app/routers/audit.py). */
+export const SEARCH_MAX = 200;
+
+/** The search the address asks for, cut to what the server accepts — a
+ *  pasted link with a longer one would otherwise fail on every reload.
+ *  Counted in code points, as the server counts. */
+export function readSearch(params: URLSearchParams): string {
+  return Array.from((params.get('q') ?? '').trim())
+    .slice(0, SEARCH_MAX)
+    .join('');
+}
+
 /** Any filter besides the time range. */
 export function hasFilters(f: AuditFilters, search: string): boolean {
   return f.security || f.category !== '' || f.actor !== '' || search !== '';

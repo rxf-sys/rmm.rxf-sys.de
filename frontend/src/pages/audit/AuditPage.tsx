@@ -28,6 +28,7 @@ import {
   RANGE_LABEL,
   RANGE_SPAN,
   RANGES,
+  SEARCH_MAX,
   actorLabel,
   csvFileName,
   detailRows,
@@ -36,6 +37,7 @@ import {
   hasFilters,
   isNarrowed,
   readFilters,
+  readSearch,
   sinceFor,
   timeOfDay,
   toCsv,
@@ -160,7 +162,7 @@ export function AuditPage({ devices }: Props) {
   // The search text is component state and only written to the URL: React
   // Router applies URL changes in a transition, so an input controlled by
   // the URL drops keystrokes when someone types fast.
-  const [q, setQ] = useState(() => params.get('q') ?? '');
+  const [q, setQ] = useState(() => readSearch(params));
   const [search, setSearch] = useState(() => q.trim());
   useEffect(() => {
     const t = setTimeout(() => setSearch(q.trim()), SEARCH_DELAY_MS);
@@ -373,6 +375,7 @@ export function AuditPage({ devices }: Props) {
                 type="search"
                 className="input"
                 value={q}
+                maxLength={SEARCH_MAX}
                 onChange={(e) => {
                   setQ(e.target.value);
                   setParam({ q: e.target.value.trim() || null });
