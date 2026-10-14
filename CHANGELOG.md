@@ -76,6 +76,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   womöglich Dutzende Geräte über mehrere Filter, war verloren. Jetzt wählt
   die ganze Kästchen-Spalte der Tabelle aus, auf der Karte der Streifen am
   linken Rand.
+- **Suche unter „Patches" blieb nach der Navigation stehen.** Wer die Seite
+  über die Leiste oder „g p" erneut öffnete, bekam alle Filter
+  zurückgesetzt, nur die Suche nicht: Sie stand weiter im Feld und filterte
+  die Liste, obwohl die Adresse sie nicht mehr enthielt. Ebenso brachte
+  „Zurück" die frühere Suche nicht zurück. Das Suchfeld folgt jetzt der
+  Adresse.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { Link, MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
 import { qk } from '../../../api/queryClient';
@@ -74,10 +74,20 @@ const fleet: Device[] = [
 const summary: PatchSummary = { '1': { pending: 5, security: 2 }, '2': { pending: 1, security: 1 } };
 const persons: Person[] = [{ id: 9, name: 'Lisa', email: '', phone: '', notes: '', created_at: 0, device_count: 1 }];
 
-/** Where the router is. */
+/** Where the router is, and what the rail's "Patches" (or "g p") and the
+ *  browser's Back do: navigate while the page stays mounted. */
 function Rail() {
   const { pathname, search } = useLocation();
-  return <p data-testid="location">{pathname + search}</p>;
+  const navigate = useNavigate();
+  return (
+    <>
+      <p data-testid="location">{pathname + search}</p>
+      <Link to="/patches">Patches in der Leiste</Link>
+      <button type="button" onClick={() => navigate(-1)}>
+        Zurück
+      </button>
+    </>
+  );
 }
 const location = () => screen.getByTestId('location').textContent;
 
@@ -228,7 +238,35 @@ describe('PatchesPage Filter', () => {
 
   it('findet über die Suche', async () => {
     show();
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Geräte durchsuchen' }), 'debian', { delay: null });
+    const box = screen.getByRole('searchbox', { name: 'Geräte durchsuchen' });
+    await userEvent.type(box, 'debian', { delay: null });
+    expect(hostnames()).toEqual(['nas']);
+    // Each keystroke rewrites the address; none of them may undo another.
+    expect(box).toHaveValue('debian');
+    expect(location()).toBe('/patches?q=debian');
+  });
+
+  it('übernimmt die Suche aus der Adresse, wenn die Leiste die Seite neu öffnet', async () => {
+    show({ route: '/patches?q=nas&filter=sicherheit' });
+    const box = screen.getByRole('searchbox', { name: 'Geräte durchsuchen' });
+    expect(hostnames()).toEqual(['nas']);
+    await userEvent.click(screen.getByRole('link', { name: 'Patches in der Leiste' }));
+    expect(location()).toBe('/patches');
+    expect(box).toHaveValue('');
+    expect(hostnames()).toHaveLength(4);
+    expect(screen.queryByRole('button', { name: /Filter zurücksetzen/ })).not.toBeInTheDocument();
+  });
+
+  it('bringt mit „Zurück" die Suche des früheren Eintrags zurück', async () => {
+    show({ route: '/patches?q=nas' });
+    await userEvent.click(screen.getByRole('link', { name: 'Patches in der Leiste' }));
+    const box = screen.getByRole('searchbox', { name: 'Geräte durchsuchen' });
+    await userEvent.type(box, 'macos', { delay: null });
+    expect(location()).toBe('/patches?q=macos');
+    expect(hostnames()).toEqual(['laptop']);
+    await userEvent.click(screen.getByRole('button', { name: 'Zurück' }));
+    expect(location()).toBe('/patches?q=nas');
+    expect(box).toHaveValue('nas');
     expect(hostnames()).toEqual(['nas']);
   });
 });

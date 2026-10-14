@@ -1,7 +1,7 @@
 import './patches.css';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, NavigationType, useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { qk } from '../../api/queryClient';
 import { FilterBar, type FilterOption } from '../../components/FilterBar';
@@ -257,6 +257,18 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
   // Component state, only mirrored into the URL: an input controlled by the
   // URL drops keystrokes, because the router applies changes in a transition.
   const [q, setQ] = useState(() => params.get('q') ?? '');
+  // The page stays mounted when the address changes under it (the rail's
+  // Patches link, "g p", Back), and the filters read from the URL follow;
+  // the search has to be taken over. Those navigations push or pop, the
+  // page's own writes replace. Syncing on our own replaces would undo
+  // keystrokes whose URL update is still in its transition.
+  const { key: locationKey } = useLocation();
+  const navigationType = useNavigationType();
+  const [seenKey, setSeenKey] = useState(locationKey);
+  if (locationKey !== seenKey) {
+    setSeenKey(locationKey);
+    if (navigationType !== NavigationType.Replace) setQ(params.get('q') ?? '');
+  }
   const rawSort = params.get('sort');
   const sort = useMemo(() => parseSort(rawSort), [rawSort]);
 
