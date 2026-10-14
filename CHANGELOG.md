@@ -40,6 +40,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Kontenliste zurücksetzte, behielt ein offenes Abschalt-Formular, das nur
   noch „2FA ist nicht aktiv“ meldete. Beides verschwindet jetzt mit dem
   zweiten Faktor.
+- **Sitzung abmelden meldete Erfolg und Fehler zugleich.** Ein Doppelklick
+  auf „Abmelden“ schickte zwei Anfragen; die zweite fand die Sitzung nicht
+  mehr und meldete „Sitzung nicht abgemeldet“. Der Knopf nimmt während der
+  Anfrage keinen zweiten Klick an („Meldet ab …“), und eine schon beendete
+  Sitzung gilt nicht mehr als Fehler.
 - **RustDesk-ID ließ sich nicht korrigieren.** Das Eingabefeld erschien nur,
   solange gar keine ID hinterlegt war. Der Reiter „Fernzugriff" bietet jetzt
   „ID ändern" an; eine ungültige hinterlegte ID (etwa eine alte Eingabe mit

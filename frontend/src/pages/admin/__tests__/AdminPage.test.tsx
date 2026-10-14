@@ -329,6 +329,30 @@ describe('AdminPage', () => {
     expect(firstName()).toMatch(/^carla/);
   });
 
+  it('sends one revoke for a double click and reports it once', async () => {
+    let finish!: (v: { ok: boolean }) => void;
+    m.revokeSession.mockReturnValue(new Promise((r) => (finish = r)));
+    show();
+    const button = await screen.findByRole('button', { name: /Sitzung bbbb2222/ });
+    await userEvent.dblClick(button);
+    expect(m.revokeSession).toHaveBeenCalledTimes(1);
+    // Still focusable while it works, but says so and takes no second click.
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveTextContent('Meldet ab …');
+    m.sessions.mockResolvedValue({ sessions: [{ token_prefix: 'aaaa1111', created_at: 1_700_000_000, expires_at: 1_800_000_000, last_seen_at: 1_700_000_100, current: true }] });
+    await act(async () => finish({ ok: true }));
+    await waitFor(() => expect(t.success).toHaveBeenCalledWith('Sitzung abgemeldet', 'bbbb2222…'));
+    expect(t.error).not.toHaveBeenCalled();
+  });
+
+  it('treats a session that is already gone as ended, not as a failure', async () => {
+    m.revokeSession.mockRejectedValue(new ApiError(404, '{"detail":"Sitzung nicht gefunden"}'));
+    show();
+    await userEvent.click(await screen.findByRole('button', { name: /Sitzung bbbb2222/ }));
+    await waitFor(() => expect(t.info).toHaveBeenCalledWith('Sitzung war schon beendet', 'bbbb2222…'));
+    expect(t.error).not.toHaveBeenCalled();
+  });
+
   it('ends the other sessions after asking', async () => {
     show();
     await userEvent.click(await screen.findByRole('button', { name: 'Alle anderen abmelden' }));

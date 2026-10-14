@@ -3,6 +3,11 @@
 .ad-pad {
   padding: 0 var(--sp-4) var(--sp-4);
 }
+/* A control that is working keeps its focus but takes no second click. */
+.ad [aria-disabled='true'] {
+  cursor: progress;
+  opacity: 0.6;
+}
 .ad-quiet {
   color: var(--tx-3);
   font-size: var(--fs-sm);
