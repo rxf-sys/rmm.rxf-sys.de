@@ -283,6 +283,31 @@ describe('AdminPage', () => {
     expect(within(dialog).getByLabelText('Neues Passwort')).toHaveValue('neues-geheimnis');
   });
 
+  it('stores any address the server accepts, umlauts included', async () => {
+    show();
+    const menu = await openMenu('bob');
+    await userEvent.click(within(menu).getByRole('menuitem', { name: /E-Mail hinterlegen/ }));
+    const dialog = screen.getByRole('dialog', { name: 'E-Mail von „bob“' });
+    await userEvent.type(within(dialog).getByLabelText('E-Mail-Adresse'), 'jürgen@firma.de');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    // The browser's e-mail grammar allows only ASCII before the @; the server takes any text.
+    await waitFor(() => expect(m.updateAccount).toHaveBeenCalledWith(2, { email: 'jürgen@firma.de' }));
+  });
+
+  it('creates an account with such an address, too', async () => {
+    m.createAccount.mockResolvedValue({ account: acc(9, 'jürgen', { role: 'viewer' }) });
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Konto anlegen' }));
+    const dialog = screen.getByRole('dialog', { name: 'Konto anlegen' });
+    await userEvent.type(within(dialog).getByLabelText('Benutzername'), 'jürgen');
+    await userEvent.type(within(dialog).getByLabelText(/E-Mail/), 'jürgen@firma.de');
+    await userEvent.type(within(dialog).getByLabelText('Passwort'), 'geheim123');
+    await userEvent.click(within(dialog).getByRole('radio', { name: 'Techniker' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Konto anlegen' }));
+    await waitFor(() => expect(m.createAccount).toHaveBeenCalledWith(expect.objectContaining({ email: 'jürgen@firma.de' })));
+  });
+
   it('explains a 403 instead of showing it raw', async () => {
     m.accounts.mockRejectedValue(new ApiError(403, '{"detail":"admin privileges required"}'));
     show();

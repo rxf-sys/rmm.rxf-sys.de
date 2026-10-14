@@ -45,6 +45,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   mehr und meldete „Sitzung nicht abgemeldet“. Der Knopf nimmt während der
   Anfrage keinen zweiten Klick an („Meldet ab …“), und eine schon beendete
   Sitzung gilt nicht mehr als Fehler.
+- **E-Mail-Adressen mit Umlaut abgelehnt.** „Konto anlegen“ und „E-Mail
+  ändern“ ließen den Browser Adressen wie „jürgen@firma.de“ zurückweisen,
+  die der Server problemlos speichert. Die Felder prüft jetzt nur noch der
+  Server.
 - **RustDesk-ID ließ sich nicht korrigieren.** Das Eingabefeld erschien nur,
   solange gar keine ID hinterlegt war. Der Reiter „Fernzugriff" bietet jetzt
   „ID ändern" an; eine ungültige hinterlegte ID (etwa eine alte Eingabe mit

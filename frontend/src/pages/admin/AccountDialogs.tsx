@@ -91,7 +91,10 @@ export function CreateAccountDialog({
   };
   return (
     <Modal title="Konto anlegen" onClose={onClose}>
-      <form className="form-stack" onSubmit={onSubmit}>
+      {/* noValidate: type=email stays for the phone keyboard, but the
+          browser's e-mail grammar refuses "jürgen@firma.de", which the
+          server stores. Name and password are checked by draftReady. */}
+      <form className="form-stack" onSubmit={onSubmit} noValidate>
         <div className="form-2">
           <div className="field">
             <label className="field-label" htmlFor={`${id}-name`}>
@@ -190,7 +193,8 @@ export function EmailDialog({ account, onSave, onClose }: { account: Account; on
   };
   return (
     <Modal title={`E-Mail von „${account.username}“`} onClose={onClose}>
-      <form className="form-stack" onSubmit={onSubmit}>
+      {/* noValidate: as in CreateAccountDialog, the server is the judge. */}
+      <form className="form-stack" onSubmit={onSubmit} noValidate>
         <div className="field">
           <label className="field-label" htmlFor={id}>
             E-Mail-Adresse
