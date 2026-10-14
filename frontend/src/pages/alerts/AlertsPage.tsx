@@ -279,7 +279,15 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
   // An acknowledged row leaves the list and takes its focused button along.
   // The focus goes to the row that moved up into its place, so a keyboard
   // user works down the list instead of starting over at the top.
-  const handoff = useRef<{ ids: Set<number>; index: number } | null>(null);
+  //
+  // The handoff is armed for exactly that: until the rows that are going to
+  // leave have left. While the requests run that is every row of the round;
+  // once they are back only the ones that went through, since a failed one
+  // stays for good. Waiting for that one kept the handoff armed forever, and
+  // any later focus loss pulled the focus and the scroll to an Ack button.
+  // `busy` re-runs the check when the round ends, for a list that was
+  // already fresh by then.
+  const handoff = useRef<{ ids: ReadonlySet<number>; index: number } | null>(null);
   useEffect(() => {
     const h = handoff.current;
     if (!h) return;
@@ -292,11 +300,12 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
       next?.focus();
     }
     if (!rows.some((a) => h.ids.has(a.id))) handoff.current = null;
-  }, [rows]);
+  }, [rows, busy]);
 
   const acknowledge = async (list: Alert[], index: number) => {
     const ids = list.map((a) => a.id);
-    handoff.current = { ids: new Set(ids), index };
+    const round = { ids: new Set(ids), index };
+    handoff.current = round;
     setBusy((prev) => new Set([...prev, ...ids]));
     // One request per alert, as a click on each row would send: the server
     // checks every one against the devices this account may see, and audits
@@ -312,13 +321,18 @@ export function AlertsPage({ alerts, devices, persons, onOpenDevice, onRefresh }
     // here shows it, so it is only marked stale.
     for (const id of new Set(list.map((a) => a.device_id))) void qc.invalidateQueries({ queryKey: qk.deviceAlerts(id) });
     await qc.invalidateQueries({ queryKey: qk.alerts });
+    // Acknowledged and meanwhile resolved alerts leave the open list; a
+    // failed one stays. A newer round owns the handoff and is left alone.
+    const leaving = new Set([
+      ...outcome.ok.map((a) => a.id),
+      ...outcome.failed.filter((f) => ackFailure(f.error) === 'gone').map((f) => f.item.id),
+    ]);
+    if (handoff.current === round) handoff.current = leaving.size > 0 ? { ids: leaving, index } : null;
     setBusy((prev) => {
       const next = new Set(prev);
       for (const id of ids) next.delete(id);
       return next;
     });
-    const leaving = outcome.ok.length + outcome.failed.filter((f) => ackFailure(f.error) === 'gone').length;
-    if (leaving === 0) handoff.current = null;
     const report = ackReport(outcome, (a) => `${hostOf(a.device_id)}: ${a.message}`);
     if (report.tone === 'error') notify.error(report.title, report.error);
     else notify[report.tone](report.title, report.detail);

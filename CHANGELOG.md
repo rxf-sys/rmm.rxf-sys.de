@@ -45,6 +45,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Alarmen noch einmal. Jetzt kommt nur die Alarmliste neu; dafür zeigt die
   Aktivität des Geräts das „quittiert von …" sofort statt erst nach einer
   Viertelminute.
+- **Fokus sprang Minuten später zu einem Alarm.** Schlug beim Quittieren
+  einer von mehreren Alarmen fehl, blieb die Fokus-Übergabe an die nächste
+  Zeile scharf. Ging der Fokus danach aus anderem Grund verloren, zog die
+  nächste Aktualisierung ihn samt Scrollposition zu einem
+  „Quittieren"-Knopf. Die Übergabe endet jetzt mit der Runde.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

@@ -420,6 +420,24 @@ describe('AlertsPage', () => {
       expect(screen.getByRole('button', { name: /^Quittieren: .*, buero-pc/ })).toHaveFocus();
       expect(tab('Quittiert')).toHaveTextContent('1');
     });
+
+    it('lets go of the focus once a round is over, even when one alert stayed', async () => {
+      const s = live([freshOutage, oldOutage, fullDisk], { fail: [13] });
+      await userEvent.click(await screen.findByRole('button', { name: 'Alle quittieren' }));
+      await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Alle quittieren' }));
+      await waitFor(() => expect(hosts()).toEqual(['nas']));
+      expect(notifyMock.error).toHaveBeenCalledWith('1 von 3 nicht quittiert', expect.any(TypeError));
+      // The bulk button left with the list; the focus went to what stayed.
+      expect(screen.getByRole('button', { name: /^Quittieren: .*, nas/ })).toHaveFocus();
+
+      // Later the focus is lost for an unrelated reason (a click on the
+      // rail, a toast that closed) and a poll changes the list. The round
+      // is long over: nothing may pull the focus and the scroll to a row.
+      (document.activeElement as HTMLElement).blur();
+      await s.poll((list) => [...list, alert({ id: 20, device_id: 1, fired_at: NOW - 3600, resolved_at: NOW - 60 })]);
+      await waitFor(() => expect(tab('Behoben')).toHaveTextContent('1'));
+      expect(document.body).toHaveFocus();
+    });
   });
 
   describe('on a phone', () => {
