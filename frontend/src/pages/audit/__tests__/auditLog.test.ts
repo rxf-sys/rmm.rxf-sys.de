@@ -10,6 +10,7 @@ import {
   hasFilters,
   isNarrowed,
   readFilters,
+  readSearch,
   sinceFor,
   timeOfDay,
   toCsv,
@@ -50,6 +51,21 @@ describe('readFilters', () => {
     const f = readFilters(new URLSearchParams('security=1&category=job'));
     expect(f.security).toBe(true);
     expect(f.category).toBe('');
+  });
+});
+
+describe('readSearch', () => {
+  it('trims the search and cuts it to the 200 characters the server accepts', () => {
+    expect(readSearch(new URLSearchParams())).toBe('');
+    expect(readSearch(new URLSearchParams('q=%20ssh%20'))).toBe('ssh');
+    expect(readSearch(new URLSearchParams(`q=${'x'.repeat(201)}`))).toHaveLength(200);
+  });
+
+  it('counts characters as the server does, not UTF-16 units', () => {
+    // 150 emoji are 150 characters for pydantic, 300 units for JavaScript.
+    const emoji = '😀'.repeat(150);
+    expect(readSearch(new URLSearchParams({ q: emoji }))).toBe(emoji);
+    expect(Array.from(readSearch(new URLSearchParams({ q: '😀'.repeat(201) })))).toHaveLength(200);
   });
 });
 

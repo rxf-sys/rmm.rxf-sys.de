@@ -1,6 +1,6 @@
 import { roleLabel } from '../../format';
 import type { Account, Role } from '../../types';
-import { ROLE_HINT } from './accounts';
+import { ROLE_HINT, seesNothing } from './accounts';
 
 /** What `useConfirm().ask` takes; every text names the account concerned. */
 export interface AskText {
@@ -15,8 +15,10 @@ const q = (name: string) => `„${name}“`;
 
 /**
  * A role change that grants or takes away admin rights asks first: it decides
- * who may manage accounts, settings and the audit log. A move between viewer
- * and technician applies at once. Null means "no question".
+ * who may manage accounts, settings and the audit log. So does making a
+ * viewer of an account without a person — it would see no device at all. A
+ * move between viewer and technician applies at once otherwise. Null means
+ * "no question".
  */
 export function roleChangeText(a: Account, role: Role): AskText | null {
   if (role === a.role) return null;
@@ -26,12 +28,22 @@ export function roleChangeText(a: Account, role: Role): AskText | null {
       body: `${q(a.username)} darf danach alles — auch Konten anlegen und löschen, Einstellungen ändern und das Audit-Log lesen.`,
       confirmLabel: 'Zum Administrator machen',
     };
+  // Judged with the new role: would the account see nothing afterwards?
+  const blind = seesNothing({ ...a, role })
+    ? `${q(a.username)} ist mit keiner Person verknüpft und sieht danach keine Geräte, bis über „Person zuordnen …“ im Menü der Zeile eine gewählt ist.`
+    : '';
   if (a.role === 'admin')
     return {
       title: `${q(a.username)} herabstufen?`,
-      body: `${q(a.username)} wird ${roleLabel(role)} und verliert den Zugriff auf Konten, Einstellungen und das Audit-Log. ${ROLE_HINT[role]}`,
+      body: `${q(a.username)} wird ${roleLabel(role)} und verliert den Zugriff auf Konten, Einstellungen und das Audit-Log. ${ROLE_HINT[role]}${blind && ` ${blind}`}`,
       confirmLabel: `Zum ${roleLabel(role)} machen`,
       danger: true,
+    };
+  if (blind)
+    return {
+      title: `${q(a.username)} zum ${roleLabel(role)} machen?`,
+      body: `Ein ${roleLabel(role)} sieht nur die Geräte seiner Person. ${blind}`,
+      confirmLabel: `Zum ${roleLabel(role)} machen`,
     };
   return null;
 }

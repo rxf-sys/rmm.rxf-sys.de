@@ -8,6 +8,57 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **Lange Suche im Audit-Log ließ die Seite abstürzen.** Eine Suche über
+  200 Zeichen beantwortet der Server mit einer Prüfliste statt eines Satzes;
+  die Oberfläche versuchte, diese Liste als Text darzustellen, und die Seite
+  brach ab — auch nach jedem Neuladen, weil die Suche in der Adresse stand.
+  Das Suchfeld nimmt jetzt höchstens 200 Zeichen an, eine längere Suche aus
+  einem Link wird gekürzt, und abgelehnte Eingaben erscheinen überall als
+  Meldung wie „Ungültige Eingabe (password: mindestens 8 Zeichen)“.
+- **Audit-Log: Suchfeld folgte der Adresse nicht.** Wer das Audit-Log über
+  die Navigation oder „g l“ erneut öffnete oder mit „Zurück“ zu einer
+  früheren Suche ging, sah im Feld und in der Liste weiter die alte Suche,
+  während die Adresse etwas anderes sagte. Feld und Liste übernehmen jetzt
+  die Suche der Adresse.
+- **Tastaturfokus fiel an den Seitenanfang.** „Filter zurücksetzen“ im
+  Audit-Log entfernte sich beim Drücken selbst, ebenso die Zeile eines
+  gelöschten Kontos samt ihrem Menüknopf; der Fokus landete danach im
+  Nichts. Er geht jetzt ins Suchfeld des Audit-Logs bzw. auf das Aktionsmenü
+  der nachrückenden Kontozeile.
+- **Administration: kurzer Serverausfall leerte Konten- und
+  Sitzungsliste.** Schlug eine Aktualisierung im Hintergrund fehl (etwa
+  während eines Deployments), ersetzte die Fehlermeldung die schon geladene
+  Liste samt ihren Aktionen. Die Liste bleibt jetzt stehen, die Meldung
+  steht darüber.
+- **Passwortlänge mit Emoji falsch gezählt.** Die Administration zählte
+  ein Emoji als zwei Zeichen und bot deshalb zu kurze Passwörter zum
+  Speichern an, die der Server ablehnte — die Ablehnung ließ die Seite
+  abstürzen. Gezählt wird jetzt wie auf dem Server.
+- **Zwei-Faktor-Bereich zeigte Veraltetes.** Wer direkt nach dem
+  Einrichten wieder abschaltete, bekam die gelöschten Backup-Codes weiter
+  zum Kopieren angeboten; wer die eigene Zwei-Faktor-Anmeldung über die
+  Kontenliste zurücksetzte, behielt ein offenes Abschalt-Formular, das nur
+  noch „2FA ist nicht aktiv“ meldete. Beides verschwindet jetzt mit dem
+  zweiten Faktor.
+- **Sitzung abmelden meldete Erfolg und Fehler zugleich.** Ein Doppelklick
+  auf „Abmelden“ schickte zwei Anfragen; die zweite fand die Sitzung nicht
+  mehr und meldete „Sitzung nicht abgemeldet“. Der Knopf nimmt während der
+  Anfrage keinen zweiten Klick an („Meldet ab …“), und eine schon beendete
+  Sitzung gilt nicht mehr als Fehler.
+- **E-Mail-Adressen mit Umlaut abgelehnt.** „Konto anlegen“ und „E-Mail
+  ändern“ ließen den Browser Adressen wie „jürgen@firma.de“ zurückweisen,
+  die der Server problemlos speichert. Die Felder prüft jetzt nur noch der
+  Server.
+- **Betrachter-Konten aus der Administration sahen nichts.** Ein
+  Betrachter sieht nur die Geräte seiner Person, doch „Konto anlegen“ bot
+  keine Person an (und schlug ausgerechnet „Betrachter“ vor), und ein
+  herabgestuftes Konto ließ sich nirgends verknüpfen — es meldete sich an
+  einem leeren Dashboard an. „Konto anlegen“ verlangt für Betrachter jetzt
+  eine Person, das Menü jeder Betrachter-Zeile bietet „Person zuordnen …“
+  bzw. „Person ändern …“, und wer ein Konto ohne Person zum Betrachter
+  macht, wird vorher gefragt. Die Kontenliste nennt die Person unter der
+  Rolle und markiert Betrachter ohne Person. Die Verknüpfung landet im
+  Audit-Log; `POST /api/accounts` nimmt dafür `person_id` an.
 - **RustDesk-ID ließ sich nicht korrigieren.** Das Eingabefeld erschien nur,
   solange gar keine ID hinterlegt war. Der Reiter „Fernzugriff" bietet jetzt
   „ID ändern" an; eine ungültige hinterlegte ID (etwa eine alte Eingabe mit

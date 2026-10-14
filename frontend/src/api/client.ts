@@ -106,17 +106,46 @@ const post = <T>(path: string, body?: unknown) => send<T>('POST', path, body);
 const patch = <T>(path: string, body?: unknown) => send<T>('PATCH', path, body);
 const del = <T>(path: string) => send<T>('DELETE', path);
 
-/** Pull a human-readable message out of an ApiError's JSON body. */
+/** One finding of FastAPI's request validation (HTTP 422). */
+interface ValidationIssue {
+  type?: unknown;
+  loc?: unknown;
+  ctx?: { min_length?: unknown; max_length?: unknown };
+}
+
+/** "q: höchstens 200 Zeichen" — the field as the API names it, and what was
+ *  wrong with it. pydantic's own `msg` is English. */
+function describeIssue(raw: unknown): string {
+  const issue = (raw ?? {}) as ValidationIssue;
+  const loc = Array.isArray(issue.loc) ? issue.loc : [];
+  // The first element says where the field sat (body, query, path).
+  const field = loc.slice(1).filter((p) => typeof p === 'string').pop();
+  const { min_length: min, max_length: max } = issue.ctx ?? {};
+  let what = 'ungültig';
+  if (issue.type === 'string_too_long' && typeof max === 'number') what = `höchstens ${max} Zeichen`;
+  else if (issue.type === 'string_too_short' && typeof min === 'number') what = `mindestens ${min} Zeichen`;
+  else if (issue.type === 'missing') what = 'fehlt';
+  return field ? `${field}: ${what}` : what;
+}
+
+/** Pull a human-readable message out of an ApiError's JSON body. Always a
+ *  string: callers render it as text, and a 422's `detail` is a list of
+ *  objects, which crashed every view that showed it. */
 export function apiErrorMessage(e: unknown): string {
   // fetch() rejects with a TypeError when the network or the server is gone.
   if (e instanceof TypeError) return 'Server nicht erreichbar';
   if (e instanceof ApiError) {
+    let detail: unknown;
     try {
-      const parsed = JSON.parse(e.body) as { detail?: string };
-      if (parsed.detail) return parsed.detail;
+      detail = (JSON.parse(e.body) as { detail?: unknown } | null)?.detail;
     } catch {
       /* body wasn't JSON */
     }
+    if (typeof detail === 'string' && detail) return detail;
+    if (Array.isArray(detail)) {
+      return detail.length > 0 ? `Ungültige Eingabe (${detail.map(describeIssue).join('; ')})` : 'Ungültige Eingabe';
+    }
+    if (detail != null) return `Fehler ${e.status}`;
     return e.body || `Fehler ${e.status}`;
   }
   return e instanceof Error ? e.message : 'Unbekannter Fehler';
@@ -219,11 +248,12 @@ export const api = {
 
   // Accounts (admin panel)
   accounts: (signal?: AbortSignal) => get<{ accounts: Account[] }>('/api/accounts', signal),
-  createAccount: (body: { username: string; password: string; role: string; email?: string }) =>
+  createAccount: (body: { username: string; password: string; role: string; email?: string; person_id?: number }) =>
     post<{ account: Account }>('/api/accounts', body),
+  /** `person_id: 0` unlinks the person; leaving it out keeps the link. */
   updateAccount: (
     id: number,
-    body: { role?: string; disabled?: boolean; password?: string; email?: string; reset_totp?: boolean },
+    body: { role?: string; disabled?: boolean; password?: string; email?: string; reset_totp?: boolean; person_id?: number },
   ) => patch<{ account: Account }>(`/api/accounts/${id}`, body),
   deleteAccount: (id: number) => del<{ ok: boolean }>(`/api/accounts/${id}`),
   deleteDevice: (id: number) => del<{ ok: boolean }>(`/api/devices/${id}`),
