@@ -39,6 +39,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   einem abgelaufenen Ein-Stunden-Token auf die falsche Ursache. Die Doku
   nennt jetzt die beim Erzeugen gewählte Dauer, den Standard
   `ENROLLMENT_TOKEN_TTL_HOURS` und widerrufene Tokens als weitere Ursache.
+- Schlug die Abfrage der RustDesk-Konfiguration fehl, forderte der
+  RustDesk-Abschnitt der Dokumentation dazu auf, `RUSTDESK_RELAY_HOST` und
+  `RUSTDESK_KEY` zu setzen — auch auf einem korrekt eingerichteten Server.
+  Er sagt jetzt, dass der Stand nicht abrufbar war.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

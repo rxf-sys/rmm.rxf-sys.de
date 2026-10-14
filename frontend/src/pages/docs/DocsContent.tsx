@@ -340,10 +340,20 @@ function RustDesk() {
               <CodeBlock label="Linux und macOS" code={cmds.unix} />
               {cmds.placeholder && (
                 <Note title="Noch mit Platzhaltern">
-                  <p>
-                    <code>{'<RELAY>'}</code> und <code>{'<PUBKEY>'}</code> stehen für Relay und Schlüssel. Sobald{' '}
-                    <code>RUSTDESK_RELAY_HOST</code> und <code>RUSTDESK_KEY</code> gesetzt sind, steht hier der fertige Befehl.
-                  </p>
+                  {/* Without data the request failed: the relay may well be set
+                      up, so sending the admin to the .env would mislead. */}
+                  {c ? (
+                    <p>
+                      <code>{'<RELAY>'}</code> und <code>{'<PUBKEY>'}</code> stehen für Relay und Schlüssel. Sobald{' '}
+                      <code>RUSTDESK_RELAY_HOST</code> und <code>RUSTDESK_KEY</code> gesetzt sind, steht hier der fertige Befehl.
+                    </p>
+                  ) : (
+                    <p>
+                      <code>{'<RELAY>'}</code> und <code>{'<PUBKEY>'}</code> stehen für Relay und Schlüssel. Der Stand dieses Servers
+                      ließ sich nicht abrufen (siehe oben); nach einem erfolgreichen „Erneut versuchen“ steht hier der fertige Befehl,
+                      sofern der Relay eingerichtet ist.
+                    </p>
+                  )}
                 </Note>
               )}
               {c?.enabled && !c.has_key && (

@@ -179,6 +179,17 @@ describe('DocsPage', () => {
     expect(remoteConfigMock).toHaveBeenCalledTimes(2);
   });
 
+  it('does not tell the admin to set up a relay when its config only failed to load', async () => {
+    remoteConfigMock.mockRejectedValueOnce(new ApiError(500, JSON.stringify({ detail: 'Datenbank gesperrt' })));
+    show();
+    const rd = section('rustdesk');
+    await rd.findByRole('alert');
+    const body = document.getElementById('rustdesk')!;
+    expect(body).not.toHaveTextContent(/Sobald RUSTDESK_RELAY_HOST/);
+    expect(body).toHaveTextContent('Der Stand dieses Servers ließ sich nicht abrufen');
+    expect(rd.getByText('rustdesk.exe --config "host=<RELAY>,key=<PUBKEY>"')).toBeInTheDocument();
+  });
+
   it('marks the section being read in the contents', () => {
     const scrollTo = layout();
     show();
