@@ -7,6 +7,20 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Behoben
+- **Endlos-Abruf nach dem Login.** Jeder angemeldete Tab rief
+  `/api/devices`, `/api/alerts`, `/api/patches/summary` und `/api/persons`
+  ununterbrochen ab — gemessen 569-mal je Endpunkt in zehn Sekunden
+  Leerlauf. `useFleet` gab bei jedem Render eine neue `refresh`-Funktion
+  zurück, und der Login-Effekt in `App.tsx` hing genau davon ab. Die
+  Funktion ist jetzt stabil; Abrufe laufen einzeln, ein Auftrag während eines
+  laufenden Abrufs wird zu genau einem Folgeabruf zusammengefasst,
+  WebSocket-Hinweise lösen höchstens alle zwei Sekunden einen Abruf aus, und
+  im versteckten Tab ruht das Polling.
+- **Alarm-Sturm erzeugte Abruf-Sturm.** Jeder ausgelöste Alarm schickte einen
+  eigenen Fleet-Hinweis. Fallen viele Geräte gleichzeitig aus, bündelt der
+  Server die Hinweise jetzt in ein Fenster von 0,5 s.
+
 ### Hinzugefügt
 - **Vorbereitung für MDM (iOS/iPadOS).** `infrastructure/docker-compose.yml`
   kennt jetzt einen NanoMDM-Container, der am Compose-Profil `mdm` hängt und
@@ -300,7 +314,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   weitergeht — per `PATCH /api/devices/{id}` neu eintragen oder leeren —,
   denn das Dashboard hat für eine schon gespeicherte ID kein Feld;
   `docs/TROUBLESHOOTING.md` zeigt den Aufruf.
-
+- Go-Toolchain für den Agent von 1.25.14 auf 1.26.9 angehoben. `govulncheck`
+  meldete neun erreichbare Schwachstellen in der Standardbibliothek, für die
+  es in der 1.25er-Reihe keinen Fix mehr gibt. Betroffen sind unter anderem
+  der TLS-Handshake im WebSocket-Dialer (GO-2026-6607) und der HTTP-Client
+  beim Agent-Update (GO-2026-6610, GO-2026-6605), also Code, den jeder
+  ausgelieferte Agent ausführt. `infrastructure/build-agent.sh` baut
+  entsprechend mit `golang:1.26-alpine`.
 - Go-Toolchain für den Agent von 1.25.0 auf 1.25.14 angehoben. `govulncheck`
   meldete 25 erreichbare Schwachstellen in der Standardbibliothek — betroffen
   waren TLS-Handshake, URL-Parsing und Cookie-Verarbeitung im WebSocket-Dialer,
