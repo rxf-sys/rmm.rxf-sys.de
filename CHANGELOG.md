@@ -620,6 +620,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   mehr der Realität (SSH statt Self-hosted Runner).
 
 ### Sicherheit
+- Go-Toolchain für den Agent von 1.25.14 auf 1.26.9 angehoben. `govulncheck`
+  meldete neun erreichbare Schwachstellen in der Standardbibliothek, für die
+  es in der 1.25er-Reihe keinen Fix mehr gibt. Betroffen sind unter anderem
+  der TLS-Handshake im WebSocket-Dialer (GO-2026-6607) und der HTTP-Client
+  beim Agent-Update (GO-2026-6610, GO-2026-6605), also Code, den jeder
+  ausgelieferte Agent ausführt. `infrastructure/build-agent.sh` baut
+  entsprechend mit `golang:1.26-alpine`.
 - Go-Toolchain für den Agent von 1.25.0 auf 1.25.14 angehoben. `govulncheck`
   meldete 25 erreichbare Schwachstellen in der Standardbibliothek — betroffen
   waren TLS-Handshake, URL-Parsing und Cookie-Verarbeitung im WebSocket-Dialer,
