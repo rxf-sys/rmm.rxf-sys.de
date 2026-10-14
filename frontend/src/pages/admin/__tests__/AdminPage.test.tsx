@@ -259,6 +259,30 @@ describe('AdminPage', () => {
     await waitFor(() => expect(m.updateAccount).toHaveBeenCalledWith(2, { password: 'neues-geheimnis' }));
   });
 
+  it('does not offer a password the server would refuse as too short', async () => {
+    show();
+    const menu = await openMenu('bob');
+    await userEvent.click(within(menu).getByRole('menuitem', { name: /Passwort setzen/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Neues Passwort für „bob“' });
+    await userEvent.type(within(dialog).getByLabelText('Neues Passwort'), '😀😀😀😀');
+    expect(within(dialog).getByText(/noch 4/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Passwort setzen' })).toBeDisabled();
+  });
+
+  it("shows the server's validation refusal in the dialog instead of crashing", async () => {
+    m.updateAccount.mockRejectedValue(
+      new ApiError(422, JSON.stringify({ detail: [{ type: 'string_too_short', loc: ['body', 'password'], msg: 'x', ctx: { min_length: 8 } }] })),
+    );
+    show();
+    const menu = await openMenu('bob');
+    await userEvent.click(within(menu).getByRole('menuitem', { name: /Passwort setzen/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Neues Passwort für „bob“' });
+    await userEvent.type(within(dialog).getByLabelText('Neues Passwort'), 'neues-geheimnis');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Passwort setzen' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Ungültige Eingabe (password: mindestens 8 Zeichen)');
+    expect(within(dialog).getByLabelText('Neues Passwort')).toHaveValue('neues-geheimnis');
+  });
+
   it('explains a 403 instead of showing it raw', async () => {
     m.accounts.mockRejectedValue(new ApiError(403, '{"detail":"admin privileges required"}'));
     show();

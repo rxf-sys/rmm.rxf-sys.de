@@ -108,6 +108,15 @@ describe('account form', () => {
     expect(passwordHint('abcdefghij')).toBe('Mindestens 8 Zeichen.');
   });
 
+  it('counts characters as the server does, not UTF-16 units', () => {
+    // Four emoji are eight UTF-16 units but four characters for pydantic's min_length.
+    const four = '😀😀😀😀';
+    expect(passwordShortfall(four)).toBe(4);
+    expect(passwordHint(four)).toBe('Mindestens 8 Zeichen — noch 4.');
+    expect(passwordShortfall(four + four)).toBe(0);
+    expect(draftReady({ ...EMPTY_DRAFT, username: 'erik', password: four }, list)).toBe(false);
+  });
+
   it('is ready with a free name and a long enough password', () => {
     expect(draftReady(EMPTY_DRAFT, list)).toBe(false);
     expect(draftReady({ ...EMPTY_DRAFT, username: 'erik', password: 'geheim123' }, list)).toBe(true);

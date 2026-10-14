@@ -30,6 +30,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   während eines Deployments), ersetzte die Fehlermeldung die schon geladene
   Liste samt ihren Aktionen. Die Liste bleibt jetzt stehen, die Meldung
   steht darüber.
+- **Passwortlänge mit Emoji falsch gezählt.** Die Administration zählte
+  ein Emoji als zwei Zeichen und bot deshalb zu kurze Passwörter zum
+  Speichern an, die der Server ablehnte — die Ablehnung ließ die Seite
+  abstürzen. Gezählt wird jetzt wie auf dem Server.
 - **RustDesk-ID ließ sich nicht korrigieren.** Das Eingabefeld erschien nur,
   solange gar keine ID hinterlegt war. Der Reiter „Fernzugriff" bietet jetzt
   „ID ändern" an; eine ungültige hinterlegte ID (etwa eine alte Eingabe mit

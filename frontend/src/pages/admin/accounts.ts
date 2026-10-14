@@ -136,8 +136,10 @@ export function nameTaken(name: string, accounts: Account[]): boolean {
   return n !== '' && accounts.some((a) => a.username.toLowerCase() === n);
 }
 
-/** How many characters a password still lacks; 0 once it is long enough. */
-export const passwordShortfall = (pw: string): number => Math.max(0, MIN_PASSWORD - pw.length);
+/** How many characters a password still lacks; 0 once it is long enough.
+ *  Counted in code points like the server's min_length — `pw.length` counts
+ *  UTF-16 units, so four emoji passed here and came back as a 422. */
+export const passwordShortfall = (pw: string): number => Math.max(0, MIN_PASSWORD - Array.from(pw).length);
 
 /** The password hint, counting down while someone types. */
 export function passwordHint(pw: string): string {
