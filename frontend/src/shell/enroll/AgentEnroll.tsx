@@ -91,6 +91,15 @@ export function AgentEnroll({ created, onCreated, onReset, onClose }: Props) {
     labelRef.current?.focus();
   };
 
+  // A command whose token is gone would only end in a 403 on the target, so
+  // revoking the token on screen takes the form back to its start. Focus
+  // stays with the token list, which moves it to its own heading.
+  const revoked = (tokenId: number) => {
+    if (tokenId !== created?.id) return;
+    onReset();
+    mint.reset();
+  };
+
   const copy = async (what: 'install' | 'download', text: string) => {
     if (await copyText(text)) {
       setCopied(what);
@@ -262,7 +271,7 @@ export function AgentEnroll({ created, onCreated, onReset, onClose }: Props) {
           </div>
         )}
       </div>
-      <OpenTokens justCreated={created?.id ?? null} />
+      <OpenTokens justCreated={created?.id ?? null} onRevoked={revoked} />
     </div>
   );
 }

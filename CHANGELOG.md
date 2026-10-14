@@ -36,6 +36,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Abruf. Das Token erscheint jetzt auch nach dem Zurückwechseln, die Liste
   wird in jedem Fall neu geladen, und ein zweiter Klick während der laufenden
   Anfrage erzeugt kein zweites Token mehr.
+- Wurde das eben erzeugte Token unter „Offene Tokens" widerrufen, blieb sein
+  Installationsbefehl samt „Gültig bis …" stehen, als wäre er noch nutzbar —
+  ausgeführt endete er mit „Enrollment-Token ungültig oder abgelaufen". Der
+  Dialog kehrt jetzt zum Formular für ein neues Token zurück.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

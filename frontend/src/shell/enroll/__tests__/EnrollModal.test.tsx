@@ -256,6 +256,39 @@ describe('EnrollModal', () => {
     expect(screen.queryByRole('button', { name: 'Token ohne Bezeichnung widerrufen' })).not.toBeInTheDocument();
   });
 
+  it('drops the install command once its own token is revoked', async () => {
+    const listed: EnrollToken = { id: fresh.id, label: fresh.label, created_at: fresh.created_at, expires_at: fresh.expires_at };
+    tokensMock.mockResolvedValue({ tokens: [...openTokens, listed] });
+    const { user } = show();
+    await mint(user);
+
+    // Another token going away leaves the command for this one standing.
+    await user.click(await screen.findByRole('button', { name: 'Token „Laptop Mama“ widerrufen' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Token widerrufen' })).getByRole('button', { name: 'Widerrufen' }));
+    expect(deleteTokenMock).toHaveBeenCalledWith(7);
+    expect(screen.getByRole('group', { name: 'Installationsbefehl für Windows' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Token „Büro-PC“ widerrufen' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Token widerrufen' })).getByRole('button', { name: 'Widerrufen' }));
+    expect(deleteTokenMock).toHaveBeenCalledWith(fresh.id);
+    expect(screen.queryByRole('group', { name: /Installationsbefehl/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Nur einmal sichtbar')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Token erzeugen' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Offene Tokens' })).toHaveFocus();
+  });
+
+  it('keeps the install command when revoking its own token fails', async () => {
+    const listed: EnrollToken = { id: fresh.id, label: fresh.label, created_at: fresh.created_at, expires_at: fresh.expires_at };
+    tokensMock.mockResolvedValue({ tokens: [listed] });
+    deleteTokenMock.mockRejectedValueOnce(new ApiError(500, JSON.stringify({ detail: 'Datenbank gesperrt' })));
+    const { user } = show();
+    await mint(user);
+    await user.click(await screen.findByRole('button', { name: 'Token „Büro-PC“ widerrufen' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Token widerrufen' })).getByRole('button', { name: 'Widerrufen' }));
+    expect(deleteTokenMock).toHaveBeenCalledWith(fresh.id);
+    expect(screen.getByRole('group', { name: 'Installationsbefehl für Windows' })).toHaveTextContent('raw-token-xyz');
+  });
+
   it('closes from the form and from the result', async () => {
     const { user, onClose } = show();
     await user.click(screen.getByRole('button', { name: 'Abbrechen' }));
