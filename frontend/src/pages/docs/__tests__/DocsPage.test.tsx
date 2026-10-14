@@ -104,6 +104,17 @@ describe('DocsPage', () => {
     expect(windows.getByText('In die Zwischenablage kopiert')).toBeInTheDocument();
   });
 
+  it('gives the token validity chosen in the enroll dialog, not a fixed 24 h', () => {
+    show();
+    // The dialog offers 1 h to 14 days; only the server default is 24 h.
+    const install = section('windows-agent').getByText(/Token gilt/).closest('li')!;
+    expect(install).toHaveTextContent('so lange, wie beim Erzeugen gewählt');
+    expect(install).toHaveTextContent('ENROLLMENT_TOKEN_TTL_HOURS');
+    const refused = section('windows-fehler').getByRole('heading', { name: /Token ungültig oder abgelaufen/ }).parentElement!;
+    expect(refused).toHaveTextContent('verbraucht, widerrufen oder abgelaufen');
+    expect(document.body).not.toHaveTextContent(/24 h gültig|älter als 24 h/);
+  });
+
   it('selects the command and says so when the browser refuses the clipboard', async () => {
     const user = userEvent.setup();
     vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('denied'));

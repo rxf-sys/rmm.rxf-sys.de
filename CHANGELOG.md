@@ -33,6 +33,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   verändertes oder abgeschnittenes Sprungziel wie `/doku#100%` ersetzte die
   ganze Seite durch die Fehleransicht. Ein unbekanntes Ziel wird jetzt
   einfach ignoriert.
+- **Dokumentation: Token-Gültigkeit stimmte nicht mehr.** Dort stand fest
+  „24 h gültig", und bei HTTP 403 hieß es, das Token sei „älter als 24 h".
+  Seit „Gerät hinzufügen" 1 Stunde bis 14 Tage anbietet, führte das bei
+  einem abgelaufenen Ein-Stunden-Token auf die falsche Ursache. Die Doku
+  nennt jetzt die beim Erzeugen gewählte Dauer, den Standard
+  `ENROLLMENT_TOKEN_TTL_HOURS` und widerrufene Tokens als weitere Ursache.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist
