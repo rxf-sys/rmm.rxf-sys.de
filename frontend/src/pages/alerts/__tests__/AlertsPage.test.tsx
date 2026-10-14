@@ -1,7 +1,6 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useState } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
@@ -135,6 +134,53 @@ function show(opts: ShowOptions = {}) {
   return s;
 }
 
+/**
+ * The page as the app runs it: the alerts come from the fleet query, and the
+ * server behind it records each acknowledgement, so a refetch brings the
+ * acknowledged alerts back as "quittiert". `fail` lists alerts whose
+ * acknowledgement breaks.
+ */
+function live(initial: Alert[], opts: { fail?: number[] } = {}) {
+  let server = initial;
+  const fetchAlerts = vi.fn(async () => server);
+  ackMock.mockImplementation(async (id) => {
+    if (opts.fail?.includes(id)) throw new TypeError('Failed to fetch');
+    server = server.map((a) => (a.id === id ? { ...a, acked_at: NOW, acked_by: 'anna' } : a));
+    return {};
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidate = vi.spyOn(client, 'invalidateQueries');
+  function Page() {
+    const q = useQuery({ queryKey: qk.alerts, queryFn: fetchAlerts });
+    return (
+      <AlertsPage
+        alerts={q.data ?? []}
+        devices={DEVICES}
+        persons={[]}
+        onOpenDevice={() => {}}
+        onRefresh={() => void client.invalidateQueries({ queryKey: qk.fleet })}
+      />
+    );
+  }
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <Page />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  return {
+    client,
+    fetchAlerts,
+    invalidate,
+    /** Change what the server holds and let the next poll bring it. */
+    poll: async (change: (list: Alert[]) => Alert[]) => {
+      server = change(server);
+      await client.invalidateQueries({ queryKey: qk.alerts });
+    },
+  };
+}
+
 const bodyRows = () => screen.getAllByRole('row').slice(1);
 const hosts = () => bodyRows().map((r) => within(r).getByRole('link').textContent);
 const tab = (name: string) => screen.getByRole('tab', { name: new RegExp(`^${name}`) });
@@ -263,9 +309,22 @@ describe('AlertsPage', () => {
       const s = show({ alerts: [oldOutage] });
       await userEvent.click(screen.getByRole('button', { name: /^Quittieren: Gerät meldet sich nicht, lisa-laptop/ }));
       expect(ackMock).toHaveBeenCalledWith(12);
-      await waitFor(() => expect(s.onRefresh).toHaveBeenCalled());
+      await waitFor(() => expect(notifyMock.success).toHaveBeenCalledWith('Alarm quittiert', 'lisa-laptop: Gerät meldet sich nicht'));
       expect(s.invalidate).toHaveBeenCalledWith({ queryKey: qk.alerts });
-      expect(notifyMock.success).toHaveBeenCalledWith('Alarm quittiert', 'lisa-laptop: Gerät meldet sich nicht');
+    });
+
+    it('fetches the alerts once and marks the device pages stale', async () => {
+      const s = live([oldOutage, fullDisk]);
+      s.client.setQueryData(qk.deviceAlerts(2), []);
+      s.client.setQueryData(qk.deviceAlerts(3), []);
+      await userEvent.click(await screen.findByRole('button', { name: /^Quittieren: .*, lisa-laptop/ }));
+      await waitFor(() => expect(notifyMock.success).toHaveBeenCalled());
+      // One fetch on load, one for the acknowledgement — not a second one
+      // for the whole fleet right behind it.
+      expect(s.fetchAlerts).toHaveBeenCalledTimes(2);
+      // The device's own alert list ("quittiert von …") is cached apart.
+      expect(s.client.getQueryState(qk.deviceAlerts(2))?.isInvalidated).toBe(true);
+      expect(s.client.getQueryState(qk.deviceAlerts(3))?.isInvalidated).toBe(false);
     });
 
     it('is busy while the request runs and takes no second click', async () => {
@@ -339,34 +398,72 @@ describe('AlertsPage', () => {
       expect(ackMock.mock.calls.map(([id]) => id).sort()).toEqual([12, 16]);
     });
 
+    it('does not acknowledge again what someone else acknowledged while the dialog was open', async () => {
+      const s = live([freshOutage, oldOutage, fullDisk]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Alle quittieren' }));
+      expect(screen.getByRole('dialog', { name: '3 offene Alarme quittieren?' })).toBeInTheDocument();
+      // A poll lands while the dialog is open: a colleague took lisa-laptop.
+      await s.poll((list) => list.map((a) => (a.id === 12 ? { ...a, acked_at: NOW, acked_by: 'ben' } : a)));
+      await waitFor(() => expect(tab('Quittiert')).toHaveTextContent('1'));
+      await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Alle quittieren' }));
+      await waitFor(() => expect(notifyMock.success).toHaveBeenCalledWith('2 Alarme quittiert', '1 war schon quittiert.'));
+      // The server would record a second acknowledgement under this name.
+      expect(ackMock.mock.calls.map(([id]) => id).sort()).toEqual([11, 13]);
+    });
+
+    it('leaves out an alert whose own acknowledge is still running', async () => {
+      live([freshOutage, oldOutage, fullDisk]);
+      let finish: (v: unknown) => void = () => {};
+      ackMock.mockImplementationOnce(() => new Promise((r) => (finish = r)));
+      await userEvent.click(await screen.findByRole('button', { name: /^Quittieren: .*, lisa-laptop/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Alle quittieren' }));
+      const dialog = screen.getByRole('dialog', { name: '2 offene Alarme quittieren?' });
+      expect(dialog).not.toHaveTextContent('lisa-laptop');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Alle quittieren' }));
+      await waitFor(() => expect(notifyMock.success).toHaveBeenCalledWith('2 Alarme quittiert', undefined));
+      finish({});
+      expect(ackMock.mock.calls.map(([id]) => id).sort()).toEqual([11, 12, 13]);
+    });
+
+    it('keeps the person filter while the persons are missing', async () => {
+      // The persons arrive after the alerts, or a poll of them failed: the
+      // link still says person 4, and "Alle quittieren" must not widen to
+      // every person's alerts.
+      const otherLaptop = alert({ id: 16, device_id: 2, rule: 'disk', message: 'Disk C: zu 85 % belegt' });
+      show({ alerts: [freshOutage, oldOutage, otherLaptop], persons: [], route: '/alarme?person=4' });
+      expect(hosts()).toEqual(['lisa-laptop', 'lisa-laptop']);
+      expect(screen.getByRole('combobox', { name: 'Nach Person filtern' })).toHaveDisplayValue('Person 4');
+      await userEvent.click(screen.getByRole('button', { name: 'Alle quittieren' }));
+      const dialog = screen.getByRole('dialog', { name: '2 offene Alarme auf Geräten von Person 4 quittieren?' });
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Alle quittieren' }));
+      await waitFor(() => expect(notifyMock.success).toHaveBeenCalled());
+      expect(ackMock.mock.calls.map(([id]) => id).sort()).toEqual([12, 16]);
+    });
+
     it('hands the focus to the next alert once one has left the list', async () => {
-      function Live() {
-        const [alerts, setAlerts] = useState([freshOutage, oldOutage, fullDisk]);
-        const client = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }))[0];
-        return (
-          <QueryClientProvider client={client}>
-            <MemoryRouter>
-              <AlertsPage
-                alerts={alerts}
-                devices={DEVICES}
-                persons={[]}
-                onOpenDevice={() => {}}
-                // What the next poll would bring: the acknowledged alerts moved on.
-                onRefresh={() =>
-                  setAlerts((list) =>
-                    list.map((a) => (ackMock.mock.calls.some(([id]) => id === a.id) ? { ...a, acked_at: NOW, acked_by: 'anna' } : a)),
-                  )
-                }
-              />
-            </MemoryRouter>
-          </QueryClientProvider>
-        );
-      }
-      render(<Live />);
-      await userEvent.click(screen.getByRole('button', { name: /^Quittieren: .*, lisa-laptop/ }));
+      live([freshOutage, oldOutage, fullDisk]);
+      await userEvent.click(await screen.findByRole('button', { name: /^Quittieren: .*, lisa-laptop/ }));
       await waitFor(() => expect(hosts()).toEqual(['nas', 'buero-pc']));
       expect(screen.getByRole('button', { name: /^Quittieren: .*, buero-pc/ })).toHaveFocus();
       expect(tab('Quittiert')).toHaveTextContent('1');
+    });
+
+    it('lets go of the focus once a round is over, even when one alert stayed', async () => {
+      const s = live([freshOutage, oldOutage, fullDisk], { fail: [13] });
+      await userEvent.click(await screen.findByRole('button', { name: 'Alle quittieren' }));
+      await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Alle quittieren' }));
+      await waitFor(() => expect(hosts()).toEqual(['nas']));
+      expect(notifyMock.error).toHaveBeenCalledWith('1 von 3 nicht quittiert', expect.any(TypeError));
+      // The bulk button left with the list; the focus went to what stayed.
+      expect(screen.getByRole('button', { name: /^Quittieren: .*, nas/ })).toHaveFocus();
+
+      // Later the focus is lost for an unrelated reason (a click on the
+      // rail, a toast that closed) and a poll changes the list. The round
+      // is long over: nothing may pull the focus and the scroll to a row.
+      (document.activeElement as HTMLElement).blur();
+      await s.poll((list) => [...list, alert({ id: 20, device_id: 1, fired_at: NOW - 3600, resolved_at: NOW - 60 })]);
+      await waitFor(() => expect(tab('Behoben')).toHaveTextContent('1'));
+      expect(document.body).toHaveFocus();
     });
   });
 

@@ -1,7 +1,7 @@
 import './patches.css';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useCallback, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { Link, NavigationType, useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { qk } from '../../api/queryClient';
 import { FilterBar, type FilterOption } from '../../components/FilterBar';
@@ -200,14 +200,21 @@ function Connection({ d, now }: { d: Device; now: number }) {
   );
 }
 
+/** aria-disabled rather than disabled, here and on the other scan and
+ *  install buttons: a disabled button drops the focus it has, and a keyboard
+ *  user would start over at the top of the page. It also keeps the reason an
+ *  offline device cannot be scanned reachable — the title is the button's
+ *  description, which a disabled button never gets to say. */
 function ScanButton({ d, busy, onScan }: { d: Device; busy: boolean; onScan: (d: Device) => void }) {
   const ok = reachable(d);
   return (
     <button
       type="button"
       className="btn-icon ghost sq30 pt-scan"
-      onClick={() => onScan(d)}
-      disabled={busy || !ok}
+      onClick={() => {
+        if (ok && !busy) onScan(d);
+      }}
+      aria-disabled={busy || !ok || undefined}
       aria-label={`${d.hostname} jetzt prüfen`}
       title={ok ? 'Jetzt nach Updates suchen' : 'Nicht verbunden — eine Prüfung braucht eine offene Agent-Verbindung'}
     >
@@ -241,10 +248,27 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
   const rawConn = params.get('conn');
   const conn: ConnFilter = isConnFilter(rawConn) ? rawConn : 'alle';
   const rawPerson = params.get('person');
-  const personFilter = rawPerson !== null && persons.some((p) => String(p.id) === rawPerson) ? Number(rawPerson) : null;
+  // The id from the URL counts on its own, not only once the persons are
+  // there: they load separately and can be missing for a while, and a
+  // filter that silently fell away would widen "Geräte prüfen" and "Alle
+  // Treffer auswählen" to the whole fleet. An unknown id shows an empty
+  // list with a way back.
+  const personFilter = rawPerson !== null && /^[1-9]\d*$/.test(rawPerson) ? Number(rawPerson) : null;
   // Component state, only mirrored into the URL: an input controlled by the
   // URL drops keystrokes, because the router applies changes in a transition.
   const [q, setQ] = useState(() => params.get('q') ?? '');
+  // The page stays mounted when the address changes under it (the rail's
+  // Patches link, "g p", Back), and the filters read from the URL follow;
+  // the search has to be taken over. Those navigations push or pop, the
+  // page's own writes replace. Syncing on our own replaces would undo
+  // keystrokes whose URL update is still in its transition.
+  const { key: locationKey } = useLocation();
+  const navigationType = useNavigationType();
+  const [seenKey, setSeenKey] = useState(locationKey);
+  if (locationKey !== seenKey) {
+    setSeenKey(locationKey);
+    if (navigationType !== NavigationType.Replace) setQ(params.get('q') ?? '');
+  }
   const rawSort = params.get('sort');
   const sort = useMemo(() => parseSort(rawSort), [rawSort]);
 
@@ -347,8 +371,14 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
     });
 
   // ---- actions ----
-  const refreshFleet = () => {
+  /** After a scan or an installation: the fleet figures, and the device
+   *  pages of the devices it touched. Starting a job sends no fleet hint,
+   *  so a device's cached Updates tab would otherwise still offer
+   *  "Installieren" while one runs. Nothing on this page reads those, so
+   *  they are only marked stale and load when a device page opens. */
+  const refreshFleet = (touched: Device[]) => {
     void qc.invalidateQueries({ queryKey: qk.patchSummary });
+    for (const d of touched) void qc.invalidateQueries({ queryKey: qk.device(d.id) });
     onRefresh();
   };
 
@@ -378,8 +408,8 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
       await api.scanPatches(d.id);
     });
     setBusy(false);
-    refreshFleet();
-    setTimeout(refreshFleet, LATE_REFRESH_MS);
+    refreshFleet(plan.targets);
+    setTimeout(() => refreshFleet(plan.targets), LATE_REFRESH_MS);
     if (res.ok.length > 0) {
       const skipped = plan.skipped.length > 0 ? ` Übersprungen: ${skippedText(plan.skipped)}.` : '';
       notify.info(
@@ -434,7 +464,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
     });
     setBusy(false);
     trackJobs(started, 'Update-Installation');
-    refreshFleet();
+    refreshFleet(plan.targets);
     reportFailures('Installation', res, n);
   }
 
@@ -466,21 +496,32 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
 
   const narrowedOtherwise = os !== 'alle' || conn !== 'alle' || personFilter !== null || q.trim() !== '';
   const narrowed = state !== 'alle' || narrowedOtherwise;
+  // Both "Filter zurücksetzen" and "Alle Treffer auswählen" disappear with
+  // their own click. The focus moves on to where the work goes on — the
+  // search, the selection — instead of dropping to the top of the page.
+  const searchRef = useRef<HTMLInputElement>(null);
+  const bulkRef = useRef<HTMLElement>(null);
   const resetFilters = () => {
     setQ('');
     setParam({ filter: null, os: null, conn: null, person: null, q: null });
+    searchRef.current?.focus();
   };
   const empty = emptyText(state, narrowedOtherwise);
   const allPct = currentPct(stats.current, stats.devices);
 
+  // The label is the box's hit area: the whole cell in the table, the left
+  // strip of a card. A near miss would otherwise open the device, and the
+  // selection, which lives in this page, would go with it.
   const check = (d: Device) => (
-    <input
-      type="checkbox"
-      className="pt-check"
-      checked={selected.has(d.id)}
-      onChange={(e) => toggle(d.id, e)}
-      aria-label={`${d.hostname} auswählen`}
-    />
+    <label className="pt-hit">
+      <input
+        type="checkbox"
+        className="pt-check"
+        checked={selected.has(d.id)}
+        onChange={(e) => toggle(d.id, e)}
+        aria-label={`${d.hostname} auswählen`}
+      />
+    </label>
   );
 
   return (
@@ -496,8 +537,10 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
             <button
               type="button"
               className="btn"
-              onClick={() => void scan(scannable)}
-              disabled={busy}
+              onClick={() => {
+                if (!busy) void scan(scannable);
+              }}
+              aria-disabled={busy || undefined}
               title="Fordert bei allen verbundenen Geräten der Liste eine Update-Prüfung an"
             >
               <IconRestart size={14} /> {fmt.format(scannable.length)} {scannable.length === 1 ? 'Gerät' : 'Geräte'} prüfen
@@ -598,6 +641,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
             <div className="pt-search">
               <IconSearch size={15} />
               <input
+                ref={searchRef}
                 type="search"
                 className="input"
                 value={q}
@@ -609,7 +653,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
                 aria-label="Geräte durchsuchen"
               />
             </div>
-            {persons.length > 0 && (
+            {(persons.length > 0 || personFilter !== null) && (
               <select
                 className={personFilter === null ? 'input pt-select' : 'input pt-select is-set'}
                 value={personFilter ?? ''}
@@ -622,6 +666,10 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
                     {p.name}
                   </option>
                 ))}
+                {/* A filter whose person is not (yet) known still says that it is on. */}
+                {personFilter !== null && !personNames.has(personFilter) && (
+                  <option value={personFilter}>Person {personFilter}</option>
+                )}
               </select>
             )}
             <select
@@ -657,6 +705,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
 
           {bulkOpen && (
             <PatchBulkBar
+              ref={bulkRef}
               count={selectedDevices.length}
               hidden={hiddenSelected}
               withSecurity={withSecurity}
@@ -666,10 +715,20 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
               onClear={() => setSelected(new Set())}
             />
           )}
-          {isOperator && pageAll && shown.length > rows.length && selectedDevices.length < shown.length && (
+          {/* Asks about the matches themselves: selected devices the filter
+              hides say nothing about whether all matches are selected, and
+              taking up the offer adds to them rather than dropping them. */}
+          {isOperator && pageAll && shown.length > rows.length && shown.some((d) => !selected.has(d.id)) && (
             <p className="pt-selectall">
               Alle {fmt.format(rows.length)} Geräte dieser Seite sind ausgewählt.{' '}
-              <button type="button" className="link-btn" onClick={() => setSelected(new Set(shown.map((d) => d.id)))}>
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => {
+                  setSelected((prev) => new Set([...prev, ...shown.map((d) => d.id)]));
+                  bulkRef.current?.focus();
+                }}
+              >
                 Alle {fmt.format(shown.length)} Treffer auswählen
               </button>
             </p>

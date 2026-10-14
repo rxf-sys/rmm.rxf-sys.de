@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { Link, MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
 import { qk } from '../../../api/queryClient';
@@ -74,7 +74,26 @@ const fleet: Device[] = [
 const summary: PatchSummary = { '1': { pending: 5, security: 2 }, '2': { pending: 1, security: 1 } };
 const persons: Person[] = [{ id: 9, name: 'Lisa', email: '', phone: '', notes: '', created_at: 0, device_count: 1 }];
 
-function show(opts: { devices?: Device[]; summary?: PatchSummary; isOperator?: boolean; route?: string; client?: QueryClient } = {}) {
+/** Where the router is, and what the rail's "Patches" (or "g p") and the
+ *  browser's Back do: navigate while the page stays mounted. */
+function Rail() {
+  const { pathname, search } = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <p data-testid="location">{pathname + search}</p>
+      <Link to="/patches">Patches in der Leiste</Link>
+      <button type="button" onClick={() => navigate(-1)}>
+        Zurück
+      </button>
+    </>
+  );
+}
+const location = () => screen.getByTestId('location').textContent;
+
+function show(
+  opts: { devices?: Device[]; summary?: PatchSummary; persons?: Person[]; isOperator?: boolean; route?: string; client?: QueryClient } = {},
+) {
   const client = opts.client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const onRefresh = vi.fn();
   const onOpenDevice = vi.fn();
@@ -84,11 +103,12 @@ function show(opts: { devices?: Device[]; summary?: PatchSummary; isOperator?: b
         <PatchesPage
           devices={opts.devices ?? fleet}
           patchSummary={opts.summary ?? summary}
-          persons={persons}
+          persons={opts.persons ?? persons}
           onOpenDevice={onOpenDevice}
           onRefresh={onRefresh}
           isOperator={opts.isOperator ?? false}
         />
+        <Rail />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -205,9 +225,48 @@ describe('PatchesPage Filter', () => {
     expect(hostnames()).toEqual(['buero-pc']);
   });
 
+  it('hält den Personenfilter, solange die Personen fehlen', async () => {
+    // The persons arrive after the devices, or a poll of them failed: the
+    // link still says person 9, and the scan must not widen to the fleet.
+    show({ route: '/patches?person=9', persons: [], isOperator: true });
+    expect(hostnames()).toEqual(['buero-pc']);
+    expect(screen.getByRole('combobox', { name: 'Nach Person filtern' })).toHaveDisplayValue('Person 9');
+    await userEvent.click(screen.getByRole('button', { name: '1 Gerät prüfen' }));
+    await waitFor(() => expect(scanMock).toHaveBeenCalledTimes(1));
+    expect(scanMock).toHaveBeenCalledWith(1);
+  });
+
   it('findet über die Suche', async () => {
     show();
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Geräte durchsuchen' }), 'debian', { delay: null });
+    const box = screen.getByRole('searchbox', { name: 'Geräte durchsuchen' });
+    await userEvent.type(box, 'debian', { delay: null });
+    expect(hostnames()).toEqual(['nas']);
+    // Each keystroke rewrites the address; none of them may undo another.
+    expect(box).toHaveValue('debian');
+    expect(location()).toBe('/patches?q=debian');
+  });
+
+  it('übernimmt die Suche aus der Adresse, wenn die Leiste die Seite neu öffnet', async () => {
+    show({ route: '/patches?q=nas&filter=sicherheit' });
+    const box = screen.getByRole('searchbox', { name: 'Geräte durchsuchen' });
+    expect(hostnames()).toEqual(['nas']);
+    await userEvent.click(screen.getByRole('link', { name: 'Patches in der Leiste' }));
+    expect(location()).toBe('/patches');
+    expect(box).toHaveValue('');
+    expect(hostnames()).toHaveLength(4);
+    expect(screen.queryByRole('button', { name: /Filter zurücksetzen/ })).not.toBeInTheDocument();
+  });
+
+  it('bringt mit „Zurück" die Suche des früheren Eintrags zurück', async () => {
+    show({ route: '/patches?q=nas' });
+    await userEvent.click(screen.getByRole('link', { name: 'Patches in der Leiste' }));
+    const box = screen.getByRole('searchbox', { name: 'Geräte durchsuchen' });
+    await userEvent.type(box, 'macos', { delay: null });
+    expect(location()).toBe('/patches?q=macos');
+    expect(hostnames()).toEqual(['laptop']);
+    await userEvent.click(screen.getByRole('button', { name: 'Zurück' }));
+    expect(location()).toBe('/patches?q=nas');
+    expect(box).toHaveValue('nas');
     expect(hostnames()).toEqual(['nas']);
   });
 });
@@ -230,7 +289,7 @@ describe('PatchesPage Rollen', () => {
 
   it('prüft ein einzelnes Gerät aus seiner Zeile', async () => {
     show({ isOperator: true });
-    expect(screen.getByRole('button', { name: 'nas jetzt prüfen' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'nas jetzt prüfen' })).toHaveAttribute('aria-disabled', 'true');
     await userEvent.click(screen.getByRole('button', { name: 'laptop jetzt prüfen' }));
     await waitFor(() => expect(scanMock).toHaveBeenCalledWith(3));
     expect(notifyMock.info).toHaveBeenCalledWith('Prüfung auf laptop gestartet', expect.any(String));
@@ -260,7 +319,11 @@ describe('PatchesPage Auswahl', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'laptop auswählen' }));
     const bar = screen.getByRole('region', { name: 'Auswahl' });
     expect(bar).toHaveTextContent('1 ausgewählt');
-    expect(within(bar).getByRole('button', { name: /Sicherheitsupdates installieren/ })).toBeDisabled();
+    const install = within(bar).getByRole('button', { name: /Sicherheitsupdates installieren/ });
+    expect(install).toHaveAttribute('aria-disabled', 'true');
+    expect(install).toHaveAccessibleDescription('Kein ausgewähltes Gerät hat offene Sicherheitsupdates');
+    await userEvent.click(install);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await userEvent.click(within(bar).getByRole('button', { name: 'Jetzt prüfen' }));
     await waitFor(() => expect(scanMock).toHaveBeenCalledWith(3));
     await userEvent.click(within(bar).getByRole('button', { name: 'Auswahl aufheben' }));
@@ -289,6 +352,58 @@ describe('PatchesPage Auswahl', () => {
     expect(onRefresh).toHaveBeenCalled();
   });
 
+  it('markiert die Updates und Aufträge der Zielgeräte als veraltet', async () => {
+    // The device page caches its update list for a while; without this the
+    // Updates tab would still offer "Installieren" on a device that is busy
+    // installing, and the server would answer with a 409.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(qk.devicePatches(1), { patches: [], installing_job: null });
+    client.setQueryData(qk.deviceJobs(1), []);
+    client.setQueryData(qk.devicePatches(3), { patches: [], installing_job: null });
+    show({ isOperator: true, client });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'buero-pc auswählen' }));
+    await userEvent.click(within(screen.getByRole('region', { name: 'Auswahl' })).getByRole('button', { name: /Sicherheitsupdates installieren/ }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Installation starten' }));
+    await waitFor(() => expect(trackJobsMock).toHaveBeenCalled());
+    expect(client.getQueryState(qk.devicePatches(1))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(qk.deviceJobs(1))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(qk.devicePatches(3))?.isInvalidated).toBe(false);
+
+    await userEvent.click(screen.getByRole('button', { name: 'laptop jetzt prüfen' }));
+    await waitFor(() => expect(scanMock).toHaveBeenCalledWith(3));
+    await waitFor(() => expect(client.getQueryState(qk.devicePatches(3))?.isInvalidated).toBe(true));
+  });
+
+  it('bietet alle Treffer an, auch neben ausgeblendeter Auswahl, und behält diese', async () => {
+    const many = [
+      ...Array.from({ length: 30 }, (_, i) => device({ id: 100 + i, hostname: `pc-${String(i + 1).padStart(2, '0')}` })),
+      ...Array.from({ length: 10 }, (_, i) => device({ id: 200 + i, hostname: `srv-${i + 1}`, os: 'linux' })),
+    ];
+    show({ devices: many, summary: {}, isOperator: true, route: '/patches?os=linux' });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Alle Geräte dieser Seite auswählen' }));
+    await userEvent.click(screen.getByRole('tab', { name: /Windows PC/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Alle Geräte dieser Seite auswählen' }));
+    const bar = screen.getByRole('region', { name: 'Auswahl' });
+    // 25 on this page plus 10 the filter hides: 5 of the 30 matches are not
+    // selected yet, so the offer stands although 35 is more than 30.
+    expect(bar).toHaveTextContent('35 ausgewählt · 10 davon ausgeblendet');
+    await userEvent.click(screen.getByRole('button', { name: 'Alle 30 Treffer auswählen' }));
+    // Adds to the selection instead of replacing it.
+    expect(bar).toHaveTextContent('40 ausgewählt · 10 davon ausgeblendet');
+  });
+
+  it('wählt bei einem Klick neben das Kästchen aus, statt die Seite zu verlassen', async () => {
+    show({ isOperator: true });
+    const box = screen.getByRole('checkbox', { name: 'laptop auswählen' });
+    // Its hit area: the whole cell, not only the 16 px box. Leaving the page
+    // would drop the selection, which lives in the page.
+    await userEvent.click(box.parentElement!);
+    expect(box).toBeChecked();
+    expect(location()).toBe('/patches');
+    await userEvent.click(within(bodyRows()[2]!).getByText('macOS 15'));
+    expect(location()).toBe('/devices/3?tab=patches');
+  });
+
   it('startet nichts, wenn die Bestätigung abgebrochen wird', async () => {
     show({ isOperator: true });
     await userEvent.click(screen.getByRole('checkbox', { name: 'buero-pc auswählen' }));
@@ -308,13 +423,92 @@ describe('PatchesPage Auswahl', () => {
   });
 });
 
-describe('PatchesPage auf dem Telefon', () => {
-  const original = window.matchMedia;
-  afterEach(() => {
-    window.matchMedia = original;
+describe('PatchesPage Fokus', () => {
+  /** Scans that hang until `release` is called. */
+  function holdScans() {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    scanMock.mockImplementation(() => gate.then(() => ({ ok: true })));
+    return () => release();
+  }
+
+  // A disabled button drops the focus: a keyboard user would land at the
+  // top of the page and a screen reader loses its place.
+  it('lässt den Fokus auf „Geräte prüfen", solange die Prüfung läuft', async () => {
+    const release = holdScans();
+    show({ isOperator: true });
+    const button = screen.getByRole('button', { name: '3 Geräte prüfen' });
+    await userEvent.click(button);
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveFocus();
+    await userEvent.click(button);
+    expect(scanMock).toHaveBeenCalledTimes(3);
+    release();
+    await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled'));
   });
 
-  it('zeigt Karten statt einer Tabelle', () => {
+  it('lässt den Fokus in der Aktionsleiste, solange die Prüfung läuft', async () => {
+    const release = holdScans();
+    show({ isOperator: true });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'buero-pc auswählen' }));
+    const bar = screen.getByRole('region', { name: 'Auswahl' });
+    const scan = within(bar).getByRole('button', { name: 'Jetzt prüfen' });
+    await userEvent.click(scan);
+    expect(scan).not.toBeDisabled();
+    expect(scan).toHaveAttribute('aria-disabled', 'true');
+    expect(scan).toHaveFocus();
+    const install = within(bar).getByRole('button', { name: /Sicherheitsupdates installieren/ });
+    expect(install).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(install);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    release();
+    await waitFor(() => expect(scan).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('lässt den Fokus auf dem Prüfknopf einer Zeile', async () => {
+    const release = holdScans();
+    show({ isOperator: true });
+    const button = screen.getByRole('button', { name: 'laptop jetzt prüfen' });
+    await userEvent.click(button);
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveFocus();
+    release();
+    await waitFor(() => expect(button).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('sagt auch per Tastatur, warum ein Gerät ohne Verbindung nicht geprüft wird', async () => {
+    show({ isOperator: true });
+    const button = screen.getByRole('button', { name: 'nas jetzt prüfen' });
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAccessibleDescription(/Nicht verbunden/);
+    await userEvent.click(button);
+    expect(scanMock).not.toHaveBeenCalled();
+  });
+
+  it('bringt den Fokus nach „Alle Treffer auswählen" in die Aktionsleiste', async () => {
+    const many = Array.from({ length: 30 }, (_, i) => device({ id: 100 + i, hostname: `pc-${String(i + 1).padStart(2, '0')}` }));
+    show({ devices: many, summary: {}, isOperator: true });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Alle Geräte dieser Seite auswählen' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Alle 30 Treffer auswählen' }));
+    const bar = screen.getByRole('region', { name: 'Auswahl' });
+    expect(bar).toHaveTextContent('30 ausgewählt');
+    expect(bar).toHaveFocus();
+  });
+
+  it('bringt den Fokus nach „Filter zurücksetzen" ins Suchfeld', async () => {
+    show({ route: '/patches?filter=sicherheit' });
+    await userEvent.click(screen.getByRole('button', { name: /Filter zurücksetzen/ }));
+    expect(hostnames()).toHaveLength(4);
+    expect(screen.getByRole('searchbox', { name: 'Geräte durchsuchen' })).toHaveFocus();
+  });
+});
+
+describe('PatchesPage auf dem Telefon', () => {
+  const original = window.matchMedia;
+  beforeEach(() => {
     window.matchMedia = vi.fn((query: string) => ({
       matches: true,
       media: query,
@@ -325,6 +519,12 @@ describe('PatchesPage auf dem Telefon', () => {
       removeListener: vi.fn(),
       dispatchEvent: vi.fn(),
     })) as unknown as typeof window.matchMedia;
+  });
+  afterEach(() => {
+    window.matchMedia = original;
+  });
+
+  it('zeigt Karten statt einer Tabelle', () => {
     show({ isOperator: true });
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     const list = screen.getByRole('region', { name: 'Update-Stand je Gerät' });
@@ -333,5 +533,14 @@ describe('PatchesPage auf dem Telefon', () => {
     expect(within(cards[0]!).getByRole('link', { name: 'buero-pc' })).toHaveAttribute('href', '/devices/1?tab=patches');
     expect(within(cards[0]!).getByRole('checkbox', { name: 'buero-pc auswählen' })).toBeInTheDocument();
     expect(within(cards[0]!).getByText('Lisa')).toBeInTheDocument();
+  });
+
+  it('gibt dem Kästchen einer Karte eine eigene Trefferfläche über dem Link', async () => {
+    show({ isOperator: true });
+    const box = screen.getByRole('checkbox', { name: 'nas auswählen' });
+    // The stretched link covers the card; the box's label sits above it.
+    await userEvent.click(box.parentElement!);
+    expect(box).toBeChecked();
+    expect(location()).toBe('/patches');
   });
 });

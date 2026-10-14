@@ -31,7 +31,9 @@ import {
   openFor,
   preview,
   sortAlerts,
+  stillToAck,
   tabOf,
+  type AckSkipped,
   type Tab,
 } from './alertList';
 import { useCachedQueryState } from '../../hooks/useCachedQueryState';
@@ -216,7 +218,11 @@ export function AlertsPage({ alerts, resolvedCap = null, devices, persons, onOpe
   const rawTab = params.get('tab');
   const tab: Tab = isTab(rawTab) ? rawTab : 'offen';
   const rawPerson = params.get('person');
-  const personFilter = rawPerson !== null && persons.some((p) => String(p.id) === rawPerson) ? Number(rawPerson) : null;
+  // The id from the URL counts on its own, not only once the persons are
+  // there: they load separately and can be missing for a while, and a
+  // filter that silently fell away would widen "Alle quittieren" to every
+  // person's alerts. An unknown id shows an empty list with a way back.
+  const personFilter = rawPerson !== null && /^[1-9]\d*$/.test(rawPerson) ? Number(rawPerson) : null;
   const setParam = (patch: Record<string, string | null>) =>
     setParams(
       (prev) => {
@@ -242,6 +248,7 @@ export function AlertsPage({ alerts, resolvedCap = null, devices, persons, onOpe
   const deviceById = useMemo(() => new Map(devices.map((d) => [d.id, d])), [devices]);
   const personName = useMemo(() => new Map(persons.map((p) => [p.id, p.name])), [persons]);
   const hostOf = (id: number) => deviceById.get(id)?.hostname ?? `Gerät ${id}`;
+  const personLabel = personFilter === null ? null : (personName.get(personFilter) ?? `Person ${personFilter}`);
 
   // The person narrows what the tabs count, so each number says what a click
   // would show.
@@ -277,7 +284,15 @@ export function AlertsPage({ alerts, resolvedCap = null, devices, persons, onOpe
   // An acknowledged row leaves the list and takes its focused button along.
   // The focus goes to the row that moved up into its place, so a keyboard
   // user works down the list instead of starting over at the top.
-  const handoff = useRef<{ ids: Set<number>; index: number } | null>(null);
+  //
+  // The handoff is armed for exactly that: until the rows that are going to
+  // leave have left. While the requests run that is every row of the round;
+  // once they are back only the ones that went through, since a failed one
+  // stays for good. Waiting for that one kept the handoff armed forever, and
+  // any later focus loss pulled the focus and the scroll to an Ack button.
+  // `busy` re-runs the check when the round ends, for a list that was
+  // already fresh by then.
+  const handoff = useRef<{ ids: ReadonlySet<number>; index: number } | null>(null);
   useEffect(() => {
     const h = handoff.current;
     if (!h) return;
@@ -290,11 +305,20 @@ export function AlertsPage({ alerts, resolvedCap = null, devices, persons, onOpe
       next?.focus();
     }
     if (!rows.some((a) => h.ids.has(a.id))) handoff.current = null;
-  }, [rows]);
+  }, [rows, busy]);
 
-  const acknowledge = async (list: Alert[], index: number) => {
+  // The list as it stands now, for the moment a confirmation comes back: the
+  // dialog can stay open across a poll and across the end of a row's own
+  // acknowledge.
+  const latest = useRef({ alerts, busy });
+  useEffect(() => {
+    latest.current = { alerts, busy };
+  });
+
+  const acknowledge = async (list: Alert[], index: number, skipped?: AckSkipped) => {
     const ids = list.map((a) => a.id);
-    handoff.current = { ids: new Set(ids), index };
+    const round = { ids: new Set(ids), index };
+    handoff.current = round;
     setBusy((prev) => new Set([...prev, ...ids]));
     // One request per alert, as a click on each row would send: the server
     // checks every one against the devices this account may see, and audits
@@ -302,26 +326,37 @@ export function AlertsPage({ alerts, resolvedCap = null, devices, persons, onOpe
     const outcome = await runBulk(list, async (a) => {
       await api.ackAlert(a.id);
     });
-    // Wait for the fresh list, so a row leaves as its button stops being
-    // busy instead of flashing back to "Quittieren" first.
+    // An acknowledgement changes the alerts and nothing else in the fleet,
+    // so only they are fetched again — the whole fleet would fetch them a
+    // second time. Wait for the fresh list, so a row leaves as its button
+    // stops being busy instead of flashing back to "Quittieren" first. A
+    // device page keeps its own alert list ("quittiert von …"); nothing
+    // here shows it, so it is only marked stale.
+    for (const id of new Set(list.map((a) => a.device_id))) void qc.invalidateQueries({ queryKey: qk.deviceAlerts(id) });
     await qc.invalidateQueries({ queryKey: qk.alerts });
-    onRefresh();
+    // Acknowledged and meanwhile resolved alerts leave the open list; a
+    // failed one stays. A newer round owns the handoff and is left alone.
+    const leaving = new Set([
+      ...outcome.ok.map((a) => a.id),
+      ...outcome.failed.filter((f) => ackFailure(f.error) === 'gone').map((f) => f.item.id),
+    ]);
+    if (handoff.current === round) handoff.current = leaving.size > 0 ? { ids: leaving, index } : null;
     setBusy((prev) => {
       const next = new Set(prev);
       for (const id of ids) next.delete(id);
       return next;
     });
-    const leaving = outcome.ok.length + outcome.failed.filter((f) => ackFailure(f.error) === 'gone').length;
-    if (leaving === 0) handoff.current = null;
-    const report = ackReport(outcome, (a) => `${hostOf(a.device_id)}: ${a.message}`);
+    const report = ackReport(outcome, (a) => `${hostOf(a.device_id)}: ${a.message}`, skipped);
     if (report.tone === 'error') notify.error(report.title, report.error);
     else notify[report.tone](report.title, report.detail);
   };
 
   const ackAll = async () => {
-    // Exactly what the dialog names: the open alerts the filter shows now.
-    const targets = shown;
-    const who = personFilter !== null ? ` auf Geräten von ${personName.get(personFilter)}` : '';
+    // Exactly what the dialog names: the open alerts the filter shows now,
+    // without one whose own acknowledge is already running.
+    const targets = stillToAck(shown, alerts, busy).send;
+    if (targets.length === 0) return;
+    const who = personLabel !== null ? ` auf Geräten von ${personLabel}` : '';
     const { head, rest } = preview(targets, CONFIRM_NAMED);
     const ok = await ask({
       title: `${targets.length} offene Alarme${who} quittieren?`,
@@ -344,8 +379,9 @@ export function AlertsPage({ alerts, resolvedCap = null, devices, persons, onOpe
       confirmLabel: 'Alle quittieren',
     });
     if (!ok) return;
+    const { send, skipped } = stillToAck(targets, latest.current.alerts, latest.current.busy);
     setBulkRunning(true);
-    await acknowledge(targets, 0);
+    await acknowledge(send, 0, skipped);
     setBulkRunning(false);
   };
 
@@ -406,7 +442,7 @@ export function AlertsPage({ alerts, resolvedCap = null, devices, persons, onOpe
             label="Alarme filtern"
           />
         </div>
-        {persons.length > 0 && (
+        {(persons.length > 0 || personFilter !== null) && (
           <select
             className={personFilter === null ? 'input al-person' : 'input al-person is-set'}
             value={personFilter ?? ''}
@@ -419,6 +455,8 @@ export function AlertsPage({ alerts, resolvedCap = null, devices, persons, onOpe
                 {p.name}
               </option>
             ))}
+            {/* A filter whose person is not (yet) known still says that it is on. */}
+            {personFilter !== null && !personName.has(personFilter) && <option value={personFilter}>{personLabel}</option>}
           </select>
         )}
       </div>
@@ -457,7 +495,7 @@ export function AlertsPage({ alerts, resolvedCap = null, devices, persons, onOpe
           ) : shown.length === 0 ? (
             <Empty
               tab={tab}
-              person={personFilter === null ? null : (personName.get(personFilter) ?? null)}
+              person={personLabel}
               acked={counts.quittiert}
               onShowAcked={() => setParam({ tab: 'quittiert' })}
               onAllPersons={() => setParam({ person: null })}

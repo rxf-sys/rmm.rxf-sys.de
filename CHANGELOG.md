@@ -230,6 +230,59 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   geht jetzt im Verlauf zurück. Danach — und nach dem Löschen einer Person —
   steht der Tastaturfokus auf der verlassenen Person in der Liste bzw. auf
   der Suche, statt auf den Seitenanfang zu fallen.
+- **Personenfilter fiel unbemerkt weg.** Im Alarm-Center und unter
+  „Patches" galt `?person=` nur, solange die Personenliste geladen war. Kam
+  sie verspätet oder schlug ein Abruf fehl, zeigten beide Seiten stillschweigend
+  alle Personen — „Alle quittieren" quittierte dann die Alarme der ganzen
+  Flotte, „Geräte prüfen" prüfte alle Geräte. Der Filter hält sich jetzt an
+  die ID aus der Adresse und nennt die Person bis dahin „Person 4".
+- **Updates-Reiter zeigte nach einer Sammel-Installation alten Stand.** Wer
+  unter „Patches" eine Installation startete und gleich das Gerät öffnete,
+  bekam aus dem Zwischenspeicher noch „Installieren" angeboten — ein Klick
+  endete mit „Es läuft bereits eine Installation". Prüfung und Installation
+  markieren jetzt Updates und Aufträge der betroffenen Geräte als veraltet.
+- **Quittieren lud die Alarme doppelt.** Nach jeder Quittierung holte das
+  Alarm-Center die Alarmliste und gleich danach die ganze Flotte samt
+  Alarmen noch einmal. Jetzt kommt nur die Alarmliste neu; dafür zeigt die
+  Aktivität des Geräts das „quittiert von …" sofort statt erst nach einer
+  Viertelminute.
+- **Fokus sprang Minuten später zu einem Alarm.** Schlug beim Quittieren
+  einer von mehreren Alarmen fehl, blieb die Fokus-Übergabe an die nächste
+  Zeile scharf. Ging der Fokus danach aus anderem Grund verloren, zog die
+  nächste Aktualisierung ihn samt Scrollposition zu einem
+  „Quittieren"-Knopf. Die Übergabe endet jetzt mit der Runde.
+- **„Alle quittieren" quittierte Quittiertes noch einmal.** Alarme, die ein
+  Kollege quittierte, während der Dialog offen stand, und einer, dessen
+  eigenes „Quittieren" noch lief, wurden erneut gesendet; der Server trug
+  dann eine zweite Quittierung unter falschem Namen ins Audit-Log ein. Das
+  Alarm-Center sendet jetzt nur, was beim Bestätigen noch offen ist, und
+  sagt im Toast, was schon quittiert oder behoben war. Der Server
+  protokolliert nur noch die Quittierung, die tatsächlich gegriffen hat.
+- **„Alle Treffer auswählen" verwarf ausgeblendete Auswahl.** Unter
+  „Patches" zählte das Angebot auch ausgewählte Geräte, die der Filter
+  gerade ausblendet, und fehlte deshalb, obwohl Treffer unausgewählt waren.
+  Ein Klick ersetzte die Auswahl, statt sie zu ergänzen — die eben noch als
+  „davon ausgeblendet" gemeldeten Geräte fielen still heraus.
+- **Tastaturfokus ging unter „Patches" verloren.** „Geräte prüfen", „Jetzt
+  prüfen", „Sicherheitsupdates installieren" und der Prüfknopf einer Zeile
+  wurden während der Arbeit gesperrt und warfen den Fokus dabei an den
+  Seitenanfang. Sie behalten ihn jetzt und nehmen nur keinen zweiten Klick
+  an. Nach „Alle Treffer auswählen" landet der Fokus in der Aktionsleiste,
+  nach „Filter zurücksetzen" im Suchfeld. Warum ein Gerät ohne Verbindung
+  nicht geprüft werden kann, erfährt jetzt auch, wer per Tastatur oder
+  Screenreader unterwegs ist.
+- **Knapp neben das Kästchen geklickt, Auswahl weg.** Unter „Patches" öffnete
+  ein Klick neben das Auswahlkästchen einer Zeile das Gerät, auf dem Telefon
+  schon jeder Tipp auf die Karte außerhalb des Kästchens — und die Auswahl,
+  womöglich Dutzende Geräte über mehrere Filter, war verloren. Jetzt wählt
+  die ganze Kästchen-Spalte der Tabelle aus, auf der Karte der Streifen am
+  linken Rand.
+- **Suche unter „Patches" blieb nach der Navigation stehen.** Wer die Seite
+  über die Leiste oder „g p" erneut öffnete, bekam alle Filter
+  zurückgesetzt, nur die Suche nicht: Sie stand weiter im Feld und filterte
+  die Liste, obwohl die Adresse sie nicht mehr enthielt. Ebenso brachte
+  „Zurück" die frühere Suche nicht zurück. Das Suchfeld folgt jetzt der
+  Adresse.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

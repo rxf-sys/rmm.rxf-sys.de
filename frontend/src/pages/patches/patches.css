@@ -115,6 +115,16 @@
   font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
 }
+/* Scan and install buttons that are busy, or cannot act here, keep their
+   focus (aria-disabled, not disabled) but look and feel like disabled ones. */
+.pt [aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.pt [aria-disabled='true']:active {
+  transform: none;
+}
+
 .pt-selectall {
   margin: 0;
   padding: var(--sp-2) var(--sp-4);
@@ -164,6 +174,11 @@
   margin: 0;
   cursor: pointer;
 }
+/* The label around a row's or a card's checkbox, sized below. */
+.pt-hit {
+  display: flex;
+  cursor: pointer;
+}
 
 /* ---- Table: shared .dt styles in components.css; here the columns. The
    name takes what is left. ---- */
@@ -176,6 +191,15 @@
   padding: 0 0 0 12px;
 }
 .pt-table td.pt-c-check {
+  position: relative;
+  padding-left: 12px;
+}
+/* The whole cell selects; the box stays where the padding put it. */
+.pt-table td.pt-c-check .pt-hit {
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
   padding-left: 12px;
 }
 .pt-table .pt-c-person {
@@ -287,13 +311,20 @@
   background: var(--accent-soft);
 }
 /* The whole card opens the device; checkbox and button sit above the link. */
-.pt-card .pt-check,
+.pt-card .pt-hit,
 .pt-card .pt-scan {
   position: relative;
   z-index: 1;
 }
-.pt-card .pt-check {
+/* The checkbox takes the strip down the card's left edge, top to bottom,
+   wider than a fingertip; the content keeps its distance from the box. */
+.pt-card .pt-hit {
   flex: none;
+  align-items: flex-start;
+  margin: calc(-1 * var(--sp-3)) calc(-1 * var(--sp-2)) calc(-1 * var(--sp-3)) calc(-1 * var(--sp-4));
+  padding: var(--sp-3) var(--sp-2) var(--sp-3) var(--sp-4);
+}
+.pt-card .pt-check {
   width: 24px;
   height: 24px;
   margin-top: 1px;

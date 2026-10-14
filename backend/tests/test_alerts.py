@@ -7,7 +7,7 @@ import aiosqlite
 import pytest
 from httpx import AsyncClient
 
-from app import alerts
+from app import alerts, audit
 from app.config import Settings, get_settings
 
 
@@ -178,6 +178,22 @@ async def test_ack_alert(admin_client: AsyncClient, settings: Settings):
     # Ack survives the list endpoint.
     listed = (await admin_client.get("/api/alerts")).json()["alerts"][0]
     assert listed["acked_by"] == "boss"
+
+
+async def test_repeat_ack_is_not_audited_again(admin_client: AsyncClient, settings: Settings):
+    """The audit log names who acknowledged an alert. A second ack (a
+    colleague whose list was a poll behind) changes nothing, so it must not
+    show up as a second acknowledgement under the second name."""
+    await _insert_device(settings, "srv4b", last_seen_ago=settings.offline_alert_after_s + 60)
+    await alerts.evaluate(settings, FakeNotifier())
+    alert = (await admin_client.get("/api/alerts")).json()["alerts"][0]
+
+    assert (await alerts.ack(alert["id"], "anna")) is not None
+    again = await alerts.ack(alert["id"], "ben")
+    assert again is not None and again["acked_by"] == "anna"
+
+    acked = [e for e in await audit.recent() if e["event"] == "alert.acked"]
+    assert [e["actor"] for e in acked] == ["anna"]
 
 
 async def test_ack_unknown_or_resolved_is_404(admin_client: AsyncClient, settings: Settings):
