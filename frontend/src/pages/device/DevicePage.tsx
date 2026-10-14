@@ -62,13 +62,16 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
   });
   const refresh = () => void qc.invalidateQueries({ queryKey: qk.device(deviceId) });
 
+  // A 404 is the server's answer, not a hiccup: the device was deleted or
+  // is no longer the viewer's to see. It wins over a cached copy, which a
+  // failed refresh would otherwise keep on screen with every action live.
+  if (q.error instanceof ApiError && q.error.status === 404)
+    return (
+      <div className="screen">
+        <EmptyState title="Gerät nicht gefunden">Es wurde entfernt, oder der Link ist alt.</EmptyState>
+      </div>
+    );
   if (q.error && !q.data) {
-    if (q.error instanceof ApiError && q.error.status === 404)
-      return (
-        <div className="screen">
-          <EmptyState title="Gerät nicht gefunden">Es wurde entfernt, oder der Link ist alt.</EmptyState>
-        </div>
-      );
     return (
       <div className="screen">
         <ErrorNote error={q.error} onRetry={() => void q.refetch()} />
@@ -176,6 +179,8 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
       await api.deleteDevice(deviceId);
       notify.success(`${d.hostname} entfernt`);
       onDeleted();
+      // Gone with its tabs: "Back" must not show the device from the cache.
+      qc.removeQueries({ queryKey: qk.device(deviceId) });
     } catch (e) {
       notify.error('Gerät nicht entfernt', e);
     }

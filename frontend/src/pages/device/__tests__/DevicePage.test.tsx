@@ -4,11 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
+import { qk } from '../../../api/queryClient';
 import type { Device, DeviceDetail, Job } from '../../../types';
 import { DevicePage } from '../DevicePage';
 
-const { deviceMock, jobsMock, updateDeviceMock } = vi.hoisted(() => ({
+const { deviceMock, jobsMock, updateDeviceMock, deleteDeviceMock } = vi.hoisted(() => ({
   deviceMock: vi.fn<() => Promise<DeviceDetail>>(),
+  deleteDeviceMock: vi.fn<() => Promise<{ ok: boolean }>>(),
   jobsMock: vi.fn<() => Promise<{ jobs: Job[] }>>(),
   updateDeviceMock: vi.fn<(id: number, body: { rustdesk_id?: string }) => Promise<unknown>>(),
 }));
@@ -26,6 +28,7 @@ vi.mock('../../../api/client', async () => {
       scripts: () => Promise.resolve({ scripts: [] }),
       remoteConfig: () => Promise.resolve({ enabled: true, relay_host: 'rd.example', has_key: true, deploy_commands: { linux: 'rustdesk --config x' } }),
       updateDevice: (id: number, body: { rustdesk_id?: string }) => updateDeviceMock(id, body),
+      deleteDevice: () => deleteDeviceMock(),
     },
     // The console streams over a socket; here it stays quiet.
     openJobSocket: () => ({ close() {} }),
@@ -63,15 +66,20 @@ function device(over: Partial<Device> = {}): Device {
   };
 }
 
-function show(route: string, role: { isAdmin: boolean; isOperator: boolean }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function show(
+  route: string,
+  role: { isAdmin: boolean; isOperator: boolean },
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
+  const onDeleted = vi.fn();
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[route]}>
-        <DevicePage deviceId={7} favorite={false} onToggleFavorite={() => {}} onDeleted={() => {}} {...role} />
+        <DevicePage deviceId={7} favorite={false} onToggleFavorite={() => {}} onDeleted={onDeleted} {...role} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return { client, onDeleted };
 }
 
 const viewer = { isAdmin: false, isOperator: false };
@@ -171,5 +179,29 @@ describe('DevicePage', () => {
     deviceMock.mockRejectedValue(new ApiError(404, '{"detail":"Gerät nicht gefunden"}'));
     show('/devices/7', admin);
     expect(await screen.findByRole('heading', { name: 'Gerät nicht gefunden' })).toBeInTheDocument();
+  });
+
+  it('says the device is gone when a refresh answers 404, even with a copy in the cache', async () => {
+    // Back after a delete, a delete by another admin, or a viewer's device
+    // moved to another person: the server answers 404 to all of them.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData<DeviceDetail>(qk.device(7), { device: device(), inventory: {} });
+    deviceMock.mockRejectedValue(new ApiError(404, '{"detail":"Gerät nicht gefunden"}'));
+    show('/devices/7', admin, client);
+    expect(await screen.findByRole('heading', { name: 'Gerät nicht gefunden' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: 'nas-keller' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Weitere Aktionen' })).not.toBeInTheDocument();
+  });
+
+  it('forgets a removed device, so going back does not show it again', async () => {
+    deleteDeviceMock.mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    const { client, onDeleted } = show('/devices/7', admin);
+    await user.click(await screen.findByRole('button', { name: 'Weitere Aktionen' }));
+    await user.click(screen.getByRole('menuitem', { name: /Entfernen/ }));
+    await user.type(screen.getByRole('textbox', { name: /Zum Bestätigen/ }), 'nas-keller');
+    await user.click(screen.getByRole('button', { name: 'Endgültig entfernen' }));
+    await vi.waitFor(() => expect(onDeleted).toHaveBeenCalled());
+    expect(client.getQueryData(qk.device(7))).toBeUndefined();
   });
 });

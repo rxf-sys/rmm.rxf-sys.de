@@ -8,6 +8,13 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **Gelöschte Geräte blieben auf ihrer Seite stehen.** Wurde ein Gerät
+  gelöscht (auch von einem anderen Admin) oder einem Betrachter entzogen,
+  zeigte seine geöffnete Seite es weiter als „online" mit allen Aktionen, die
+  nur noch „nicht gefunden" meldeten; nach dem Entfernen holte „Zurück" es aus
+  dem Zwischenspeicher wieder hervor. Antwortet der Server mit „nicht
+  gefunden", sagt die Seite das jetzt, und ein entferntes Gerät wird sofort
+  vergessen.
 - **Offene Dialoge überlebten die Abmeldung.** War „Gerät hinzufügen", die
   Suche, die Kürzel-Liste oder das Navigationsblatt offen, als die Sitzung
   ablief oder jemand sich abmeldete, stand es nach der nächsten Anmeldung im
