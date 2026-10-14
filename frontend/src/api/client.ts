@@ -106,18 +106,132 @@ const post = <T>(path: string, body?: unknown) => send<T>('POST', path, body);
 const patch = <T>(path: string, body?: unknown) => send<T>('PATCH', path, body);
 const del = <T>(path: string) => send<T>('DELETE', path);
 
+/** Request fields as the forms name them. Anything else is quoted as sent. */
+const FIELD_LABEL: Record<string, string> = {
+  name: 'Name',
+  username: 'Benutzername',
+  password: 'Passwort',
+  email: 'E-Mail',
+  phone: 'Telefon',
+  notes: 'Notizen',
+  label: 'Bezeichnung',
+  hostname: 'Gerätename',
+  owner_label: 'Besitzer',
+  os_version: 'Betriebssystem-Version',
+  model: 'Modell',
+  serial: 'Seriennummer',
+  imei: 'IMEI',
+  tags: 'Tags',
+  tag: 'Tag',
+  rustdesk_id: 'RustDesk-ID',
+  command: 'Befehl',
+  content: 'Inhalt',
+  shell: 'Shell',
+  role: 'Rolle',
+  code: 'Code',
+  totp_code: 'Code',
+  ttl_hours: 'Gültigkeit',
+  minutes: 'Minuten',
+  hour: 'Stunde',
+  weekday: 'Wochentag',
+  threshold: 'Schwelle',
+  scope_kind: 'Geltungsbereich',
+  scope_value: 'Geltungsbereich',
+  base: 'Server-Adresse',
+  topic: 'Thema',
+};
+
+/** How many problems of one rejection are named; the rest are counted. */
+const MAX_ISSUES = 3;
+
+const ctxNumber = (v: unknown) => (typeof v === 'number' ? v.toLocaleString('de-DE') : String(v ?? ''));
+
+/** One entry of FastAPI's 422 list ({type, loc, msg, ctx}), as a clause. */
+function validationIssue(raw: unknown): string {
+  const i = (raw !== null && typeof raw === 'object' ? raw : {}) as { type?: unknown; loc?: unknown; msg?: unknown; ctx?: unknown };
+  const type = typeof i.type === 'string' ? i.type : '';
+  if (type === 'json_invalid') return 'Die Anfrage ist kein gültiges JSON';
+  // loc starts with where the value came from (body, query, path).
+  const path = (Array.isArray(i.loc) ? i.loc.slice(1) : []).filter((p): p is string | number => typeof p === 'string' || typeof p === 'number');
+  const key = path.join('.');
+  const field = key === '' ? 'Die Anfrage' : (FIELD_LABEL[key] ?? `„${key}“`);
+  const ctx = (i.ctx !== null && typeof i.ctx === 'object' ? i.ctx : {}) as Record<string, unknown>;
+  switch (type) {
+    case 'missing':
+      return `${field} fehlt`;
+    case 'string_too_short':
+      return ctx.min_length === 1 ? `${field} darf nicht leer sein` : `${field} ist zu kurz (mindestens ${ctxNumber(ctx.min_length)} Zeichen)`;
+    case 'string_too_long':
+      return `${field} ist zu lang (höchstens ${ctxNumber(ctx.max_length)} Zeichen)`;
+    case 'too_short':
+      return `${field} hat zu wenige Einträge`;
+    case 'too_long':
+      return `${field} hat zu viele Einträge`;
+    case 'string_pattern_mismatch':
+      return `${field} hat ein ungültiges Format`;
+    case 'greater_than_equal':
+      return `${field} muss mindestens ${ctxNumber(ctx.ge)} sein`;
+    case 'less_than_equal':
+      return `${field} darf höchstens ${ctxNumber(ctx.le)} sein`;
+    case 'greater_than':
+      return `${field} muss größer als ${ctxNumber(ctx.gt)} sein`;
+    case 'less_than':
+      return `${field} muss kleiner als ${ctxNumber(ctx.lt)} sein`;
+    case 'int_parsing':
+    case 'int_type':
+    case 'int_from_float':
+      return `${field} muss eine ganze Zahl sein`;
+    case 'float_parsing':
+    case 'float_type':
+      return `${field} muss eine Zahl sein`;
+    case 'bool_parsing':
+    case 'bool_type':
+      return `${field} muss ja oder nein sein`;
+    case 'string_type':
+      return `${field} muss Text sein`;
+    case 'literal_error':
+    case 'enum':
+      return `${field} hat keinen erlaubten Wert`;
+    case 'value_error':
+    case 'assertion_error': {
+      // The server's own validators word these (in German); pydantic only
+      // puts its English prefix in front.
+      const msg = typeof i.msg === 'string' ? i.msg.replace(/^(Value error|Assertion failed), /, '') : '';
+      return msg ? `${field}: ${msg}` : `${field} ist ungültig`;
+    }
+    default:
+      return `${field} ist ungültig`;
+  }
+}
+
+/** FastAPI's 422 detail (a list, not a sentence) as one German sentence. */
+function validationMessage(detail: unknown[]): string {
+  const issues = [...new Set(detail.map(validationIssue))];
+  if (issues.length === 0) return 'Ungültige Eingabe.';
+  const named = issues.slice(0, MAX_ISSUES).join('; ');
+  const rest = issues.length - MAX_ISSUES;
+  return `Ungültige Eingabe: ${named}${rest > 0 ? ` und ${rest} weitere ${rest === 1 ? 'Angabe' : 'Angaben'}` : ''}.`;
+}
+
 /** Pull a human-readable message out of an ApiError's JSON body. */
 export function apiErrorMessage(e: unknown): string {
   // fetch() rejects with a TypeError when the network or the server is gone.
   if (e instanceof TypeError) return 'Server nicht erreichbar';
   if (e instanceof ApiError) {
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(e.body) as { detail?: string };
-      if (parsed.detail) return parsed.detail;
+      parsed = JSON.parse(e.body);
     } catch {
-      /* body wasn't JSON */
+      // Not JSON (a proxy's plain-text answer): the body is the message.
+      return e.body || `Fehler ${e.status}`;
     }
-    return e.body || `Fehler ${e.status}`;
+    const detail = parsed !== null && typeof parsed === 'object' ? (parsed as { detail?: unknown }).detail : undefined;
+    if (typeof detail === 'string' && detail) return detail;
+    // A rejected request body: FastAPI lists every violation. Passed on
+    // as it was, the list of objects reached toasts and ErrorNote as a
+    // React child, which throws.
+    if (Array.isArray(detail)) return validationMessage(detail);
+    return `Fehler ${e.status}`;
   }
   return e instanceof Error ? e.message : 'Unbekannter Fehler';
 }

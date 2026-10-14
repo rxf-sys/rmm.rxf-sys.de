@@ -8,6 +8,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **Abgelehnte Eingaben brachten keine lesbare Meldung.** Wies der Server
+  eine Eingabe als ungültig zurück (zu kurz, zu lang, Feld fehlt, falsches
+  Format), kam seine Liste der Beanstandungen unverändert in Meldung oder
+  Fehlerhinweis an, statt als Text. Jetzt steht dort ein deutscher Satz wie
+  „Ungültige Eingabe: Passwort ist zu kurz (mindestens 8 Zeichen)."
 - **Menüs ließen sich mit der Tastatur schlecht bedienen.** Beim ersten
   Öffnen eines Menüs („Weitere Aktionen", „Aktionen" der Auswahl, Zeilenmenüs)
   blieb der Fokus auf dem Knopf, Pfeiltasten und Escape taten nichts. Und
