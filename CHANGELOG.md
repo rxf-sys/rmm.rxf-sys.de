@@ -8,6 +8,12 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **Ein ungewöhnliches Inventar legte die Geräteseite lahm.** Meldete ein
+  Agent ein Feld in unerwarteter Form (etwa die Softwareliste als Objekt,
+  ein Paket ohne Namen oder den Firewall-Status als Objekt), brach die
+  Geräteseite für alle mit einem Fehler ab. Die Seite prüft das Inventar
+  jetzt Feld für Feld und zeigt, was sich lesen lässt; der Rest gilt als
+  nicht gemeldet.
 - **„Ausgabe" öffnete den Auftrag nicht, wenn „Aktivität" schon offen war.**
   Ein Klick auf „Ausgabe" im Toast oder in der Benachrichtigungszentrale
   führte zwar auf den Reiter, klappte den Auftrag aber nicht auf und rollte

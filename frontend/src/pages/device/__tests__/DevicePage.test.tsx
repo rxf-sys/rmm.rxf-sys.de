@@ -197,6 +197,49 @@ describe('DevicePage', () => {
     scroll.mockRestore();
   });
 
+  describe('with an inventory of the wrong shape', () => {
+    // The server stores the inventory as the agent sends it. A custom, newer
+    // or broken agent must not take the page down for everyone opening it.
+    const odd = {
+      hardware: {
+        updated_at: 1,
+        data: {
+          platform: { name: 'debian' },
+          cpu_model: 'Ryzen 5',
+          security: { firewall: { enabled: true }, antivirus: 'ClamAV', encryption: 7 },
+          nics: [{ name: { x: 1 }, ips: 'not-a-list' }, null, { name: 'eth0', ips: ['10.0.0.2', { v: 6 }], mac: 'aa:bb' }],
+          macs: [{ x: 1 }, 'cc:dd'],
+        },
+      },
+      software: { updated_at: 1, data: [{ name: null }, { name: 'curl', version: { major: 8 } }, 'zsh', { name: 'bash', version: 5.2 }] },
+    };
+
+    it('still shows the overview, with what can be read', async () => {
+      deviceMock.mockResolvedValue({ device: device(), inventory: odd });
+      show('/devices/7', admin);
+      const security = (await screen.findByRole('heading', { name: 'Sicherheit' })).closest('section') as HTMLElement;
+      expect(within(security).getByText('ClamAV')).toBeInTheDocument();
+      expect(within(security).getAllByText('unbekannt')).toHaveLength(2);
+      expect(screen.getByText('eth0')).toBeInTheDocument();
+      expect(screen.getByText('10.0.0.2')).toBeInTheDocument();
+      expect(screen.getByText('Ryzen 5')).toBeInTheDocument();
+    });
+
+    it('still lists the packages that have a name', async () => {
+      deviceMock.mockResolvedValue({ device: device(), inventory: odd });
+      show('/devices/7?tab=inventory', admin);
+      const table = await screen.findByRole('table');
+      const rows = within(table).getAllByRole('row').slice(1).map((r) => r.textContent);
+      expect(rows).toEqual(['bash5.2', 'curl']);
+    });
+
+    it('treats a software list that is not a list as not reported', async () => {
+      deviceMock.mockResolvedValue({ device: device(), inventory: { software: { updated_at: 1, data: { curl: '8.0' } } } });
+      show('/devices/7?tab=inventory', admin);
+      expect(await screen.findByText('Der Agent hat keine Softwareliste geliefert.')).toBeInTheDocument();
+    });
+  });
+
   it('says plainly when the device is gone', async () => {
     deviceMock.mockRejectedValue(new ApiError(404, '{"detail":"Gerät nicht gefunden"}'));
     show('/devices/7', admin);

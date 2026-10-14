@@ -3,6 +3,7 @@ import { formatAgo, formatBytes, formatDateTime } from '../../../format';
 import { IconPackage, IconSearch } from '../../../icons';
 import type { DeviceDetail } from '../../../types';
 import { EmptyState, KeyValue, Panel } from '../../../ui';
+import { readHardware, readSoftware } from '../inventory';
 
 /** Rows rendered at most; a filter narrows the rest. */
 const LIMIT = 500;
@@ -16,8 +17,8 @@ function Reported({ at }: { at: number | undefined }) {
 export function InventoryTab({ detail }: { detail: DeviceDetail }) {
   const [q, setQ] = useState('');
   const filterId = useId();
-  const hw = (detail.inventory.hardware?.data ?? {}) as Record<string, unknown>;
-  const sw = (detail.inventory.software?.data ?? []) as { name: string; version?: string }[];
+  const hw = readHardware(detail.inventory.hardware?.data);
+  const sw = readSoftware(detail.inventory.software?.data) ?? [];
 
   if (!detail.inventory.hardware && !detail.inventory.software) {
     return (
@@ -27,13 +28,12 @@ export function InventoryTab({ detail }: { detail: DeviceDetail }) {
     );
   }
 
-  const str = (v: unknown) => (typeof v === 'string' || typeof v === 'number' ? String(v) : '');
   const rows: [ReactNode, ReactNode][] = [
-    ['Plattform', `${str(hw.platform)} ${str(hw.platform_version)}`.trim() || '—'],
-    ['Kernel', str(hw.kernel_version) || '—'],
-    ['Prozessor', str(hw.cpu_model) || '—'],
-    ['Threads', str(hw.cpu_threads) || '—'],
-    ['Arbeitsspeicher', typeof hw.mem_total_b === 'number' ? formatBytes(hw.mem_total_b) : '—'],
+    ['Plattform', `${hw.platform} ${hw.platform_version}`.trim() || '—'],
+    ['Kernel', hw.kernel_version || '—'],
+    ['Prozessor', hw.cpu_model || '—'],
+    ['Threads', hw.cpu_threads !== undefined ? String(hw.cpu_threads) : '—'],
+    ['Arbeitsspeicher', hw.mem_total_b !== undefined ? formatBytes(hw.mem_total_b) : '—'],
   ];
   const needle = q.trim().toLowerCase();
   const shown = needle ? sw.filter((s) => s.name.toLowerCase().includes(needle)) : sw;
@@ -80,7 +80,7 @@ export function InventoryTab({ detail }: { detail: DeviceDetail }) {
                 {sorted.slice(0, LIMIT).map((s, i) => (
                   <tr key={`${s.name}-${i}`}>
                     <td>{s.name}</td>
-                    <td className="dv-r num muted">{s.version ?? ''}</td>
+                    <td className="dv-r num muted">{s.version}</td>
                   </tr>
                 ))}
               </tbody>

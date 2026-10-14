@@ -10,14 +10,7 @@ import type { DeviceDetail } from '../../../types';
 import { KeyValue, Meter, Panel, StatusBadge } from '../../../ui';
 import type { TabId } from '../deviceTabs';
 import { isRustdeskId } from '../../../remoteDesk';
-
-interface NicInfo {
-  name: string;
-  mac?: string;
-  ips: string[];
-  mtu?: number;
-  speed_mbit?: number;
-}
+import { readHardware, readSoftware } from '../inventory';
 
 const BATTERY: Record<string, string> = { charging: 'lädt', discharging: 'entlädt', full: 'voll', ac: 'Netzbetrieb' };
 
@@ -55,15 +48,10 @@ const speed = (mbit: number) =>
 export function OverviewTab({ detail, isOperator, onGoTab }: { detail: DeviceDetail; isOperator: boolean; onGoTab: (t: TabId) => void }) {
   const d = detail.device;
   const hb = d.heartbeat;
-  const hw = (detail.inventory.hardware?.data ?? {}) as Record<string, unknown>;
+  const hw = readHardware(detail.inventory.hardware?.data);
   const disks = hb.disks ?? [];
-  const nics = (Array.isArray(hw.nics) ? hw.nics : []) as NicInfo[];
-  // Older agents report only the Wake-on-LAN MAC list.
-  const fallbackMacs = (Array.isArray(hw.macs) ? hw.macs : []) as string[];
-  const gateway = typeof hw.gateway === 'string' ? hw.gateway : '';
-  const dnsList = (Array.isArray(hw.dns) ? hw.dns : []) as string[];
-  const security = (hw.security && typeof hw.security === 'object' ? hw.security : {}) as Record<string, string>;
-  const swCount = Array.isArray(detail.inventory.software?.data) ? (detail.inventory.software!.data as unknown[]).length : null;
+  const { nics, macs: fallbackMacs, gateway, dns: dnsList, security } = hw;
+  const swCount = readSoftware(detail.inventory.software?.data)?.length ?? null;
 
   const now = useNow();
   const patches = useQuery({
@@ -76,7 +64,7 @@ export function OverviewTab({ detail, isOperator, onGoTab }: { detail: DeviceDet
     : null;
 
   const live = d.online;
-  const model = [hw.manufacturer, hw.model].filter((s): s is string => typeof s === 'string' && s !== '').join(' ');
+  const model = [hw.manufacturer, hw.model].filter(Boolean).join(' ');
   const unknown = <span className="muted">unbekannt</span>;
 
   const glance: [ReactNode, ReactNode][] = [
@@ -86,7 +74,7 @@ export function OverviewTab({ detail, isOperator, onGoTab }: { detail: DeviceDet
     ],
   ];
   if (live && hb.logged_in_user) glance.push(['Angemeldet', hb.logged_in_user]);
-  if (typeof hw.uptime_s === 'number') glance.push(['Läuft seit', `${Math.floor((hw.uptime_s as number) / 86400)} Tagen`]);
+  if (hw.uptime_s !== undefined) glance.push(['Läuft seit', `${Math.floor(hw.uptime_s / 86400)} Tagen`]);
   if (live && hb.reboot_required) glance.push(['Neustart', <StatusBadge kind="warn" label="erforderlich" />]);
   if (live && typeof hb.cpu_temp_c === 'number' && hb.cpu_temp_c > 0)
     glance.push(['Temperatur', `CPU ${Math.round(hb.cpu_temp_c)} °C`]);
@@ -100,8 +88,8 @@ export function OverviewTab({ detail, isOperator, onGoTab }: { detail: DeviceDet
     ['Agent', d.agent_update_available ? <>{d.agent_version || '—'} · <span className="accent-tx">{d.agent_update_available} verfügbar</span></> : d.agent_version || '—'],
   ];
   if (model) facts.push(['Modell', model]);
-  if (typeof hw.serial === 'string' && hw.serial) facts.push(['Seriennummer', <span className="num">{hw.serial}</span>]);
-  if (typeof hw.cpu_model === 'string' && hw.cpu_model) facts.push(['Prozessor', hw.cpu_model]);
+  if (hw.serial) facts.push(['Seriennummer', <span className="num">{hw.serial}</span>]);
+  if (hw.cpu_model) facts.push(['Prozessor', hw.cpu_model]);
   if (d.owner_label) facts.push(['Besitzer', d.owner_label]);
   facts.push(['Aufgenommen', <span title={formatDateTime(d.created_at)}>{formatAgo(d.created_at)}</span>]);
 
