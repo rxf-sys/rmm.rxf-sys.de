@@ -1,6 +1,5 @@
 import './palette.css';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Modal } from '../../components/Modal';
 import { deviceStatusKind, deviceStatusLabel } from '../../deviceStatus';
 import { osLabel } from '../../format';
@@ -15,7 +14,7 @@ import {
   IconTag,
   IconTerminal,
 } from '../../icons';
-import { devicePath, type PageId } from '../../routes';
+import type { PageId } from '../../routes';
 import type { Device } from '../../types';
 import { StatusBadge } from '../../ui';
 import { NAV_GROUPS } from '../nav';
@@ -29,7 +28,9 @@ interface Props {
   canEnroll: boolean;
   onClose: () => void;
   onNavigate: (p: PageId) => void;
-  onOpenDevice: (id: number) => void;
+  /** Opens a device, on `tab` for a quick target. The shell navigates, so
+   *  it also closes what else is open (the phone's navigation sheet). */
+  onOpenDevice: (id: number, tab?: QuickTab) => void;
   onOpenEnroll: () => void;
   onToggleTheme: () => void;
 }
@@ -130,7 +131,6 @@ export function CommandPalette({
   onOpenEnroll,
   onToggleTheme,
 }: Props) {
-  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [activeKey, setActiveKey] = useState<string | null>(null);
   // Read once per opening; a choice writes it on the way out.
@@ -194,8 +194,7 @@ export function CommandPalette({
         return;
       case 'quick':
         rememberDevice(o.device.id);
-        navigate(`${devicePath(o.device.id)}?tab=${o.tab}`);
-        onClose();
+        onOpenDevice(o.device.id, o.tab);
         return;
     }
   };

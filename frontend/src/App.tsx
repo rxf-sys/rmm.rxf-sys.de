@@ -18,10 +18,12 @@ import { IconInfo, IconStatusDanger, IconStatusOk, IconStatusWarn } from './icon
 import { BottomNav } from './shell/BottomNav';
 import { MoreSheet } from './shell/MoreSheet';
 import { Rail } from './shell/Rail';
+import { goShortcutsFor } from './shell/nav';
+import type { QuickTab } from './shell/palette/paletteModel';
 import { ShortcutsDialog } from './shell/ShortcutsDialog';
 import { Topbar, type Crumb } from './shell/Topbar';
 import { setToastNavigator } from './ui/toast';
-import { useShortcuts, type GoShortcut } from './hooks/useShortcuts';
+import { useShortcuts } from './hooks/useShortcuts';
 import { useAuth } from './hooks/useAuth';
 import { useFleet } from './hooks/useFleet';
 import { useTheme } from './hooks/useTheme';
@@ -128,6 +130,19 @@ export default function App() {
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  // Overlays belong to the session that opened them. App stays mounted across
+  // sign-out and only swaps in the login page, so an open "Gerät hinzufügen"
+  // or navigation sheet used to come back for whoever signed in next, a
+  // viewer included. Reset while rendering, so not even one frame shows them.
+  const sessionId = user?.id ?? null;
+  const [overlaySession, setOverlaySession] = useState(sessionId);
+  if (overlaySession !== sessionId) {
+    setOverlaySession(sessionId);
+    setPaletteOpen(false);
+    setEnrollOpen(false);
+    setMoreOpen(false);
+    setHelpOpen(false);
+  }
   const [favorites, setFavorites] = useState<number[]>(loadFavorites);
 
   const toggleFavorite = useCallback((id: number) => {
@@ -147,18 +162,8 @@ export default function App() {
     return () => setToastNavigator(null);
   }, [navigate]);
 
-  const goShortcuts = useMemo<GoShortcut[]>(
-    () => [
-      { key: 'o', path: PAGE_PATH.overview, label: 'Übersicht' },
-      { key: 'd', path: PAGE_PATH.devices, label: 'Geräte' },
-      { key: 'a', path: PAGE_PATH.alerts, label: 'Alarme' },
-      { key: 'p', path: PAGE_PATH.patches, label: 'Patches' },
-      { key: 's', path: PAGE_PATH.scripts, label: 'Skripte' },
-      { key: 'u', path: PAGE_PATH.automation, label: 'Automatisierung' },
-      { key: 'l', path: PAGE_PATH.audit, label: 'Audit-Log' },
-    ],
-    [],
-  );
+  const role = user?.role ?? null;
+  const goShortcuts = useMemo(() => (role ? goShortcutsFor(role) : []), [role]);
   const openPalette = useCallback(() => setPaletteOpen((o) => !o), []);
   const openHelp = useCallback(() => setHelpOpen(true), []);
   const goPath = useCallback((path: string) => navigate(path), [navigate]);
@@ -229,6 +234,10 @@ export default function App() {
   const openDevice = (id: number) => {
     closeOverlays();
     navigate(devicePath(id));
+  };
+  const openDeviceTab = (id: number, tab?: QuickTab) => {
+    closeOverlays();
+    navigate(tab ? `${devicePath(id)}?tab=${tab}` : devicePath(id));
   };
 
   const page = pageForPath(location.pathname);
@@ -406,7 +415,7 @@ export default function App() {
           canEnroll={isOperator}
           onClose={() => setPaletteOpen(false)}
           onNavigate={goPage}
-          onOpenDevice={openDevice}
+          onOpenDevice={openDeviceTab}
           onOpenEnroll={() => {
             setPaletteOpen(false);
             setEnrollOpen(true);
@@ -425,7 +434,8 @@ export default function App() {
         />
       )}
       {helpOpen && <ShortcutsDialog go={goShortcuts} onClose={() => setHelpOpen(false)} />}
-      {enrollOpen && (
+      {/* Only for roles that may enroll: the server refuses everyone else. */}
+      {enrollOpen && isOperator && (
         <EnrollModal
           onClose={() => {
             setEnrollOpen(false);

@@ -11,6 +11,7 @@ import {
   IconTerminal,
   IconUsers,
 } from '../icons';
+import type { GoShortcut } from '../hooks/useShortcuts';
 import { PAGE_LABEL, PAGE_PATH, type PageId } from '../routes';
 import type { Role } from '../types';
 
@@ -71,4 +72,26 @@ export function visibleGroups(role: Role): NavGroup[] {
   return NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => !i.roles || i.roles.includes(role)) })).filter(
     (g) => g.items.length > 0,
   );
+}
+
+/** The letter after "g" that jumps to a page. */
+const GO_KEY: Partial<Record<PageId, string>> = {
+  overview: 'o',
+  devices: 'd',
+  alerts: 'a',
+  patches: 'p',
+  scripts: 's',
+  automation: 'u',
+  audit: 'l',
+};
+
+/** The go-to shortcuts of the pages the role sees in the navigation, in its
+ *  order. Built from the same list, so a jump never lands on "Kein Zugriff". */
+export function goShortcutsFor(role: Role): GoShortcut[] {
+  return visibleGroups(role)
+    .flatMap((g) => g.items)
+    .flatMap((i) => {
+      const key = GO_KEY[i.id];
+      return key ? [{ key, path: i.path, label: i.label }] : [];
+    });
 }

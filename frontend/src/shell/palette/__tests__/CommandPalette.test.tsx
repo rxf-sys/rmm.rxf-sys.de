@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Device, Role } from '../../../types';
 import { CommandPalette } from '../CommandPalette';
@@ -14,11 +14,6 @@ const fleet = [
   device({ id: 5, hostname: 'Kasse' }),
   phone({ id: 3, hostname: 'iPhone von Lisa' }),
 ];
-
-function Location() {
-  const l = useLocation();
-  return <div data-testid="location">{l.pathname + l.search}</div>;
-}
 
 function show(opts: { role?: Role; devices?: Device[] } = {}) {
   const role = opts.role ?? 'admin';
@@ -36,7 +31,6 @@ function show(opts: { role?: Role; devices?: Device[] } = {}) {
   const view = render(
     <MemoryRouter initialEntries={['/']}>
       <CommandPalette {...props} />
-      <Location />
     </MemoryRouter>,
   );
   return { user, props, view, input: screen.getByRole('combobox') };
@@ -152,8 +146,9 @@ describe('CommandPalette', () => {
     await user.keyboard('nas');
     expect(optionNames()).toEqual(['nas, OK, Linux', 'Terminal — nas', 'Updates — nas', 'Aktivität — nas']);
     await user.keyboard('{ArrowDown}{Enter}');
-    expect(screen.getByTestId('location')).toHaveTextContent('/devices/2?tab=remote');
-    expect(props.onClose).toHaveBeenCalled();
+    // The shell navigates, as for every other row, so it can close whatever
+    // else is open over the page.
+    expect(props.onOpenDevice).toHaveBeenCalledWith(2, 'remote');
     expect(JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]')).toEqual([2]);
   });
 

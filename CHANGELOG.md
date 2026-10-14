@@ -8,6 +8,20 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **Offene Dialoge überlebten die Abmeldung.** War „Gerät hinzufügen", die
+  Suche, die Kürzel-Liste oder das Navigationsblatt offen, als die Sitzung
+  ablief oder jemand sich abmeldete, stand es nach der nächsten Anmeldung im
+  selben Tab wieder offen — „Gerät hinzufügen" auch für einen Betrachter, dem
+  der Server das Erstellen eines Tokens verweigert. Das Navigationsblatt
+  sprang sogar nach jedem „Abmelden" daraus wieder auf. Eine neue Sitzung
+  beginnt jetzt ohne offene Dialoge, und „Gerät hinzufügen" erscheint nur für
+  Rollen, die Geräte aufnehmen dürfen. Ein Sprung aus der Suche direkt in
+  einen Geräte-Reiter („Updates — nas") schließt nun auch das
+  Navigationsblatt, statt es über der neuen Seite stehen zu lassen.
+- **Tastaturkürzel führten auf „Kein Zugriff".** „g s" (Skripte) und „g l"
+  (Audit-Log) standen jeder Rolle in der Kürzel-Liste und funktionierten auch
+  dort, wo die Seite gesperrt ist. Die Kürzel folgen jetzt der Navigation:
+  jede Rolle bekommt nur die Seiten, die sie öffnen darf.
 - **Konten und Personen waren je Seite doppelt zwischengespeichert.**
   Administration und Personen hielten die Kontenliste getrennt, die
   Personen-Auswahl im Gerätedialog und bei „Mobilgerät erfassen" eine eigene
