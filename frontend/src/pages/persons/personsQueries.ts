@@ -5,7 +5,8 @@ import { qk } from '../../api/queryClient';
 import { useCachedQueryState } from '../../hooks/useCachedQueryState';
 import { firstLoadError } from '../../hooks/useFleet';
 
-export const ACCOUNTS_KEY = ['accounts'] as const;
+/** Shared with the admin page: an account changed there must show here. */
+export const ACCOUNTS_KEY = qk.accounts;
 /** The newest slice of the audit log; each person's activity is filtered
  *  out of it, so switching persons costs no request. */
 export const RECENT_AUDIT_KEY = ['audit', 'recent'] as const;

@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { api, apiErrorMessage, openFleetSocket } from '../api/client';
 import { qk } from '../api/queryClient';
@@ -172,6 +172,12 @@ export interface AlertList {
   resolvedCap: number | null;
 }
 
+/** The persons list as every screen reads it (see qk.persons). */
+export const personsQuery = queryOptions({
+  queryKey: qk.persons,
+  queryFn: ({ signal }) => api.persons(signal).then((r) => r.persons),
+});
+
 const EMPTY_DEVICES: Device[] = [];
 const EMPTY_ALERTS: Alert[] = [];
 const EMPTY_SUMMARY: PatchSummary = {};
@@ -209,11 +215,7 @@ export function useFleet(enabled: boolean): Fleet {
     queryKey: qk.patchSummary,
     queryFn: ({ signal }) => api.patchSummary(signal).then((r) => r.summary),
   });
-  const persons = useQuery({
-    ...common,
-    queryKey: qk.persons,
-    queryFn: ({ signal }) => api.persons(signal).then((r) => r.persons),
-  });
+  const persons = useQuery({ ...common, ...personsQuery });
 
   useFleetSocket(enabled);
 

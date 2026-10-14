@@ -4,6 +4,7 @@ import { ApiError, api, apiErrorMessage } from '../../api/client';
 import { Modal } from '../../components/Modal';
 import { isAgent } from '../../deviceClass';
 import { osLabel } from '../../format';
+import { personsQuery } from '../../hooks/useFleet';
 import type { Device } from '../../types';
 import { ErrorNote } from '../../ui';
 
@@ -12,12 +13,9 @@ import { ErrorNote } from '../../ui';
  *  overwrite them, and the server refuses them (device_policy.py). */
 export function EditDeviceDialog({ device, onClose, onSaved }: { device: Device; onClose: () => void; onSaved: () => void }) {
   const manual = !isAgent(device);
-  // Not the fleet's persons query: that one turns any failure into an empty
-  // list, and an empty picker would quietly say "nobody to assign".
-  const persons = useQuery({
-    queryKey: ['persons', 'picker'],
-    queryFn: ({ signal }) => api.persons(signal).then((r) => r.persons),
-  });
+  // The fleet's persons list, so the picker offers who the persons page just
+  // created and not who it just deleted.
+  const persons = useQuery(personsQuery);
   // Techniker may not list persons (admin-only); for them the assignment
   // simply stays as it is instead of showing an error they cannot fix.
   const canPickPerson = !(persons.error instanceof ApiError && persons.error.status === 403);

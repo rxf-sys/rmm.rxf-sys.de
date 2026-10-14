@@ -8,6 +8,15 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **Konten und Personen waren je Seite doppelt zwischengespeichert.**
+  Administration und Personen hielten die Kontenliste getrennt, die
+  Personen-Auswahl im Gerätedialog und bei „Mobilgerät erfassen" eine eigene
+  Personenliste. Wer kurz nach einer Änderung die andere Seite öffnete, sah
+  den alten Stand: eine geänderte Rolle fehlte, die Löschbestätigung einer
+  Person versprach das Falsche über ihr Konto, ein mit der Person gelöschtes
+  Konto stand noch in der Administration (und lieferte „Konto nicht
+  gefunden"), eine gelöschte Person ließ sich noch zuweisen. Jede Liste liegt
+  jetzt einmal vor, eine Änderung erscheint sofort überall.
 - **Ein gescheiterter erster Abruf sah aus wie eine leere Flotte.** Kam die
   Geräteliste beim Start nicht an (Server weg, 500, unerwartete Antwort),
   zeigten Geräteliste und Übersicht „Noch keine Geräte" mit „Gerät

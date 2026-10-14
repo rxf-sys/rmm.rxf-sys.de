@@ -1,10 +1,12 @@
 import { ApiError } from '../../api/client';
+import { qk } from '../../api/queryClient';
 import type { Account, Role } from '../../types';
 
 /** Query keys of this page. Not under 'fleet': the fleet socket has nothing
- *  to say about accounts, sessions or settings. */
+ *  to say about accounts, sessions or settings. The accounts are shared with
+ *  the persons page, which lists and deletes them too. */
 export const adminKeys = {
-  accounts: ['admin', 'accounts'] as const,
+  accounts: qk.accounts,
   sessions: ['admin', 'sessions'] as const,
   ntfy: ['admin', 'ntfy'] as const,
 };

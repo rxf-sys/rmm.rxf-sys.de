@@ -30,6 +30,9 @@ export const qk = {
   devices: ['fleet', 'devices'] as const,
   alerts: ['fleet', 'alerts'] as const,
   patchSummary: ['fleet', 'patch-summary'] as const,
+  // The one persons list: the fleet, the persons page and the person pickers
+  // of the device dialogs all read it, so a person created or deleted on one
+  // screen is at once on or off the others.
   persons: ['fleet', 'persons'] as const,
   device: (id: number) => ['device', id] as const,
   deviceAll: ['device'] as const,
@@ -40,4 +43,9 @@ export const qk = {
   deviceHistory: (id: number, hours: number) => ['device', id, 'history', hours] as const,
   deviceAudit: (id: number) => ['device', id, 'audit'] as const,
   scripts: ['scripts'] as const,
+  // GET /api/accounts, read by the admin page and the persons page. One key,
+  // so an account change on either page shows on the other: the persons page
+  // words its delete confirmation from the cached role, and the server
+  // deletes a person's viewer account with the person.
+  accounts: ['accounts'] as const,
 };
