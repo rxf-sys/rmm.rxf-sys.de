@@ -681,10 +681,17 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
               onClear={() => setSelected(new Set())}
             />
           )}
-          {isOperator && pageAll && shown.length > rows.length && selectedDevices.length < shown.length && (
+          {/* Asks about the matches themselves: selected devices the filter
+              hides say nothing about whether all matches are selected, and
+              taking up the offer adds to them rather than dropping them. */}
+          {isOperator && pageAll && shown.length > rows.length && shown.some((d) => !selected.has(d.id)) && (
             <p className="pt-selectall">
               Alle {fmt.format(rows.length)} Geräte dieser Seite sind ausgewählt.{' '}
-              <button type="button" className="link-btn" onClick={() => setSelected(new Set(shown.map((d) => d.id)))}>
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => setSelected((prev) => new Set([...prev, ...shown.map((d) => d.id)]))}
+              >
                 Alle {fmt.format(shown.length)} Treffer auswählen
               </button>
             </p>

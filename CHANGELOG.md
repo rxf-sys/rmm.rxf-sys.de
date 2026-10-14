@@ -57,6 +57,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Alarm-Center sendet jetzt nur, was beim Bestätigen noch offen ist, und
   sagt im Toast, was schon quittiert oder behoben war. Der Server
   protokolliert nur noch die Quittierung, die tatsächlich gegriffen hat.
+- **„Alle Treffer auswählen" verwarf ausgeblendete Auswahl.** Unter
+  „Patches" zählte das Angebot auch ausgewählte Geräte, die der Filter
+  gerade ausblendet, und fehlte deshalb, obwohl Treffer unausgewählt waren.
+  Ein Klick ersetzte die Auswahl, statt sie zu ergänzen — die eben noch als
+  „davon ausgeblendet" gemeldeten Geräte fielen still heraus.
 
 ### Hinzugefügt
 - **Geräteliste mit Massenaktionen, Ansichten und Export.** Die Liste ist

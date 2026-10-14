@@ -324,6 +324,24 @@ describe('PatchesPage Auswahl', () => {
     await waitFor(() => expect(client.getQueryState(qk.devicePatches(3))?.isInvalidated).toBe(true));
   });
 
+  it('bietet alle Treffer an, auch neben ausgeblendeter Auswahl, und behält diese', async () => {
+    const many = [
+      ...Array.from({ length: 30 }, (_, i) => device({ id: 100 + i, hostname: `pc-${String(i + 1).padStart(2, '0')}` })),
+      ...Array.from({ length: 10 }, (_, i) => device({ id: 200 + i, hostname: `srv-${i + 1}`, os: 'linux' })),
+    ];
+    show({ devices: many, summary: {}, isOperator: true, route: '/patches?os=linux' });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Alle Geräte dieser Seite auswählen' }));
+    await userEvent.click(screen.getByRole('tab', { name: /Windows PC/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Alle Geräte dieser Seite auswählen' }));
+    const bar = screen.getByRole('region', { name: 'Auswahl' });
+    // 25 on this page plus 10 the filter hides: 5 of the 30 matches are not
+    // selected yet, so the offer stands although 35 is more than 30.
+    expect(bar).toHaveTextContent('35 ausgewählt · 10 davon ausgeblendet');
+    await userEvent.click(screen.getByRole('button', { name: 'Alle 30 Treffer auswählen' }));
+    // Adds to the selection instead of replacing it.
+    expect(bar).toHaveTextContent('40 ausgewählt · 10 davon ausgeblendet');
+  });
+
   it('startet nichts, wenn die Bestätigung abgebrochen wird', async () => {
     show({ isOperator: true });
     await userEvent.click(screen.getByRole('checkbox', { name: 'buero-pc auswählen' }));
