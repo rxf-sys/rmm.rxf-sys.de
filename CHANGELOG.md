@@ -675,6 +675,23 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   Wake-on-LAN. Sie fanden den Secret-Fehler unter „Sicherheit".
 - README neu strukturiert; die Beschreibung der CD-Pipeline entsprach nicht
   mehr der Realität (SSH statt Self-hosted Runner).
+- **Agent-CI prüft alle drei Zielsysteme.** `go vet` läuft zusätzlich mit
+  `GOOS=windows` und `GOOS=darwin` — Dateien hinter einem Build-Tag wurden
+  vorher nur für Linux geprüft. Neu ist golangci-lint 2.14.0 (errcheck, gosec,
+  govet, staticcheck, unused) über die offizielle Action, ebenfalls je
+  Zielsystem, denn der Windows-Code hatte Befunde, die ein Linux-Lauf nie
+  zeigt. Die Version ist gepinnt wie bei ruff. Gewollte gosec-Treffer
+  (Shell-Jobs, die signierte Binary mit 0755, feste `/sys`-Pfade) sind in
+  `agent/.golangci.yml` einzeln je Datei und Prüfung ausgenommen und
+  begründet. Die Tests laufen mit `-race`. Lokal prüfen `make vet` und das
+  neue `make lint` alle drei Systeme.
+- Der Agent trennt das Lesen einer Servernachricht (`decodeCommand`, ohne
+  Seiteneffekte) von ihrer Ausführung (`dispatch`). Eine Nachricht, die er
+  nicht lesen kann, wird protokolliert und übersprungen, statt die Verbindung
+  abzubauen — neu verbinden macht die nächste nicht lesbarer. Decoder, die
+  Parser für apt, dpkg/rpm und `resolv.conf` sowie die Signaturprüfung für
+  Agent-Updates haben jetzt Fuzz-Tests; die Testabdeckung des Agents steigt
+  von 11,7 % auf 26,0 %.
 
 ### Sicherheit
 - **Zwei Befehle an Geräte liefen am Audit-Log vorbei.** Das Agent-Update,
@@ -741,25 +758,20 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   zurückfällt, wenn `TRUST_PROXY_HEADERS` aus ist.
 - Das Dashboard bietet keinen kopierbaren Download-Link mit Token in der URL
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
-- Abmelden und abgelaufene Sitzungen leeren jetzt den gesamten
-  Abfrage-Cache und die Auftrags-Toasts. Vorher sah, wer sich im selben Tab
-  mit einem anderen Konto anmeldete, für einen Moment Geräte, Alarme und
-  Auftragsausgaben des vorherigen Kontos.
-- RustDesk-Links öffnet das Dashboard nur noch, wenn die ID wohlgeformt ist;
-  eine vom Agent gemeldete ID landet sonst nicht ungeprüft in
-  `window.location`. Manuell eingetragene IDs werden genauso geprüft.
-- Fernzugriff, Fernsteuerung, die Einrichtung von RustDesk und die
-  Auftragskonsole laufender Updates sind für die Rolle Viewer ausgeblendet —
-  das Backend verweigert sie ohnehin.
-- Die Auftrags-Verbindung gibt auf, wenn der Server sie endgültig abweist
-  (4401/4403/4404), statt es endlos neu zu versuchen.
-- Ein als destruktiv markiertes Skript lässt sich nur noch nach Eingabe
-  seines Namens einplanen oder als Zeitplan einschalten — wie beim
-  direkten Ausführen.
-- Massenaktionen nennen vor dem Start jedes betroffene Gerät; die
-  Software-Installation zeigt den Befehl, der je Betriebssystem läuft.
-  Gleichnamige Geräte werden in Auswahllisten und Bestätigungen per
-  `#ID` unterschieden.
+- **Der Agent nimmt vom Server höchstens 1 MiB pro Nachricht an.**
+  gorilla/websocket hält eine Nachricht vollständig im Speicher und setzt ab
+  Werk keine Grenze; ein defekter Server oder etwas zwischen Server und Gerät
+  konnte so jeden Agent der Flotte beliebig viel Speicher belegen lassen. Die
+  größte legitime Nachricht, ein Skript mit 64.000 Zeichen, kommt JSON-kodiert
+  auf höchstens 384.000 Byte.
+- **Der Agent prüft Patch-IDs, bevor er sie weitergibt.** Unter Windows
+  landeten sie in einem PowerShell-String in einfachen Anführungszeichen, und
+  maskiert wurde nur `'` — PowerShell beendet einen solchen String aber auch
+  an `‘`, `’`, `‚` und `‛`. Unter Linux gingen sie ohne `--` an apt, eine ID
+  wie `-o…` war also eine Option. Jetzt nimmt der Agent nur die Form an, die
+  sein eigener Scan meldet (Windows: GUID; Linux: Debian-Paketname, optional
+  mit `:arch`), und lehnt den Job sonst mit der abgelehnten ID in der Ausgabe
+  ab; vor den Paketnamen steht zusätzlich `--`.
 - **Ein Secret aus einer `##RMM-CRED##`-Zeile konnte zum Teil im Job-Log
   landen.** Der Filter zerlegte die Ausgabe mit `str.splitlines()`, das auch
   an U+2028, NEL, Seitenvorschub und ähnlichen Zeichen trennt — JSON erlaubt
