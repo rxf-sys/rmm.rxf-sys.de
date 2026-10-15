@@ -222,7 +222,17 @@ export function apiErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {
     let parsed: unknown;
     try {
-      parsed = JSON.parse(e.body);
+      const parsed = JSON.parse(e.body) as { detail?: unknown };
+      if (typeof parsed.detail === 'string' && parsed.detail) return parsed.detail;
+      // A failed request-body check (422) carries a list of
+      // {loc, msg, …} instead of one sentence. Handing that list on would
+      // put objects where callers render text.
+      if (Array.isArray(parsed.detail)) {
+        const msgs = parsed.detail
+          .map((d: unknown) => (d && typeof d === 'object' && 'msg' in d ? String(d.msg) : ''))
+          .filter(Boolean);
+        if (msgs.length) return msgs.join(' · ');
+      }
     } catch {
       // Not JSON (a proxy's plain-text answer): the body is the message.
       return e.body || `Fehler ${e.status}`;

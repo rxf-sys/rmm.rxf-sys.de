@@ -4,7 +4,7 @@ import time
 
 from httpx import AsyncClient
 
-from app import accounts, alerts, automation, devices, jobs, patches
+from app import accounts, alerts, audit, automation, devices, jobs, patches, wol
 from app.agents_ws import manager
 from app.config import Settings
 
@@ -278,3 +278,41 @@ async def test_window_skips_offline_and_patchless(
     # Everything offline → no job rows at all (no weekly failure noise).
     assert await automation.run_patch_window(settings, now=now) == []
     assert await jobs.active_job_of_kind(dev, "patch_install") is None
+
+
+async def test_window_wake_is_audited(client: AsyncClient, settings: Settings, monkeypatch):
+    """The magic packet before the window is a command to a device like the
+    operator's "Aufwecken", so it lands in the audit log the same way, with
+    the system actor instead of a user. Out-of-scope devices are not woken,
+    and a wake that fails is not recorded as sent."""
+    asleep = await _make_device("mama-pc", tags=["familie"])
+    broken = await _make_device("oma-pc", tags=["familie"])
+    elsewhere = await _make_device("buero-pc", tags=["arbeit"])
+    for dev in (asleep, broken, elsewhere):
+        await devices.set_inventory(
+            dev, "hardware", {"macs": [f"aa:bb:cc:dd:ee:0{dev}", f"aa:bb:cc:dd:ee:1{dev}"]}
+        )
+    _fake_connected(monkeypatch, connected=False)
+
+    woken: list[list[str]] = []
+
+    def _wake(macs: list[str], broadcast: str = "255.255.255.255") -> int:
+        if macs[0].endswith(f"0{broken}"):
+            raise OSError("network unreachable")
+        woken.append(macs)
+        return len(macs)
+
+    monkeypatch.setattr(wol, "wake", _wake)
+
+    now, wday, hour = _window_now()
+    await _enable_window(wday, hour)
+    await audit.clear()
+    assert await automation.run_patch_window(settings, now=now) == []
+
+    assert len(woken) == 1
+    wakes = [e for e in await audit.recent() if e["event"] == "device.wake"]
+    assert len(wakes) == 1
+    assert wakes[0]["actor"] == "automation"
+    assert wakes[0]["device_id"] == asleep
+    assert wakes[0]["detail"]["macs"] == 2
+    assert wakes[0]["detail"]["patch_window"] is True
