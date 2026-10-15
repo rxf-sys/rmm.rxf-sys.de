@@ -94,8 +94,17 @@ const del = <T>(path: string) => send<T>('DELETE', path);
 export function apiErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {
     try {
-      const parsed = JSON.parse(e.body) as { detail?: string };
-      if (parsed.detail) return parsed.detail;
+      const parsed = JSON.parse(e.body) as { detail?: unknown };
+      if (typeof parsed.detail === 'string' && parsed.detail) return parsed.detail;
+      // A failed request-body check (422) carries a list of
+      // {loc, msg, …} instead of one sentence. Handing that list on would
+      // put objects where callers render text.
+      if (Array.isArray(parsed.detail)) {
+        const msgs = parsed.detail
+          .map((d: unknown) => (d && typeof d === 'object' && 'msg' in d ? String(d.msg) : ''))
+          .filter(Boolean);
+        if (msgs.length) return msgs.join(' · ');
+      }
     } catch {
       /* body wasn't JSON */
     }

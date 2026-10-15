@@ -233,6 +233,13 @@ async def test_schedule_dispatch(client: AsyncClient, settings: Settings, monkey
 
     created = await automation.run_script_schedules(settings, now=now)
     assert len(created) == 1 and sent[0]["payload"]["kind"] == "script"
+    # The run names the script version it sent, like a manual script job.
+    from app import audit
+
+    run = next(e for e in await audit.recent() if e["event"] == "script.scheduled_run")
+    assert run["actor"] == "automation" and run["device_id"] == dev
+    assert run["detail"]["script_id"] == script["id"]
+    assert run["detail"]["content_hmac"] == await scripts.content_hmac("echo hi")
     # Same hour again → last_run guard blocks.
     assert await automation.run_script_schedules(settings, now=now + 60) == []
 
