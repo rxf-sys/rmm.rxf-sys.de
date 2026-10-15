@@ -168,9 +168,14 @@ Agent  ──job_started──▶ Status "running"
 - Timeouts kommen vom Server, werden aber im Agent auf 4 h gedeckelt
   (`agent/jobs.go:19,32-41`).
 - Job-Output läuft vor dem Speichern durch `job_secrets.extract`
-  (`backend/app/job_secrets.py:101`): Ein Skript kann mit einem
+  (`backend/app/job_secrets.py:246`): Ein Skript kann mit einem
   `##RMM-CRED##`-Marker ein Geheimnis melden, das dann verschlüsselt im
-  Tresor landet und **nicht** im Job-Log.
+  Tresor landet und **nicht** im Job-Log. Vor dem Marker dürfen Leerraum,
+  Steuerzeichen und unsichtbare Formatzeichen (BOM, Zero-Width-Space, Word
+  Joiner …) stehen. Eine Marker-Zeile ist auf 64 Ki Zeichen begrenzt; eine
+  längere wird durch einen Hinweis ersetzt und nicht gespeichert. Endet ein
+  Job ohne Ergebnis (Timeout, Gerät gelöscht), wird ein noch
+  zurückgehaltenes Fragment verworfen und nur seine Länge geloggt.
 - Jobs an ein offline stehendes Gerät scheitern sofort, statt in der
   Warteschlange zu verfallen.
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from hypothesis import settings as hypothesis_settings
 
 from app import (
     accounts,
@@ -23,6 +24,16 @@ from app.config import Settings, get_settings
 from app.main import app
 from app.routers import agent as agent_router
 from app.routers import auth as auth_router
+
+# Property tests: a fixed number of examples keeps the suite's runtime
+# predictable. Built on whatever profile is active, so under CI Hypothesis's
+# own "ci" profile (derandomized, no example database) stays in effect. No
+# deadline: the functions under test are pure, and a slow first example on a
+# busy machine says nothing about them.
+hypothesis_settings.register_profile(
+    "rmm", hypothesis_settings(), max_examples=200, deadline=None
+)
+hypothesis_settings.load_profile("rmm")
 
 
 @pytest.fixture
