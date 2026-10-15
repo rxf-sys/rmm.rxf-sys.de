@@ -333,7 +333,7 @@ async def list_for_dashboard(
             unresolved = await cur.fetchall()
         # One row past the bound tells whether the history was cut.
         async with db.execute(_RESOLVED_SQL, (person_id, person_id, resolved_limit + 1)) as cur:
-            resolved = await cur.fetchall()
+            resolved = list(await cur.fetchall())
     truncated = len(resolved) > resolved_limit
     rows = [*unresolved, *resolved[:resolved_limit]]
     return [_row_to_dict(r) for r in rows], truncated
