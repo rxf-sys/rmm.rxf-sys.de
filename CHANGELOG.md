@@ -723,9 +723,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   gespeicherte ID, `PATCH /api/devices/{id}` antwortet mit 422 (leer löscht
   die ID weiterhin), und aus einer schon gespeicherten ungültigen ID entsteht
   kein Link mehr (409, ohne Audit-Eintrag). Die Meldung nennt den Aufruf,
-  der sie korrigiert (`PATCH /api/devices/{id}` mit `rustdesk_id`); im
-  Dashboard bietet der Reiter „Fernzugriff" eine solche ID vorbefüllt zum
-  Neu-Speichern an. `docs/TROUBLESHOOTING.md` beschreibt beide Wege.
+  der sie korrigiert (`PATCH /api/devices/{id}` mit `rustdesk_id`); ist
+  RustDesk auf dem Server eingerichtet, bietet der Reiter „Fernzugriff" im
+  Dashboard eine solche ID vorbefüllt zum Neu-Speichern an.
+  `docs/TROUBLESHOOTING.md` beschreibt beide Wege.
 - **Ein Agent konnte über die Jobs anderer Geräte berichten.** Der Server
   übernahm die `job_id` aus `job_started`, `job_output` und `job_result`
   ungeprüft. Ein manipuliertes oder fehlerhaftes Gerät konnte damit den Job

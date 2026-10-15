@@ -139,10 +139,11 @@ ID über „ID ändern").
 
 Steht im Reiter „Fernzugriff" der Hinweis „hinterlegte ID ungültig", stammt
 die gespeicherte ID aus der Zeit vor der Formatprüfung (6–12 Ziffern oder 6–16
-Zeichen, beginnend mit einem Buchstaben, aus `A–Z`, `0–9`, `_` und `-`). Das
-Feld darunter ist mit der ID vorbefüllt, Leerzeichen wie in `123 456 789`
-schon entfernt: korrigieren, falls nötig, und speichern. Meldet der Agent eine
-gültige ID, ersetzt der nächste Heartbeat die alte ohnehin.
+Zeichen, beginnend mit einem Buchstaben, aus `A–Z`, `0–9`, `_` und `-`). Ist
+RustDesk auf dem Server eingerichtet, steht darunter ein Feld mit dieser ID,
+Leerzeichen wie in `123 456 789` schon entfernt: korrigieren, falls nötig, und
+speichern. Meldet der Agent eine gültige ID, ersetzt der nächste Heartbeat die
+alte ohnehin.
 
 Über die API antwortet `GET /api/remote/devices/{id}/session` für eine solche
 ID mit 409 „Die hinterlegte RustDesk-ID ist ungültig" — nur Leerzeichen
