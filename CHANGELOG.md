@@ -825,6 +825,22 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
 
 ### Behoben
+- **Der Agent konnte sich dauerhaft aufhängen, solange Jobs viel ausgaben.**
+  Die Hauptschleife ist die einzige, die die Warteschlange zum Server leert,
+  stellte aber Heartbeat, Inventar und die Antworten auf `ping` und
+  `get_logs` selbst in dieselbe Warteschlange. War sie von Job-Ausgaben voll,
+  wartete die Schleife auf sich selbst: kein Heartbeat mehr, keine Antwort,
+  und auch ein Verbindungsabbruch blieb unbemerkt, bis der Dienst neu
+  startete. Diese Nachrichten schreibt die Schleife jetzt direkt; sie können
+  dabei wartende Job-Ausgaben überholen, deren Reihenfolge untereinander
+  bleibt erhalten.
+- Der Agent konnte bei jedem Verbindungsabbruch eine Goroutine samt
+  Nachricht zurücklassen: Der Leser des Sockets blieb an einem ungepufferten
+  Kanal hängen, sobald die Hauptschleife schon beendet war. Er gibt jetzt auf,
+  sobald die Verbindung vorbei ist.
+- Der Agent meldete aus einer Zeile wie `nameservers 10.0.0.2` in der
+  `resolv.conf` einen DNS-Server. Das Schlüsselwort muss jetzt für sich
+  stehen, wie es auch der Resolver verlangt.
 - Eine abgelehnte Eingabe (422 mit FastAPIs Fehlerliste) brachte die
   Geräteseite zum Absturz: `apiErrorMessage` reichte die Liste als Meldung
   weiter, und das RustDesk-Formular rendert die Meldung als Text. Die Liste
