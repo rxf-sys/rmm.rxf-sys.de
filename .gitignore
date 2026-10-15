@@ -21,6 +21,8 @@ __pycache__/
 .coverage
 htmlcov/
 .ruff_cache/
+.mypy_cache/
+.hypothesis/
 
 # Node
 node_modules/

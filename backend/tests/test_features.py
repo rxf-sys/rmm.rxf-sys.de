@@ -7,6 +7,8 @@ import time
 
 import pyotp
 from httpx import AsyncClient
+from hypothesis import given
+from hypothesis import strategies as st
 
 from app import alerts, automation, devices, wol
 from app.config import Settings
@@ -35,6 +37,39 @@ def test_magic_packet_shape():
     assert len(pkt) == 6 + 16 * 6
     assert pkt[:6] == b"\xff" * 6
     assert pkt[6:12] == bytes.fromhex("aabbccddeeff")
+
+
+@st.composite
+def _mac(draw: st.DrawFn) -> tuple[bytes, str]:
+    """Six bytes and one way an inventory might write them: either case per
+    digit, ":" or "-" per separator, whitespace around."""
+    raw = draw(st.binary(min_size=6, max_size=6))
+    digits = [draw(st.sampled_from([c.lower(), c.upper()])) for c in raw.hex()]
+    groups = ["".join(digits[i : i + 2]) for i in range(0, 12, 2)]
+    text = groups[0] + "".join(draw(st.sampled_from(":-")) + g for g in groups[1:])
+    pad = st.sampled_from(["", " ", "\t", "\n"])
+    return raw, draw(pad) + text + draw(pad)
+
+
+@given(_mac())
+def test_normalize_mac_gives_one_form_per_address(mac: tuple[bytes, str]):
+    raw, text = mac
+    normal = wol.normalize_mac(text)
+    assert normal == raw.hex()
+    # Idempotent as a canonical form: written out again, it comes back as is.
+    spelled = ":".join(normal[i : i + 2] for i in range(0, 12, 2))
+    assert wol.normalize_mac(spelled) == normal
+
+
+@given(st.text() | _mac().map(lambda m: m[1]))
+def test_normalize_mac_returns_none_or_twelve_lowercase_hex_digits(text: str):
+    normal = wol.normalize_mac(text)
+    if normal is None:
+        return
+    assert len(normal) == 12
+    assert set(normal) <= set("0123456789abcdef")
+    # Exactly what the magic packet needs: bytes.fromhex accepts it as is.
+    assert wol._magic_packet(normal) == b"\xff" * 6 + bytes.fromhex(normal) * 16
 
 
 async def test_wake_endpoint(admin_client: AsyncClient):

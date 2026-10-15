@@ -278,6 +278,22 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Der ruff-Regelsatz ist explizit in `pyproject.toml` aufgeführt und die
   ruff-Version auf die 0.16er-Reihe gepinnt. Vorher hätte eine neue
   ruff-Version das Lint-Gate ohne Codeänderung rot gemacht.
+- **Das Backend wird mit mypy geprüft** (Normalmodus, `mypy==2.3.1` als
+  Dev-Abhängigkeit), im CI-Job und im Gate-Kommando
+  (`ruff check . && mypy app && pytest …`). Von den vier Befunden war einer
+  echt: `get_ntfy_config` war als `dict[str, str]` annotiert, liefert aber
+  das `has_token`-Bool, auf das sich das Dashboard verlässt.
+- ruff prüft zusätzlich `DTZ` (naive Datumswerte — so entstand der
+  Zeitumstellungsfehler im Update-Scan) und `TRY400`. Die zwei
+  `TRY400`-Stellen loggen jetzt mit Traceback: ein abgelehnter Bootstrap-Admin
+  und ein Tresor-Eintrag, der sich nicht entschlüsseln lässt — erst der
+  Traceback unterscheidet einen ausgetauschten `credentials.key` von einem
+  Secret, das kein UTF-8 ist.
+- **Property-Tests mit hypothesis** (`hypothesis==6.168.1`, Dev-Abhängigkeit,
+  200 Beispiele je Test, festgelegt in `tests/conftest.py`): Update-Scan-Slot
+  über Zeitumstellungen hinweg, Secret-Filter unabhängig von Chunk-Grenzen,
+  Versionsvergleich der Agent-Updates und MAC-Normalisierung für
+  Wake-on-LAN. Sie fanden den Secret-Fehler unter „Sicherheit".
 - README neu strukturiert; die Beschreibung der CD-Pipeline entsprach nicht
   mehr der Realität (SSH statt Self-hosted Runner).
 
@@ -346,6 +362,20 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   zurückfällt, wenn `TRUST_PROXY_HEADERS` aus ist.
 - Das Dashboard bietet keinen kopierbaren Download-Link mit Token in der URL
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
+- **Ein Secret aus einer `##RMM-CRED##`-Zeile konnte zum Teil im Job-Log
+  landen.** Der Filter zerlegte die Ausgabe mit `str.splitlines()`, das auch
+  an U+2028, NEL, Seitenvorschub und ähnlichen Zeichen trennt — JSON erlaubt
+  U+2028 und NEL aber roh in Strings. Stand eines davon im Secret, ging der
+  Rest der Zeile als normale Ausgabe in Job-Log und Live-Stream, und der
+  Eintrag wurde als „ungültiges Format" verworfen statt im Tresor abgelegt.
+  Zeilen enden jetzt nur noch an CR und LF.
+- **Eine `##RMM-CRED##`-Zeile hinter einem unsichtbaren Zeichen landete
+  vollständig im Job-Log, Secret inklusive.** Vor dem Marker galt nur
+  Leerraum als erlaubt; ein BOM (U+FEFF), ein Zero-Width-Space (U+200B), ein
+  Word Joiner (U+2060) oder ein NUL machten aus der Marker-Zeile normale
+  Ausgabe. Vor dem Marker dürfen jetzt außer Leerraum auch Steuerzeichen und
+  unsichtbare Formatzeichen stehen — an allen Stellen, die nach dem Marker
+  suchen, nach derselben Regel.
 
 ### Geändert
 - Build und CI laufen auf **Node 24 (LTS)** statt 22 — und beide zusammen:
@@ -489,6 +519,45 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   „Text file busy"; der Windows-Installer machte das schon richtig.
 - `install.sh` bricht bei einer nicht unterstützten Architektur mit einer
   aussagekräftigen Meldung ab statt mit „no matching agent binary".
+- Der tägliche Update-Scan lieferte am Tag der Umstellung auf Sommerzeit einen
+  Slot in der Zukunft, wenn `PATCH_SCAN_HOUR=2` gesetzt war: 02:30 gibt es am
+  29.03.2026 in Berlin nicht, der Slot landete auf 03:30, und ein Gerät, das
+  um 03:10 gerade gescannt hatte, galt trotzdem als überfällig und wurde nach
+  Ablauf der Sperrfrist erneut aufgefordert. In der doppelten Stunde im
+  Herbst fiel der Slot nach dem ersten 02:30 auf den Vortag zurück. Die
+  Slots werden jetzt als Zeitpunkte verglichen, nicht als Uhrzeiten.
+- Der Secret-Filter für Job-Ausgaben hing an der Stelle, an der der Agent
+  seine Chunks schnitt: Kam das LF eines CRLF erst mit dem nächsten Chunk,
+  folgte dem Hinweis „In Passwörtern gespeichert" eine Leerzeile; endete die
+  Ausgabe auf Leerzeichen oder `##`, hängte das Jobende einen Zeilenumbruch
+  an; ein zurückgehaltenes Fragment konnte hinter später gelesene Zeilen
+  rutschen. Das Ergebnis ist jetzt für jede Zerlegung dasselbe.
+- Eine `##RMM-CRED##`-Zeile ohne Zeilenende konnte den ganzen Server
+  ausbremsen: Der Filter hielt sie ohne Obergrenze zurück und zerlegte sie mit
+  jedem weiteren Chunk von vorn. 2 MiB Ausgabe ohne Umbruch kosteten 1,4 s
+  Rechenzeit, in denen die Event-Loop für alle Agents und das Dashboard
+  stand. Jetzt wird nur der neue Chunk nach dem Zeilenende durchsucht
+  (0,015 s), und eine Marker-Zeile darf höchstens 64 Ki Zeichen lang werden —
+  auch das längste gültige Credential bleibt darunter. Eine längere Zeile
+  ersetzt der Hinweis „[⚠ RMM-CRED-Zeile ignoriert: zu lang]"; von ihr selbst
+  landet nichts im Job-Log, auch nicht der Rest hinter der Grenze, und die
+  Zeilen danach laufen normal weiter.
+- Endete ein Job ohne Ergebnis — vom Timeout-Sweep beendet oder mit seinem
+  Gerät gelöscht —, verschwand ein noch zurückgehaltenes Stück einer
+  `##RMM-CRED##`-Zeile spurlos, und sein Filterzustand blieb bis zum
+  Neustart im Speicher. Beides räumt jetzt `job_secrets.discard()` ab; eine
+  Warnung `job_secrets.discarded` im Server-Log nennt Job und Länge, nie den
+  Inhalt. Ein Neustart verliert den Zustand weiterhin ohne Spur, er liegt
+  nur im Speicher.
+- `POST /api/devices/{id}/patches/install` nahm beliebig viele und beliebig
+  lange Patch-IDs an. Der Server schickt sie in einer einzigen Nachricht an
+  den Agent, der höchstens 1 MiB pro Nachricht liest — eine zu große
+  Auswahl kostete ihn die Verbindung. Jetzt sind es höchstens 400 IDs à 128
+  Zeichen (auch im ungünstigsten Fall unter 1 MiB), und jede ID muss für
+  dieses Gerät ausstehen: eine erfundene oder die eines anderen Geräts
+  beantwortet der Server mit 422, statt sie an den Agent weiterzureichen.
+  Doppelte IDs gehen nur einmal hinaus. „Alles installieren" schickt wie
+  bisher keine IDs und ist davon nicht betroffen.
 
 ---
 
