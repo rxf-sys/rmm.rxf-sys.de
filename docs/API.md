@@ -128,7 +128,7 @@ Bestandsskripte bekommen `sonstiges` und `danger = false`.
 | GET | `/api/patches/summary` | Session | Flottenweite Übersicht, für Viewer gefiltert |
 | GET | `/api/devices/{device_id}/patches` | Session | Ausstehende Patches eines Geräts, dazu `last_scan_at` |
 | POST | `/api/devices/{device_id}/patches/scan` | Operator | Scan anstoßen. 409 ohne offene Agent-Verbindung |
-| POST | `/api/devices/{device_id}/patches/install` | Operator | Installations-Job. 409 ohne Verbindung oder bei bereits laufender Installation, 422 wenn nichts aussteht |
+| POST | `/api/devices/{device_id}/patches/install` | Operator | Installations-Job; ohne Agent-Verbindung ist er sofort fehlgeschlagen. 409 bei bereits laufender Installation, 422 wenn nichts aussteht. Ohne `patch_ids` alles Ausstehende (oder mit `security_only` nur Sicherheitsupdates); mit `patch_ids` höchstens 400 IDs à 128 Zeichen, und jede muss für dieses Gerät ausstehen, sonst 422 |
 
 ## Alarme, Inventar, Audit
 

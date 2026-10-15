@@ -630,7 +630,7 @@ async def bootstrap_admin(settings: Settings) -> None:
     except AccountError as e:
         # Starting without an admin is bad, but starting with a two-character
         # admin password on a remote-command tool is worse. Refuse and say so.
-        log.error(
+        log.exception(
             "accounts.bootstrap_rejected",
             error=str(e),
             hint="fix BOOTSTRAP_ADMIN_PASSWORD and restart; no admin was created",

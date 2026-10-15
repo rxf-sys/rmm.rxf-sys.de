@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 import time
 
 import aiosqlite
 from httpx import AsyncClient
 
-from app import alerts, devices, patches
+from app import alerts, devices, jobs, patches
 from app.config import Settings
 
 
@@ -112,6 +113,45 @@ async def test_install_offline_device_fails_fast(admin_client: AsyncClient):
     job = r.json()["job"]
     assert job["kind"] == "patch_install"
     assert job["status"] == "failed"  # dispatched to an offline device
+
+
+async def test_install_rejects_a_selection_too_large_for_one_agent_message(
+    admin_client: AsyncClient,
+):
+    # The ids go to the agent in one message, which it reads up to 1 MiB; an
+    # unbounded list could exceed that and cost the agent its connection.
+    dev = await _make_device()
+    await patches.apply_scan(dev, [_item(f"pkg{i}") for i in range(401)] + [_item("p" * 129)])
+    url = f"/api/devices/{dev}/patches/install"
+    r = await admin_client.post(url, json={"patch_ids": ["p" * 129]})
+    assert r.status_code == 422
+    r = await admin_client.post(url, json={"patch_ids": [f"pkg{i}" for i in range(401)]})
+    assert r.status_code == 422
+    assert await jobs.list_jobs(dev) == []
+    # Right at the limits it goes through (and fails fast: offline device).
+    await patches.apply_scan(dev, [_item(f"pkg{i}") for i in range(399)] + [_item("p" * 128)])
+    ids = [f"pkg{i}" for i in range(399)] + ["p" * 128]
+    r = await admin_client.post(url, json={"patch_ids": ids})
+    assert r.status_code == 200, r.text
+    assert json.loads(r.json()["job"]["command"]) == ids
+
+
+async def test_install_rejects_ids_that_are_not_pending_on_the_device(admin_client: AsyncClient):
+    dev = await _make_device()
+    other = await _make_device("other-pc")
+    await patches.apply_scan(dev, [_item("openssl", "critical")])
+    await patches.apply_scan(other, [_item("curl")])
+    url = f"/api/devices/{dev}/patches/install"
+    # Another device's patch, or a made-up one, is nothing to send this agent.
+    for wrong in ("curl", "erfunden"):
+        r = await admin_client.post(url, json={"patch_ids": ["openssl", wrong]})
+        assert r.status_code == 422
+        assert wrong in r.json()["detail"]
+    assert await jobs.list_jobs(dev) == []
+    # Duplicates are sent once.
+    r = await admin_client.post(url, json={"patch_ids": ["openssl", "openssl"]})
+    assert r.status_code == 200, r.text
+    assert json.loads(r.json()["job"]["command"]) == ["openssl"]
 
 
 async def test_patch_alert_fires_and_resolves(client: AsyncClient, settings: Settings):

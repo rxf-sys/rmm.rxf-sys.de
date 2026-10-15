@@ -10,7 +10,7 @@
 
 ## Wie geprüft
 
-- [ ] `cd backend && ruff check . && pytest -v --cov=app --cov-fail-under=70`
+- [ ] `cd backend && ruff check . && mypy app && pytest -v --cov=app --cov-fail-under=70`
 - [ ] `cd frontend && npm run build`
 - [ ] `cd agent && make vet test`
 - [ ] Manuell geprüft: <!-- was genau, oder "entfällt" -->

@@ -24,6 +24,7 @@ from typing import Any
 import aiosqlite
 import structlog
 
+from . import job_secrets
 from .config import Settings
 from .db import connect as db_connect
 
@@ -271,6 +272,8 @@ async def sweep_stale(timeout_s: int, patch_timeout_s: int | None = None) -> int
             )
         await db.commit()
     for jid in stale:
+        # No job_result will come to flush what the output filter still holds.
+        job_secrets.discard(jid)
         hub.publish(jid, {"type": "done", "status": "timeout", "exit_code": None})
     return len(stale)
 
@@ -332,8 +335,14 @@ async def active_job_of_kind(device_id: int, kind: str) -> int | None:
 
 async def delete_for_device(device_id: int) -> None:
     async with _connect() as db:
-        await db.execute("DELETE FROM jobs WHERE device_id = ?", (device_id,))
+        async with db.execute(
+            "DELETE FROM jobs WHERE device_id = ? RETURNING id", (device_id,)
+        ) as cur:
+            deleted = [int(r[0]) for r in await cur.fetchall()]
         await db.commit()
+    # A job that was still running never sends its job_result now.
+    for jid in deleted:
+        job_secrets.discard(jid)
 
 
 def reset_for_tests(db_path: str) -> None:
