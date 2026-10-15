@@ -668,6 +668,25 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   zurückfällt, wenn `TRUST_PROXY_HEADERS` aus ist.
 - Das Dashboard bietet keinen kopierbaren Download-Link mit Token in der URL
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
+- Abmelden und abgelaufene Sitzungen leeren jetzt den gesamten
+  Abfrage-Cache und die Auftrags-Toasts. Vorher sah, wer sich im selben Tab
+  mit einem anderen Konto anmeldete, für einen Moment Geräte, Alarme und
+  Auftragsausgaben des vorherigen Kontos.
+- RustDesk-Links öffnet das Dashboard nur noch, wenn die ID wohlgeformt ist;
+  eine vom Agent gemeldete ID landet sonst nicht ungeprüft in
+  `window.location`. Manuell eingetragene IDs werden genauso geprüft.
+- Fernzugriff, Fernsteuerung, die Einrichtung von RustDesk und die
+  Auftragskonsole laufender Updates sind für die Rolle Viewer ausgeblendet —
+  das Backend verweigert sie ohnehin.
+- Die Auftrags-Verbindung gibt auf, wenn der Server sie endgültig abweist
+  (4401/4403/4404), statt es endlos neu zu versuchen.
+- Ein als destruktiv markiertes Skript lässt sich nur noch nach Eingabe
+  seines Namens einplanen oder als Zeitplan einschalten — wie beim
+  direkten Ausführen.
+- Massenaktionen nennen vor dem Start jedes betroffene Gerät; die
+  Software-Installation zeigt den Befehl, der je Betriebssystem läuft.
+  Gleichnamige Geräte werden in Auswahllisten und Bestätigungen per
+  `#ID` unterschieden.
 - **Ein Secret aus einer `##RMM-CRED##`-Zeile konnte zum Teil im Job-Log
   landen.** Der Filter zerlegte die Ausgabe mit `str.splitlines()`, das auch
   an U+2028, NEL, Seitenvorschub und ähnlichen Zeichen trennt — JSON erlaubt
