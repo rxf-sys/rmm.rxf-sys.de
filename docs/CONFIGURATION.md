@@ -11,7 +11,7 @@ Einstellungen.
 |---|---|---|
 | Compose-Umgebung | `infrastructure/.env` (Vorlage: `.env.example`) | Backend-Container, plus `TRUSTED_PROXY_CIDR` für Caddy |
 | Prozess-Umgebung | beliebige Env-Variablen | überschreibt alles, z. B. im lokalen Dev-Setup |
-| Laufzeit-Overrides | Tabelle `app_settings` in der DB | derzeit nur die ntfy-Konfiguration, im Dashboard änderbar |
+| Laufzeit-Overrides | Tabelle `app_settings` in der DB | die ntfy-Konfiguration, im Dashboard änderbar; außerdem der Schlüssel für die Skript-Fingerabdrücke im Audit-Log, den der Server beim ersten Gebrauch selbst erzeugt |
 | Agent | `/etc/rxf-rmm/agent.json` bzw. `%ProgramData%\rxf-rmm\agent.json` | pro Gerät, beim Enrollment geschrieben |
 
 Namen sind **nicht** case-sensitiv (`case_sensitive=False`,

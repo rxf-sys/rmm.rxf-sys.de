@@ -92,7 +92,10 @@ async def create_job(
             user=user["username"],
             device_id=device_id,
             kind="script",
+            script_id=script["id"],
             script=script["name"],
+            # Which version ran: the library can change after this job.
+            content_hmac=await scripts.content_hmac(script["content"]),
         )
 
     return {"job": await _dispatch(job)}

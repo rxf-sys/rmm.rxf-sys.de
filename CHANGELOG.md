@@ -227,6 +227,47 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   jemand nachgesehen hatte.
 
 ### Geändert
+- **Audit-Einträge sagen jetzt, was sich geändert hat.** `devices.updated`
+  nennt in `changed` die Felder, die sich tatsächlich geändert haben: die
+  Person mit vorher/nachher samt Namen, hinzugefügte und entfernte Tags, die
+  RustDesk-ID mit vorher/nachher — sie entscheidet, wohin eine
+  Fernsteuerung geht — und alles Übrige nur mit Namen; Notizen,
+  Seriennummern und IMEIs gehören nicht ins Log. Skript-Einträge
+  (`job.created` für Skripte, `script.scheduled_run`, `script.created`,
+  `script.updated`) tragen einen Fingerabdruck des Skriptinhalts
+  (`content_hmac`), `script.updated` zusätzlich den vorherigen, die
+  `destruktiv`-Markierung vorher und nachher und bei einer Umbenennung den
+  alten Namen (`script_from`) — ältere Einträge nennen das Skript noch so,
+  und der Feed sagt „umbenannt von …". Die Bibliothek ist änderbar; erst der
+  Fingerabdruck verbindet einen Lauf mit der Fassung, die tatsächlich lief,
+  ohne den Inhalt ins Log zu kopieren. Er ist ein HMAC-SHA256 mit einem
+  zufälligen Schlüssel dieser Installation (in `app_settings`, von keinem
+  Endpunkt ausgeliefert), kein bloßer SHA-256: Skripte folgen bekannten
+  Vorlagen, und ein kurzes Passwort darin ließe sich aus einem ungesalzenen
+  Hash im Log in Minuten durchprobieren — auch noch, nachdem es längst aus
+  dem Skript entfernt ist.
+- **Rollen-Matrix als Test** (`backend/tests/test_role_matrix.py`). Jeder
+  schreibende `/api`-Endpunkt wird mit eingeschalteter Auth ohne Sitzung, als
+  Viewer und als Techniker aufgerufen: Admin-Endpunkte antworten beiden mit
+  403, Operator-Endpunkte dem Viewer, und ein abgewiesener Aufruf hinterlässt
+  keinen Audit-Eintrag. Die zugelassene Rolle bekommt den Status, den der
+  Handler wirklich liefert, nicht bloß „nicht 403" — ein Eintrag, dessen Pfad
+  ins Leere geht, fällt so auf. Erwartet ein Eintrag einen Fehlerstatus, muss
+  die Antwort eine Meldung des Handlers sein und nicht FastAPIs Fehlerliste
+  aus der Eingabeprüfung, die ebenfalls mit 422 antwortet. Ein Wächtertest
+  liest `app.routes` und schlägt fehl, sobald ein schreibender Endpunkt ohne
+  Eintrag dazukommt; ausgenommen sind mit Begründung nur Login, Logout und
+  das Agent-Enrollment. Dazu
+  kommen Tests für das Viewer-Scoping von `/api/fleet/metrics` und
+  `/api/inventory/search`, für `4403` am Job-Socket (auch für den Viewer, dem
+  das Gerät gehört) und für den Fleet-Socket, der ohne Sitzung `4401` sendet
+  und auch angemeldet nur Hinweise ohne Nutzdaten. Die Matrix und die
+  Socket-Tests schalten Auth am zwischengespeicherten `get_settings()` ein,
+  das `verify_session` und die Sockets selbst lesen; ein nachträglich
+  gesetztes `AUTH_ENABLED` kam dort nie an, sodass ein lokales
+  `AUTH_ENABLED=false` die Tests scheitern ließ, ohne etwas über die Prüfung
+  zu sagen.
+
 - Alle Module öffnen die Datenbank über einen gemeinsamen Helfer
   (`app/db.py`), der Fremdschlüssel einschaltet. Vorher taten das zwei von
   zwölf, wodurch `ON DELETE CASCADE` davon abhing, welches Modul das DELETE
@@ -274,6 +315,38 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   von 11,7 % auf 26,0 %.
 
 ### Sicherheit
+- **Zwei Befehle an Geräte liefen am Audit-Log vorbei.** Das Agent-Update,
+  das der Server beim ersten Heartbeat einer Verbindung von selbst anbietet,
+  steht jetzt als `agent.update_offered` mit dem Akteur `automation`, der
+  angebotenen und der vom Agent gemeldeten Version im Log; das Abrufen der
+  Agent-Logs als `device.agent_logs` mit dem anfragenden Benutzer. Den
+  Eintrag für `get_logs` schreibt `ConnectionManager.request_logs` selbst,
+  sobald der Befehl den Server verlassen hat — eine Zeitüberschreitung bleibt
+  so belegt, und kein späterer Aufrufer kann den Befehl ohne Eintrag
+  schicken. Beide Ereignisse zählen zur Kategorie „Geräte", und das Dashboard
+  beschreibt sie in ganzen Sätzen.
+- **Auch das Wecken vor dem Patch-Fenster steht im Audit-Log.** Das Magic
+  Packet, das der Server offline Geräten im Fenster schickt, schreibt jetzt
+  `device.wake` wie das Aufwecken von Hand, mit dem Akteur `automation`, der
+  Zahl der MAC-Adressen und `patch_window: true`. Scheitert das Senden schon
+  am Socket, entsteht kein Eintrag.
+- **RustDesk-IDs werden geprüft.** Angenommen werden nur numerische IDs
+  (6–12 Ziffern) und eigene Aliasse (6–16 Zeichen, beginnend mit einem
+  Buchstaben, aus Buchstaben, Ziffern, `_` und `-`) — dieselbe Regel wie im
+  Dashboard. Ohne den Buchstaben am Anfang wäre jede 13- bis 16-stellige
+  Ziffernfolge als Alias durchgegangen. Die ID landet in einem
+  `rustdesk://`-Link, den der Rechner des Technikers an einen
+  Protokoll-Handler übergibt, und sie kommt vom Agent oder aus einem
+  Formular. Leerzeichen entfernt der Server vor der Prüfung — RustDesk zeigt
+  IDs in Dreiergruppen (`123 456 789`), und so werden sie kopiert —, im
+  Formular, im Heartbeat und bei einer schon gespeicherten ID; gespeichert
+  wird die bereinigte Form. Ein Heartbeat mit ungültigem Wert behält die
+  gespeicherte ID, `PATCH /api/devices/{id}` antwortet mit 422 (leer löscht
+  die ID weiterhin), und aus einer schon gespeicherten ungültigen ID entsteht
+  kein Link mehr (409, ohne Audit-Eintrag). Die Meldung sagt, wie es
+  weitergeht — per `PATCH /api/devices/{id}` neu eintragen oder leeren —,
+  denn das Dashboard hat für eine schon gespeicherte ID kein Feld;
+  `docs/TROUBLESHOOTING.md` zeigt den Aufruf.
 - **Ein Agent konnte über die Jobs anderer Geräte berichten.** Der Server
   übernahm die `job_id` aus `job_started`, `job_output` und `job_result`
   ungeprüft. Ein manipuliertes oder fehlerhaftes Gerät konnte damit den Job
@@ -354,22 +427,15 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
 
 ### Behoben
-- **Der Agent konnte sich dauerhaft aufhängen, solange Jobs viel ausgaben.**
-  Die Hauptschleife ist die einzige, die die Warteschlange zum Server leert,
-  stellte aber Heartbeat, Inventar und die Antworten auf `ping` und
-  `get_logs` selbst in dieselbe Warteschlange. War sie von Job-Ausgaben voll,
-  wartete die Schleife auf sich selbst: kein Heartbeat mehr, keine Antwort,
-  und auch ein Verbindungsabbruch blieb unbemerkt, bis der Dienst neu
-  startete. Diese Nachrichten schreibt die Schleife jetzt direkt; sie können
-  dabei wartende Job-Ausgaben überholen, deren Reihenfolge untereinander
-  bleibt erhalten.
-- Der Agent konnte bei jedem Verbindungsabbruch eine Goroutine samt
-  Nachricht zurücklassen: Der Leser des Sockets blieb an einem ungepufferten
-  Kanal hängen, sobald die Hauptschleife schon beendet war. Er gibt jetzt auf,
-  sobald die Verbindung vorbei ist.
-- Der Agent meldete aus einer Zeile wie `nameservers 10.0.0.2` in der
-  `resolv.conf` einen DNS-Server. Das Schlüsselwort muss jetzt für sich
-  stehen, wie es auch der Resolver verlangt.
+- Eine abgelehnte Eingabe (422 mit FastAPIs Fehlerliste) brachte die
+  Geräteseite zum Absturz: `apiErrorMessage` reichte die Liste als Meldung
+  weiter, und das RustDesk-Formular rendert die Meldung als Text. Die Liste
+  wird jetzt zu einem Satz zusammengesetzt.
+- `test_outdated_agent_is_offered_an_update` hing von der Testreihenfolge ab:
+  bei einem nie gescannten Gerät geht zuerst die tägliche Scan-Aufforderung
+  hinaus, und der Test lief nur grün, wenn ein früherer Test Gerät 1 schon als
+  gefragt markiert hatte.
+
 - **Ein destruktives Skript lief im Remote-Reiter mit einem einzigen Klick.**
   In der Bibliothek verlangt es seinen Namen, hier stand es als Knopf in einer
   Reihe gleich aussehender Knöpfe. Jetzt gilt dieselbe Hürde. Außerdem bot der

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from httpx import AsyncClient
 
-from app import audit
+from app import audit, scripts
 
 
 async def test_record_and_recent_newest_first(client: AsyncClient):
@@ -219,3 +219,208 @@ async def test_deleting_a_script_records_its_name(admin_client: AsyncClient):
 
     deleted = next(e for e in await audit.recent() if e["event"] == "script.deleted")
     assert deleted["detail"]["script"] == "Temp aufraeumen"
+
+
+# --- What an edit changed ----------------------------------------------------
+
+
+async def _last(event: str) -> dict:
+    return next(e for e in await audit.recent() if e["event"] == event)
+
+
+async def test_device_patch_records_person_tags_and_rustdesk_changes(admin_client: AsyncClient):
+    from app import devices, persons
+
+    raw, _ = await devices.create_enrollment_token("test", 1)
+    device_id = (await devices.enroll_device(token=raw, hostname="pc-oma", os="linux"))["device_id"]
+    oma = await persons.create_person("Oma", "", "", "")
+    opa = await persons.create_person("Opa", "", "", "")
+    await devices.update_device(
+        device_id, tags=["familie", "keller"], rustdesk_id="111222333", person_id=oma["id"]
+    )
+
+    r = await admin_client.patch(
+        f"/api/devices/{device_id}",
+        json={
+            "person_id": opa["id"],
+            "tags": ["familie", "buero"],
+            "rustdesk_id": "444555666",
+            "owner_label": "Arbeitszimmer",
+        },
+    )
+    assert r.status_code == 200
+
+    event = await _last("devices.updated")
+    assert event["actor"] == "boss"
+    detail = event["detail"]
+    assert detail["changed"] == ["person_id", "tags", "rustdesk_id", "owner_label"]
+    assert detail["person_id_from"] == oma["id"] and detail["person_id_to"] == opa["id"]
+    assert detail["person_from"] == "Oma" and detail["person_to"] == "Opa"
+    assert detail["tags_added"] == ["buero"] and detail["tags_removed"] == ["keller"]
+    assert detail["rustdesk_id_from"] == "111222333"
+    assert detail["rustdesk_id_to"] == "444555666"
+    # Named, not quoted.
+    assert "Arbeitszimmer" not in str(detail)
+
+
+async def test_device_patch_unassigning_a_person_records_none(admin_client: AsyncClient):
+    from app import devices, persons
+
+    raw, _ = await devices.create_enrollment_token("test", 1)
+    device_id = (await devices.enroll_device(token=raw, hostname="pc", os="linux"))["device_id"]
+    oma = await persons.create_person("Oma", "", "", "")
+    await devices.update_device(device_id, person_id=oma["id"])
+
+    assert (await admin_client.patch(f"/api/devices/{device_id}", json={"person_id": 0})).status_code == 200
+    detail = (await _last("devices.updated"))["detail"]
+    assert detail["changed"] == ["person_id"]
+    assert detail["person_id_from"] == oma["id"] and detail["person_id_to"] is None
+    assert detail["person_from"] == "Oma" and detail["person_to"] == ""
+
+
+async def test_device_patch_lists_only_real_changes(admin_client: AsyncClient):
+    """Resending the stored values — padded, reordered — is not a change; a
+    field nobody sent is not either."""
+    from app import devices
+
+    raw, _ = await devices.create_enrollment_token("test", 1)
+    device_id = (await devices.enroll_device(token=raw, hostname="pc", os="linux"))["device_id"]
+    await devices.update_device(device_id, owner_label="Mama", tags=["a", "b"])
+
+    r = await admin_client.patch(
+        f"/api/devices/{device_id}", json={"owner_label": "  Mama ", "tags": ["b", "a"]}
+    )
+    assert r.status_code == 200
+    detail = (await _last("devices.updated"))["detail"]
+    assert detail == {"changed": [], "hostname": "pc"}
+
+
+async def test_manual_device_patch_names_inventory_fields(admin_client: AsyncClient):
+    r = await admin_client.post(
+        "/api/devices", json={"hostname": "iPhone Oma", "os": "ios", "serial": "OLD"}
+    )
+    device_id = r.json()["device"]["id"]
+    r = await admin_client.patch(
+        f"/api/devices/{device_id}",
+        json={"serial": "NEW-123", "notes": "PIN steht im Tresor", "model": ""},
+    )
+    assert r.status_code == 200
+    detail = (await _last("devices.updated"))["detail"]
+    # "model" was sent but already empty: unchanged, so not listed.
+    assert detail["changed"] == ["serial", "notes"]
+    assert "NEW-123" not in str(detail) and "Tresor" not in str(detail)
+
+
+async def test_script_create_and_update_record_fingerprint_and_danger(admin_client: AsyncClient):
+    r = await admin_client.post(
+        "/api/scripts",
+        json={"name": "Platte putzen", "shell": "bash", "content": "rm -rf /tmp/x", "danger": True},
+    )
+    sid = r.json()["script"]["id"]
+    created = (await _last("script.created"))["detail"]
+    assert created["script_id"] == sid
+    assert created["script"] == "Platte putzen"
+    assert created["danger"] is True
+    assert created["content_hmac"] == await scripts.content_hmac("rm -rf /tmp/x")
+    assert "rm -rf" not in str(created)
+
+    r = await admin_client.put(
+        f"/api/scripts/{sid}",
+        json={"name": "Platte putzen", "shell": "bash", "content": "echo harmlos", "danger": False},
+    )
+    assert r.status_code == 200
+    updated = (await _last("script.updated"))["detail"]
+    assert updated["content_hmac_from"] == created["content_hmac"]
+    assert updated["content_hmac"] == await scripts.content_hmac("echo harmlos")
+    assert updated["danger_from"] is True and updated["danger_to"] is False
+
+
+async def test_script_fingerprint_is_keyed_not_a_bare_sha256(admin_client: AsyncClient):
+    """A plain SHA-256 of a known script template with a short secret in it
+    falls to brute force in minutes, and the audit log keeps the hash of a
+    version long after the secret was edited out. The fingerprint is an
+    HMAC under a random key of this installation that no endpoint returns,
+    so the log alone gives nothing to try guesses against."""
+    import hashlib
+    import hmac
+
+    from app import accounts
+
+    body = "net user admin 4711"
+    r = await admin_client.post(
+        "/api/scripts", json={"name": "Admin-PW", "shell": "powershell", "content": body}
+    )
+    assert r.status_code == 200
+    detail = (await _last("script.created"))["detail"]
+    assert "content_sha256" not in detail
+    assert detail["content_hmac"] != hashlib.sha256(body.encode()).hexdigest()
+
+    key = await accounts.get_app_setting("audit_script_hmac_key")
+    assert key is not None and len(bytes.fromhex(key)) == 32
+    expected = hmac.new(bytes.fromhex(key), body.encode(), hashlib.sha256).hexdigest()
+    assert detail["content_hmac"] == expected
+    # Created once, then reused: rows written later still match earlier ones.
+    assert await scripts.content_hmac(body) == expected
+    assert await accounts.get_app_setting("audit_script_hmac_key") == key
+
+
+async def test_script_rename_records_the_previous_name(admin_client: AsyncClient):
+    """A rename is the edit that makes old rows hard to follow: job.created
+    names the script as it was called then. The update row bridges both
+    names, and only when the name actually changed."""
+    r = await admin_client.post(
+        "/api/scripts", json={"name": "Drucker", "shell": "bash", "content": "lpstat"}
+    )
+    sid = r.json()["script"]["id"]
+
+    r = await admin_client.put(
+        f"/api/scripts/{sid}",
+        json={"name": "Drucker-Reset", "shell": "bash", "content": "lpstat"},
+    )
+    assert r.status_code == 200
+    renamed = (await _last("script.updated"))["detail"]
+    assert renamed["script"] == "Drucker-Reset"
+    assert renamed["script_from"] == "Drucker"
+
+    r = await admin_client.put(
+        f"/api/scripts/{sid}",
+        json={"name": "Drucker-Reset", "shell": "bash", "content": "lpstat -t"},
+    )
+    assert r.status_code == 200
+    edited = (await _last("script.updated"))["detail"]
+    assert edited["script"] == "Drucker-Reset"
+    assert "script_from" not in edited
+
+
+async def test_script_update_of_unknown_script_is_404_without_a_record(admin_client: AsyncClient):
+    await audit.clear()
+    r = await admin_client.put(
+        "/api/scripts/999", json={"name": "x", "shell": "bash", "content": "echo"}
+    )
+    assert r.status_code == 404
+    assert [e["event"] for e in await audit.recent()] == []
+
+
+async def test_script_job_records_the_fingerprint_that_ran(admin_client: AsyncClient):
+    from app import devices
+
+    raw, _ = await devices.create_enrollment_token("test", 1)
+    device_id = (await devices.enroll_device(token=raw, hostname="pc", os="linux"))["device_id"]
+    r = await admin_client.post(
+        "/api/scripts", json={"name": "Uptime", "shell": "bash", "content": "uptime"}
+    )
+    sid = r.json()["script"]["id"]
+
+    r = await admin_client.post(
+        f"/api/devices/{device_id}/jobs", json={"kind": "script", "script_id": sid}
+    )
+    assert r.status_code == 200
+    job = await _last("job.created")
+    assert job["device_id"] == device_id
+    assert job["detail"]["kind"] == "script"
+    assert job["detail"]["script_id"] == sid
+    assert job["detail"]["script"] == "Uptime"
+    assert job["detail"]["content_hmac"] == await scripts.content_hmac("uptime")
+    # The same value as on the row that created this body: that is the link.
+    created = (await _last("script.created"))["detail"]
+    assert job["detail"]["content_hmac"] == created["content_hmac"]
