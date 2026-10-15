@@ -134,26 +134,31 @@ docker exec rxf-rmm-hbbs cat /root/id_ed25519.pub
 ```
 
 Als Notlösung lässt sich die ID im Dashboard von Hand eintragen
-(Gerät → Remote → ID setzen).
+(Gerät → Fernzugriff → „Oder ID von Hand eintragen"; eine schon gespeicherte
+ID über „ID ändern").
 
-Meldet das Panel „Die hinterlegte RustDesk-ID ist ungültig" (409), stammt
-die gespeicherte ID aus der Zeit vor der Formatprüfung (6–12 Ziffern oder
-6–16 Zeichen, beginnend mit einem Buchstaben, aus `A–Z`, `0–9`, `_` und `-`).
-Leerzeichen wie in `123 456 789` entfernt der Server selbst — solche IDs
-funktionieren ohne Zutun. Für den Rest hat das Dashboard kein Feld, solange
-eine ID gespeichert ist: per `PATCH /api/devices/{id}` mit `rustdesk_id` neu
-eintragen oder leeren, als Admin oder Techniker angemeldet, etwa in der
-Browser-Konsole des Dashboards (`7` = Geräte-ID aus der URL):
+Steht im Reiter „Fernzugriff" der Hinweis „hinterlegte ID ungültig", stammt
+die gespeicherte ID aus der Zeit vor der Formatprüfung (6–12 Ziffern oder 6–16
+Zeichen, beginnend mit einem Buchstaben, aus `A–Z`, `0–9`, `_` und `-`). Ist
+RustDesk auf dem Server eingerichtet, steht darunter ein Feld mit dieser ID,
+Leerzeichen wie in `123 456 789` schon entfernt: korrigieren, falls nötig, und
+speichern. Meldet der Agent eine gültige ID, ersetzt der nächste Heartbeat die
+alte ohnehin.
+
+Über die API antwortet `GET /api/remote/devices/{id}/session` für eine solche
+ID mit 409 „Die hinterlegte RustDesk-ID ist ungültig" — nur Leerzeichen
+entfernt der Server dort selbst. Korrigieren oder leeren lässt sie sich per
+`PATCH /api/devices/{id}` mit `rustdesk_id`, als Admin oder Techniker
+angemeldet, etwa in der Browser-Konsole des Dashboards (`7` = Geräte-ID aus
+der URL):
 
 ```js
 fetch('/api/devices/7', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ rustdesk_id: '' }) })  // '' leert, sonst die richtige ID
 ```
 
-Nach dem Leeren bietet der Remote-Reiter wieder „ID setzen" an, und meldet
-der Agent eine gültige ID, trägt sie der nächste Heartbeat ein. Eine ID aus
-dem Heartbeat, die das Format verfehlt, verwirft der Server und schreibt
-`devices.rustdesk_id_rejected` ins Backend-Log.
+Eine ID aus dem Heartbeat, die das Format verfehlt, verwirft der Server und
+schreibt `devices.rustdesk_id_rejected` ins Backend-Log.
 
 Prüfen, ob das Gerät das Relay erreicht:
 

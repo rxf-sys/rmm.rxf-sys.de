@@ -79,9 +79,9 @@ async def remote_session(
         )
     # The link goes to a protocol handler on the operator's machine, so an
     # invalid value never becomes one. Such a row is not rewritten (no data
-    # migrations), so the message names the call that fixes it: the
-    # dashboard offers no field once an ID is stored, but clearing it brings
-    # the "ID setzen" form back.
+    # migrations), so the message names the call that fixes it. The
+    # dashboard does not ask for a session with such an ID: its remote tab
+    # checks the same format and offers the stored value for correction.
     if not devices.valid_rustdesk_id(rid):
         raise HTTPException(
             status_code=409,

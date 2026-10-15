@@ -722,10 +722,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   wird die bereinigte Form. Ein Heartbeat mit ungültigem Wert behält die
   gespeicherte ID, `PATCH /api/devices/{id}` antwortet mit 422 (leer löscht
   die ID weiterhin), und aus einer schon gespeicherten ungültigen ID entsteht
-  kein Link mehr (409, ohne Audit-Eintrag). Die Meldung sagt, wie es
-  weitergeht — per `PATCH /api/devices/{id}` neu eintragen oder leeren —,
-  denn das Dashboard hat für eine schon gespeicherte ID kein Feld;
-  `docs/TROUBLESHOOTING.md` zeigt den Aufruf.
+  kein Link mehr (409, ohne Audit-Eintrag). Die Meldung nennt den Aufruf,
+  der sie korrigiert (`PATCH /api/devices/{id}` mit `rustdesk_id`); ist
+  RustDesk auf dem Server eingerichtet, bietet der Reiter „Fernzugriff" im
+  Dashboard eine solche ID vorbefüllt zum Neu-Speichern an.
+  `docs/TROUBLESHOOTING.md` beschreibt beide Wege.
 - **Ein Agent konnte über die Jobs anderer Geräte berichten.** Der Server
   übernahm die `job_id` aus `job_started`, `job_output` und `job_result`
   ungeprüft. Ein manipuliertes oder fehlerhaftes Gerät konnte damit den Job
@@ -758,6 +759,25 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   zurückfällt, wenn `TRUST_PROXY_HEADERS` aus ist.
 - Das Dashboard bietet keinen kopierbaren Download-Link mit Token in der URL
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
+- Abmelden und abgelaufene Sitzungen leeren jetzt den gesamten
+  Abfrage-Cache und die Auftrags-Toasts. Vorher sah, wer sich im selben Tab
+  mit einem anderen Konto anmeldete, für einen Moment Geräte, Alarme und
+  Auftragsausgaben des vorherigen Kontos.
+- RustDesk-Links öffnet das Dashboard nur noch, wenn die ID wohlgeformt ist;
+  eine vom Agent gemeldete ID landet sonst nicht ungeprüft in
+  `window.location`. Manuell eingetragene IDs werden genauso geprüft.
+- Fernzugriff, Fernsteuerung, die Einrichtung von RustDesk und die
+  Auftragskonsole laufender Updates sind für die Rolle Viewer ausgeblendet —
+  das Backend verweigert sie ohnehin.
+- Die Auftrags-Verbindung gibt auf, wenn der Server sie endgültig abweist
+  (4401/4403/4404), statt es endlos neu zu versuchen.
+- Ein als destruktiv markiertes Skript lässt sich nur noch nach Eingabe
+  seines Namens einplanen oder als Zeitplan einschalten — wie beim
+  direkten Ausführen.
+- Massenaktionen nennen vor dem Start jedes betroffene Gerät; die
+  Software-Installation zeigt den Befehl, der je Betriebssystem läuft.
+  Gleichnamige Geräte werden in Auswahllisten und Bestätigungen per
+  `#ID` unterschieden.
 - **Der Agent nimmt vom Server höchstens 1 MiB pro Nachricht an.**
   gorilla/websocket hält eine Nachricht vollständig im Speicher und setzt ab
   Werk keine Grenze; ein defekter Server oder etwas zwischen Server und Gerät
@@ -806,6 +826,22 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
 
 ### Behoben
+- **Der Agent konnte sich dauerhaft aufhängen, solange Jobs viel ausgaben.**
+  Die Hauptschleife ist die einzige, die die Warteschlange zum Server leert,
+  stellte aber Heartbeat, Inventar und die Antworten auf `ping` und
+  `get_logs` selbst in dieselbe Warteschlange. War sie von Job-Ausgaben voll,
+  wartete die Schleife auf sich selbst: kein Heartbeat mehr, keine Antwort,
+  und auch ein Verbindungsabbruch blieb unbemerkt, bis der Dienst neu
+  startete. Diese Nachrichten schreibt die Schleife jetzt direkt; sie können
+  dabei wartende Job-Ausgaben überholen, deren Reihenfolge untereinander
+  bleibt erhalten.
+- Der Agent konnte bei jedem Verbindungsabbruch eine Goroutine samt
+  Nachricht zurücklassen: Der Leser des Sockets blieb an einem ungepufferten
+  Kanal hängen, sobald die Hauptschleife schon beendet war. Er gibt jetzt auf,
+  sobald die Verbindung vorbei ist.
+- Der Agent meldete aus einer Zeile wie `nameservers 10.0.0.2` in der
+  `resolv.conf` einen DNS-Server. Das Schlüsselwort muss jetzt für sich
+  stehen, wie es auch der Resolver verlangt.
 - Eine abgelehnte Eingabe (422 mit FastAPIs Fehlerliste) brachte die
   Geräteseite zum Absturz: `apiErrorMessage` reichte die Liste als Meldung
   weiter, und das RustDesk-Formular rendert die Meldung als Text. Die Liste
