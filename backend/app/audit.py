@@ -65,7 +65,9 @@ CATEGORIES = ("auth", "account", "device", "job", "patch", "remote", "alert", "s
               "person", "credential", "config", "other")
 
 # Was man ansieht, wenn man einem Verdacht nachgeht: Anmeldungen, Konten,
-# aufgedeckte Passwörter, Enrollment-Token, Fernzugriff, gelöschte Geräte.
+# aufgedeckte Passwörter, Enrollment-Token, Fernzugriff, gelöschte Geräte —
+# und ein Agent, der über fremde Jobs berichtet: das passiert im Normalbetrieb
+# nie und heißt, dass das Gerät manipuliert oder kaputt ist.
 # Jobs stehen bewusst NICHT drin — sie sind Alltag und würden den Filter
 # zuschütten; dafür gibt es die eigene Kategorie "job".
 _SECURITY_PREFIXES = ("auth.", "account.", "credential.")
@@ -74,6 +76,7 @@ _SECURITY_EVENTS = (
     "devices.token_deleted",
     "devices.deleted",
     "remote.session_opened",
+    "agent.job_mismatch",
 )
 
 

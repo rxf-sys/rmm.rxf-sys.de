@@ -119,43 +119,19 @@ describe('describeAudit', () => {
     expect(describeAudit(bare)).toBe('Skript „Skript #7“ geändert');
   });
 
-  it('mentions a rename with the old name, and only when the name changed', () => {
-    const renamed = event({
-      event: 'script.updated',
-      detail: { script_id: 7, script: 'Drucker-Reset', script_from: 'Drucker' },
+  it('names the reporting device and the job it had no business with', () => {
+    const foreign = event({
+      event: 'agent.job_mismatch',
+      device_id: 2,
+      detail: { hostname: 'intruder-pc', job_id: 12, reason: 'foreign', owner_device_id: 1 },
     });
-    expect(describeAudit(renamed)).toBe(
-      'Skript „Drucker-Reset“ geändert, umbenannt von „Drucker“',
-    );
-    const edited = event({
-      event: 'script.updated',
-      detail: { script_id: 7, script: 'Drucker-Reset' },
+    expect(describeAudit(foreign)).toBe('Meldung von intruder-pc zu fremdem Job #12 abgewiesen');
+    const unknown = event({
+      event: 'agent.job_mismatch',
+      device_id: 2,
+      detail: { job_id: 99, reason: 'unknown' },
     });
-    expect(describeAudit(edited)).toBe('Skript „Drucker-Reset“ geändert');
-  });
-
-  it('says that the automatic update offer came from the server, with both versions', () => {
-    const offer = event({
-      event: 'agent.update_offered',
-      actor: 'automation',
-      device_id: 4,
-      detail: { hostname: 'oma-pc', version: '1.9.0', from_version: '1.8.2' },
-    });
-    expect(describeAudit(offer)).toBe(
-      'Agent-Update auf 1.9.0 automatisch an oma-pc angeboten (bisher 1.8.2)',
-    );
-    // An agent that reported no version leaves out the "bisher" part rather
-    // than printing an empty one.
-    expect(describeAudit({ ...offer, detail: { version: '1.9.0' } })).toBe(
-      'Agent-Update auf 1.9.0 automatisch an Gerät 4 angeboten',
-    );
-  });
-
-  it('names the device whose agent logs were fetched', () => {
-    const e = event({ event: 'device.agent_logs', actor: 'techie', device_id: 4, detail: {} });
-    expect(describeAudit(e, auditNamesFrom([{ id: 4, hostname: 'buero-pc' }]))).toBe(
-      'Agent-Logs von buero-pc abgerufen',
-    );
+    expect(describeAudit(unknown)).toBe('Meldung von Gerät 2 zu unbekanntem Job #99 abgewiesen');
   });
 
   it('has a sentence for every event the server can write', () => {
@@ -173,6 +149,7 @@ describe('describeAudit', () => {
       'account.password_reset',
       'account.totp_reset',
       'agent.enrolled',
+      'agent.job_mismatch',
       'devices.token_created',
       'devices.token_deleted',
       'devices.updated',

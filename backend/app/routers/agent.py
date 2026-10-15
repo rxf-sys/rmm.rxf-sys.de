@@ -309,6 +309,66 @@ def _as_pct(value: object) -> float:
         return 0.0
 
 
+# A misbehaving agent repeats a foreign job id with every output chunk. One
+# audit row per job and connection already says "this device reports on jobs
+# that are not its own"; the cap keeps an agent that cycles through ids from
+# using the audit log as a write amplifier. structlog still sees every refusal.
+_MAX_JOB_REFUSALS_AUDITED = 20
+
+
+class _JobGate:
+    """Decides which job reports this agent socket may apply.
+
+    The job id in a report comes from the agent and proves nothing by itself.
+    Unchecked, device B could mark running, append to or finish device A's
+    job — and since job_secrets keeps its half-read marker line per job id,
+    B could also splice chunks into A's ##RMM-CRED## stream, pushing A's
+    secret into the job log or its own line into A's vault.
+
+    Ownership is read from the jobs table, not from what this connection
+    dispatched: an agent that loses its socket mid-job reports the rest over
+    the next one, and the row is what survives the reconnect.
+    """
+
+    def __init__(self, device_id: int) -> None:
+        self._device_id = device_id
+        # A job never changes devices, so one lookup per job and connection
+        # covers the many output chunks that follow.
+        self._owned: set[int] = set()
+        self._refused: set[int] = set()
+
+    async def allows(self, job_id: int, msg_type: str) -> bool:
+        if job_id in self._owned:
+            return True
+        owner = await jobs.device_of(job_id)
+        if owner == self._device_id:
+            self._owned.add(job_id)
+            return True
+        log.warning(
+            "agent.job_mismatch",
+            device_id=self._device_id,
+            job_id=job_id,
+            owner_device_id=owner,
+            msg_type=msg_type,
+        )
+        if job_id not in self._refused and len(self._refused) < _MAX_JOB_REFUSALS_AUDITED:
+            self._refused.add(job_id)
+            await audit_record(
+                "agent.job_mismatch",
+                device_id=self._device_id,
+                job_id=job_id,
+                owner_device_id=owner,
+                msg_type=msg_type,
+                reason="unknown" if owner is None else "foreign",
+            )
+        return False
+
+    def finished(self, job_id: int) -> None:
+        """The job is closed; drop it so the set tracks only running jobs on
+        a long-lived connection. A late report simply looks it up again."""
+        self._owned.discard(job_id)
+
+
 def _parse_bearer(header: str) -> tuple[int, str] | None:
     """``Bearer <device_id>:<secret>`` → (device_id, secret), or None."""
     if not header.lower().startswith("bearer "):
@@ -371,6 +431,7 @@ async def agent_ws(ws: WebSocket, settings: Settings = Depends(get_settings)) ->
     # Tracked per connection so the daily scan check costs no query per
     # heartbeat; the report handler below keeps it current.
     last_scan_at = int(device.get("last_patch_scan_at") or 0)
+    job_gate = _JobGate(device_id)
     try:
         while True:
             try:
@@ -428,12 +489,16 @@ async def agent_ws(ws: WebSocket, settings: Settings = Depends(get_settings)) ->
                         await devices.set_inventory(device_id, kind, payload[kind])
             elif msg_type == "job_started" and isinstance(payload, dict):
                 job_id = payload.get("job_id")
-                if isinstance(job_id, int):
+                if isinstance(job_id, int) and await job_gate.allows(job_id, msg_type):
                     await jobs.mark_running(job_id)
             elif msg_type == "job_output" and isinstance(payload, dict):
                 job_id = payload.get("job_id")
                 chunk = payload.get("chunk")
-                if isinstance(job_id, int) and isinstance(chunk, str):
+                if (
+                    isinstance(job_id, int)
+                    and isinstance(chunk, str)
+                    and await job_gate.allows(job_id, msg_type)
+                ):
                     # ##RMM-CRED##-Zeilen abfangen, bevor sie in DB oder
                     # Live-Stream landen — Secrets gehören in den Tresor,
                     # nicht ins Job-Log. Ein Agent kann nur Credentials
@@ -447,7 +512,12 @@ async def agent_ws(ws: WebSocket, settings: Settings = Depends(get_settings)) ->
                 job_id = payload.get("job_id")
                 result_status = payload.get("status")
                 exit_code = payload.get("exit_code")
-                if isinstance(job_id, int) and isinstance(result_status, str):
+                if (
+                    isinstance(job_id, int)
+                    and isinstance(result_status, str)
+                    and await job_gate.allows(job_id, msg_type)
+                ):
+                    job_gate.finished(job_id)
                     # Zurückgehaltenes Zeilen-Fragment (Marker ohne
                     # abschließenden Umbruch) noch verarbeiten.
                     clean, found = job_secrets.flush(job_id)

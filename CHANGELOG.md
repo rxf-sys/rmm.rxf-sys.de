@@ -282,38 +282,18 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   mehr der Realität (SSH statt Self-hosted Runner).
 
 ### Sicherheit
-- **Zwei Befehle an Geräte liefen am Audit-Log vorbei.** Das Agent-Update,
-  das der Server beim ersten Heartbeat einer Verbindung von selbst anbietet,
-  steht jetzt als `agent.update_offered` mit dem Akteur `automation`, der
-  angebotenen und der vom Agent gemeldeten Version im Log; das Abrufen der
-  Agent-Logs als `device.agent_logs` mit dem anfragenden Benutzer. Den
-  Eintrag für `get_logs` schreibt `ConnectionManager.request_logs` selbst,
-  sobald der Befehl den Server verlassen hat — eine Zeitüberschreitung bleibt
-  so belegt, und kein späterer Aufrufer kann den Befehl ohne Eintrag
-  schicken. Beide Ereignisse zählen zur Kategorie „Geräte", und das Dashboard
-  beschreibt sie in ganzen Sätzen.
-- **Auch das Wecken vor dem Patch-Fenster steht im Audit-Log.** Das Magic
-  Packet, das der Server offline Geräten im Fenster schickt, schreibt jetzt
-  `device.wake` wie das Aufwecken von Hand, mit dem Akteur `automation`, der
-  Zahl der MAC-Adressen und `patch_window: true`. Scheitert das Senden schon
-  am Socket, entsteht kein Eintrag.
-- **RustDesk-IDs werden geprüft.** Angenommen werden nur numerische IDs
-  (6–12 Ziffern) und eigene Aliasse (6–16 Zeichen, beginnend mit einem
-  Buchstaben, aus Buchstaben, Ziffern, `_` und `-`) — dieselbe Regel wie im
-  Dashboard. Ohne den Buchstaben am Anfang wäre jede 13- bis 16-stellige
-  Ziffernfolge als Alias durchgegangen. Die ID landet in einem
-  `rustdesk://`-Link, den der Rechner des Technikers an einen
-  Protokoll-Handler übergibt, und sie kommt vom Agent oder aus einem
-  Formular. Leerzeichen entfernt der Server vor der Prüfung — RustDesk zeigt
-  IDs in Dreiergruppen (`123 456 789`), und so werden sie kopiert —, im
-  Formular, im Heartbeat und bei einer schon gespeicherten ID; gespeichert
-  wird die bereinigte Form. Ein Heartbeat mit ungültigem Wert behält die
-  gespeicherte ID, `PATCH /api/devices/{id}` antwortet mit 422 (leer löscht
-  die ID weiterhin), und aus einer schon gespeicherten ungültigen ID entsteht
-  kein Link mehr (409, ohne Audit-Eintrag). Die Meldung sagt, wie es
-  weitergeht — per `PATCH /api/devices/{id}` neu eintragen oder leeren —,
-  denn das Dashboard hat für eine schon gespeicherte ID kein Feld;
-  `docs/TROUBLESHOOTING.md` zeigt den Aufruf.
+- **Ein Agent konnte über die Jobs anderer Geräte berichten.** Der Server
+  übernahm die `job_id` aus `job_started`, `job_output` und `job_result`
+  ungeprüft. Ein manipuliertes oder fehlerhaftes Gerät konnte damit den Job
+  eines anderen Geräts als laufend markieren, Ausgabe anhängen oder ihn
+  abschließen — und, weil die `##RMM-CRED##`-Erkennung ihre halb gelesene
+  Zeile pro Job festhält, sich in dessen Passwort-Zeile einschieben: das
+  Secret landete dann im Klartext im Job-Log. Jetzt prüft der Server vor jeder
+  dieser Meldungen, ob der Job zum Gerät des Sockets gehört, verwirft fremde
+  und unbekannte Job-IDs und schreibt `agent.job_mismatch` als
+  Sicherheitsereignis ins Audit-Log. Die Zuordnung kommt aus der Datenbank,
+  nicht aus der Verbindung — ein Job, der vor einem Reconnect verschickt
+  wurde, lässt sich danach weiterhin abschließen.
 - Go-Toolchain für den Agent von 1.25.14 auf 1.26.9 angehoben. `govulncheck`
   meldete neun erreichbare Schwachstellen in der Standardbibliothek, für die
   es in der 1.25er-Reihe keinen Fix mehr gibt. Betroffen sind unter anderem

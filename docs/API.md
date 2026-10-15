@@ -166,8 +166,9 @@ und `detail` zwei serverseitig berechnete Felder:
   dem Präfix vor dem Punkt im Ereignisnamen.
 - `security` — `true` für Anmeldungen (`auth.*`), Kontoänderungen
   (`account.*`), Passwortzugriffe (`credential.*`) sowie
-  `devices.token_created`, `devices.token_deleted`, `devices.deleted` und
-  `remote.session_opened`. Job-Ausführungen stehen bewusst **nicht** drin: sie
+  `devices.token_created`, `devices.token_deleted`, `devices.deleted`,
+  `remote.session_opened` und `agent.job_mismatch` (ein Agent meldet sich zu
+  einem Job, der nicht seinem Gerät gehört). Job-Ausführungen stehen bewusst **nicht** drin: sie
   sind Alltag und würden den Filter zuschütten — dafür gibt es die Kategorie
   `job`.
 
@@ -256,6 +257,14 @@ ist, wird der alte mit `1000` abgelöst.
 | `pong` | — | wird ignoriert |
 
 Unbekannte Typen werden geloggt und ignoriert.
+
+`job_started`, `job_output` und `job_result` wirken nur auf Jobs des eigenen
+Geräts — maßgeblich ist die `device_id` der Job-Zeile, deshalb kann ein Agent
+einen Job auch nach einem Reconnect über den neuen Socket abschließen. Eine
+Meldung zu einem fremden oder unbekannten `job_id` verwirft der Server, ohne
+Job, Ausgabe oder Passwort-Tresor anzufassen, und schreibt
+`agent.job_mismatch` ins Audit-Log (einmal pro Job und Verbindung, höchstens
+20 pro Verbindung; geloggt wird jede).
 
 ### Server → Agent
 

@@ -567,3 +567,101 @@ def test_ws_patch_report_marks_the_device_scanned(ws_client: TestClient, setting
     device = asyncio.run(devices.get_device(device_id, 300))
     assert device is not None
     assert device["last_patch_scan_at"] >= int(time.time()) - 60
+
+
+def test_ws_reports_for_another_devices_job_change_nothing(ws_client: TestClient):
+    """A job id in an agent message is a claim, not a credential: device B
+    reporting on device A's job must leave that job exactly as it was, and
+    the attempt is recorded as a security event — once per job and
+    connection, not once per message."""
+    asyncio.run(audit.clear())
+    owner = _enroll("owner-pc")
+    intruder = _enroll("intruder-pc")
+    job = asyncio.run(
+        jobs.create_job(owner["device_id"], kind="shell", command="whoami", created_by="boss")
+    )
+
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(intruder)) as ws:
+        _sync(ws)
+        ws.send_json({"type": "job_started", "payload": {"job_id": job["id"]}})
+        ws.send_json({"type": "job_output", "payload": {"job_id": job["id"], "chunk": "fake\n"}})
+        ws.send_json(
+            {"type": "job_result", "payload": {"job_id": job["id"], "status": "done", "exit_code": 0}}
+        )
+        # An id that belongs to nobody is refused the same way.
+        ws.send_json({"type": "job_result", "payload": {"job_id": 999_999, "status": "done"}})
+        _sync(ws)
+
+    stored = asyncio.run(jobs.get_job(job["id"]))
+    assert stored is not None
+    assert stored["status"] == "queued"
+    assert stored["started_at"] is None
+    assert stored["finished_at"] is None
+    assert stored["exit_code"] is None
+    assert stored["output"] == ""
+
+    events = asyncio.run(audit.query(security_only=True))["events"]
+    refused = [e for e in events if e["event"] == "agent.job_mismatch"]
+    assert len(refused) == 2
+    by_job = {e["detail"]["job_id"]: e for e in refused}
+    assert by_job[job["id"]]["device_id"] == intruder["device_id"]
+    assert by_job[job["id"]]["detail"]["reason"] == "foreign"
+    assert by_job[job["id"]]["detail"]["owner_device_id"] == owner["device_id"]
+    assert by_job[999_999]["detail"]["reason"] == "unknown"
+    assert all(e["security"] for e in refused)
+
+
+def test_ws_job_dispatched_before_a_reconnect_finishes_on_the_new_socket(
+    ws_client: TestClient,
+):
+    """Ownership comes from the job row, not from what one connection sent:
+    an agent that loses its socket mid-job reports the rest over the next."""
+    _login_admin(ws_client)
+    creds = _enroll("flaky-pc")
+    device_id = creds["device_id"]
+
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as first:
+        _sync(first)
+        r = ws_client.post(
+            f"/api/devices/{device_id}/jobs",
+            json={"kind": "shell", "command": "sleep 5; echo ok", "shell": "bash"},
+        )
+        assert r.status_code == 200
+        job_id = r.json()["job"]["id"]
+        assert first.receive_json()["payload"]["job_id"] == job_id
+        first.send_json({"type": "job_started", "payload": {"job_id": job_id}})
+        first.send_json({"type": "job_output", "payload": {"job_id": job_id, "chunk": "before\n"}})
+        _sync(first)
+
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as second:
+        _sync(second)
+        second.send_json({"type": "job_output", "payload": {"job_id": job_id, "chunk": "after\n"}})
+        second.send_json(
+            {"type": "job_result", "payload": {"job_id": job_id, "status": "done", "exit_code": 0}}
+        )
+        _sync(second)
+
+    final = asyncio.run(jobs.get_job(job_id))
+    assert final["status"] == "done"
+    assert final["exit_code"] == 0
+    assert final["output"] == "before\nafter\n"
+    events = asyncio.run(audit.recent())
+    assert not any(e["event"] == "agent.job_mismatch" for e in events)
+
+
+def test_ws_refusal_audit_is_capped_per_connection(ws_client: TestClient):
+    """An agent cycling through job ids gets each refused, but the audit log
+    records only the first few per connection — the rest go to structlog."""
+    from app.routers.agent import _MAX_JOB_REFUSALS_AUDITED
+
+    asyncio.run(audit.clear())
+    creds = _enroll("noisy-pc")
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as ws:
+        _sync(ws)
+        for job_id in range(900_000, 900_000 + _MAX_JOB_REFUSALS_AUDITED + 5):
+            ws.send_json({"type": "job_started", "payload": {"job_id": job_id}})
+        _sync(ws)
+
+    events = asyncio.run(audit.query(limit=500))["events"]
+    refused = [e for e in events if e["event"] == "agent.job_mismatch"]
+    assert len(refused) == _MAX_JOB_REFUSALS_AUDITED

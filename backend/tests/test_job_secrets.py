@@ -180,3 +180,60 @@ def test_ws_job_output_marker_lands_in_vault_not_in_job_log(ws_client: TestClien
     assert [c["label"] for c in vault] == ["BitLocker C:"]
     assert vault[0]["updated_by"] == f"Job #{job['id']}"
     assert asyncio.run(credentials.reveal(vault[0]["id"], device_id)) == "111-222"
+
+
+def test_ws_foreign_device_cannot_splice_into_a_credential_line(ws_client: TestClient):
+    """The marker parser keeps its half-read line per job id. If another
+    device could report on that job, a single newline from it would close
+    the owner's held-back fragment early, and the owner's next chunk — the
+    rest of the marker, secret included — would land in the job log as
+    plain text."""
+    def enroll(hostname: str) -> tuple[int, dict]:
+        raw, _ = asyncio.run(devices.create_enrollment_token("t", 1))
+        creds = asyncio.run(devices.enroll_device(token=raw, hostname=hostname, os="windows"))
+        headers = {"Authorization": f"Bearer {creds['device_id']}:{creds['device_secret']}"}
+        return int(creds["device_id"]), headers
+
+    owner_id, owner_headers = enroll("owner")
+    intruder_id, intruder_headers = enroll("intruder")
+    job = asyncio.run(jobs.create_job(owner_id, kind="shell", command="get-key", created_by="boss"))
+    marker = job_secrets.marker_line({"label": "BitLocker C:", "secret": "111-222"})
+    intruder_marker = job_secrets.marker_line({"label": "BitLocker C:", "secret": "evil"})
+
+    def barrier(ws) -> None:
+        ws.send_json({"type": "ping"})
+        assert ws.receive_json() == {"type": "pong"}
+
+    with (
+        ws_client.websocket_connect(WS_PATH, headers=owner_headers) as owner,
+        ws_client.websocket_connect(WS_PATH, headers=intruder_headers) as intruder,
+    ):
+        owner.send_json({"type": "job_started", "payload": {"job_id": job["id"]}})
+        owner.send_json({"type": "job_output", "payload": {"job_id": job["id"], "chunk": marker[:10]}})
+        barrier(owner)
+        # Closes the owner's fragment early if it is let through…
+        intruder.send_json({"type": "job_output", "payload": {"job_id": job["id"], "chunk": "\n"}})
+        # …and a whole foreign marker line must not become the owner's secret.
+        intruder.send_json({"type": "job_output", "payload": {"job_id": job["id"], "chunk": intruder_marker}})
+        intruder.send_json(
+            {"type": "job_result", "payload": {"job_id": job["id"], "status": "failed", "exit_code": 1}}
+        )
+        barrier(intruder)
+        owner.send_json({"type": "job_output", "payload": {"job_id": job["id"], "chunk": marker[10:]}})
+        owner.send_json(
+            {"type": "job_result", "payload": {"job_id": job["id"], "status": "done", "exit_code": 0}}
+        )
+        barrier(owner)
+
+    stored = asyncio.run(jobs.get_job(job["id"]))
+    assert stored is not None
+    assert stored["status"] == "done"
+    assert stored["exit_code"] == 0
+    assert "111-222" not in stored["output"]
+    assert "evil" not in stored["output"]
+    assert stored["output"] == "[✓ In Passwörtern gespeichert: BitLocker C:]\n"
+
+    vault = asyncio.run(credentials.list_for_device(owner_id))
+    assert [c["label"] for c in vault] == ["BitLocker C:"]
+    assert asyncio.run(credentials.reveal(vault[0]["id"], owner_id)) == "111-222"
+    assert asyncio.run(credentials.list_for_device(intruder_id)) == []

@@ -61,6 +61,8 @@ async def test_category_and_security_classification():
     assert audit.is_security_event("credential.revealed") is True
     assert audit.is_security_event("devices.token_created") is True
     assert audit.is_security_event("remote.session_opened") is True
+    assert audit.is_security_event("agent.job_mismatch") is True
+    assert audit.category_of("agent.job_mismatch") == "device"
     # Jobs sind Alltag und würden den Sicherheitsfilter zuschütten.
     assert audit.is_security_event("job.created") is False
     assert audit.is_security_event("patch.install") is False
