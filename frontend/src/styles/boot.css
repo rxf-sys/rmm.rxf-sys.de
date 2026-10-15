@@ -1,0 +1,89 @@
+/* ============================================================
+   Startup sequence (boot/BootSequence.tsx). The stage uses the rail's ink
+   in both themes, so the hand-off to the shell is seamless.
+   ============================================================ */
+
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-boot);
+  display: grid;
+  place-items: center;
+  color: var(--shell-tx);
+  overflow: hidden;
+  cursor: default;
+}
+.boot-bg {
+  position: absolute;
+  inset: 0;
+  background: var(--shell);
+}
+.boot-field {
+  position: absolute;
+  inset: 0;
+}
+.boot-field circle {
+  fill: var(--shell-tx-2);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.boot-center {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-6);
+  text-align: center;
+}
+.boot-fox-wrap {
+  width: min(34vmin, 240px);
+  aspect-ratio: 1;
+  transform-origin: center;
+}
+.boot-fox {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.boot-node,
+.boot-facet {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.boot-word {
+  font-size: clamp(28px, 6vmin, 44px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.boot-status {
+  min-height: 1.5em;
+  color: var(--shell-tx-2);
+  font-size: var(--fs-md);
+  font-variant-numeric: tabular-nums;
+}
+.boot-skip {
+  position: absolute;
+  bottom: calc(var(--sp-6) + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  min-height: var(--hit);
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--shell-line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--shell-tx-2);
+  font: 600 var(--fs-sm) var(--font);
+  transform: translateX(-50%);
+}
+.boot-skip:hover {
+  color: var(--shell-tx);
+}
+.boot-skip:focus-visible {
+  outline-color: var(--shell-focus);
+}
+.boot-still .boot-skip {
+  display: none;
+}

@@ -1,0 +1,390 @@
+/* Administration (pages/admin). */
+
+.ad-pad {
+  padding: 0 var(--sp-4) var(--sp-4);
+}
+/* A control that is working keeps its focus but takes no second click. */
+.ad [aria-disabled='true'] {
+  cursor: progress;
+  opacity: 0.6;
+}
+.ad-quiet {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+.ad-none {
+  color: var(--tx-disabled);
+}
+.ad-optional {
+  color: var(--tx-3);
+  font-weight: 500;
+}
+.ad-text {
+  max-width: 68ch;
+  margin: 0 0 var(--sp-3);
+  color: var(--tx-2);
+  line-height: var(--lh-body);
+}
+.ad-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* ---- Accounts: the shared .dt styles live in components.css; here only
+   the column widths. The name takes what is left. ---- */
+.ad-table tbody tr {
+  /* There is no account page to open; nothing happens on a row click. */
+  cursor: default;
+}
+.ad-table .ad-c-role {
+  width: 176px;
+}
+.ad-table .ad-c-mail {
+  width: 28%;
+}
+.ad-table .ad-c-totp {
+  width: 124px;
+}
+.ad-table .ad-c-login {
+  width: 148px;
+}
+.ad-table .ad-c-act {
+  width: 60px;
+  text-align: right;
+}
+.ad-table td.ad-c-mail {
+  overflow: hidden;
+  color: var(--tx-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ad-table td.ad-c-login {
+  color: var(--tx-2);
+  white-space: nowrap;
+}
+.ad-sub-mail {
+  display: none;
+}
+
+/* Fewer columns as the table narrows, least important first. */
+@container (max-width: 760px) {
+  .ad-table .ad-c-mail {
+    display: none;
+  }
+  .ad-sub-mail {
+    display: block;
+    margin-top: 2px;
+    overflow: hidden;
+    color: var(--tx-3);
+    font-size: var(--fs-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+@container (max-width: 600px) {
+  .ad-table .ad-c-login {
+    display: none;
+  }
+}
+
+.ad-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--sp-2);
+  min-width: 0;
+}
+.ad-user {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tx);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.is-off .ad-user {
+  color: var(--tx-2);
+}
+.ad-role {
+  width: 100%;
+  max-width: 160px;
+  min-height: var(--hit-sm);
+}
+.ad-role-self {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 600;
+}
+/* Whose devices the account sees, under its role. */
+.ad-person {
+  display: block;
+  max-width: 160px;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ad-card-facts .ad-person {
+  max-width: 100%;
+}
+
+.ad-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--line);
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+}
+.ad-foot svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ---- Accounts as cards (narrow screens) ---- */
+.ad-cards {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ad-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+.ad-card-top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.ad-card-top .ad-name {
+  flex: 1;
+}
+.ad-card-top .ad-user {
+  font-size: var(--fs-lg);
+}
+.ad-card-mail {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.ad-card-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-2) var(--sp-3);
+  margin: 0;
+}
+.ad-card-facts dt {
+  color: var(--tx-3);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.ad-card-facts dd {
+  min-width: 0;
+  margin: 2px 0 0;
+}
+.ad-card-facts .ad-role {
+  max-width: 100%;
+}
+@media (max-width: 520px) {
+  .ad-card-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* The role select gets a full row: it is the one control among facts. */
+  .ad-card-facts > div:first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---- Own sign-in and notifications ---- */
+.ad-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  gap: var(--sp-4);
+  align-items: start;
+}
+.ad-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+/* Two-factor setup. A step and the backup codes take focus when they
+   appear, as a reading position, not as a control: no ring. */
+.ad-step:focus,
+.ad-codes:focus {
+  outline: none;
+}
+.ad-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding-left: var(--sp-5);
+}
+.ad-steps li::marker {
+  color: var(--tx-3);
+  font-weight: 700;
+}
+.ad-steps p {
+  margin: 0 0 var(--sp-2);
+  color: var(--tx-2);
+  line-height: var(--lh-body);
+}
+.ad-secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ad-secret code {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-size: var(--fs-md);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.ad-uri {
+  margin-top: var(--sp-2);
+}
+.ad-uri summary {
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.ad-uri code {
+  display: block;
+  margin-top: var(--sp-1);
+  color: var(--tx-3);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+.ad-code {
+  width: 100%;
+  max-width: 18ch;
+}
+
+/* Backup codes: shown once, so they get a surface of their own. */
+.ad-codes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.ad-codes-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ad-codes-head h3 {
+  font-size: var(--fs-md);
+  font-weight: 750;
+}
+.ad-codes p {
+  margin: 0;
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+}
+.ad-code-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12ch, 1fr));
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ad-code-list code {
+  font-size: var(--fs-md);
+  user-select: all;
+}
+
+/* Password with a show/hide button. */
+.ad-pw {
+  display: flex;
+  gap: var(--sp-2);
+}
+.ad-pw .input {
+  flex: 1;
+  min-width: 0;
+}
+.ad-pw-toggle {
+  flex: none;
+}
+
+/* Sessions. */
+.ad-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ad-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+.ad-row-text {
+  display: flex;
+  flex: 1 1 240px;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.ad-row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 650;
+}
+.ad-row-sub {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+}
+.ad-row .btn {
+  flex: none;
+}
+
+/* ntfy. */
+.ad-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--hit-sm);
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.ad-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}

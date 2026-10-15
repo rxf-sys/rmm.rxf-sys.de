@@ -27,6 +27,14 @@ htmlcov/
 # Node
 node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+
+# Datenbank der End-to-End-Tests (aus tests/fixtures/seed_demo.py)
+backend/e2e.db*
+# Vault key the backend creates next to its database (credentials.py) —
+# the e2e run puts both into backend/. A key never belongs in git.
+backend/credentials.key
 
 # Go
 agent/rmm-agent

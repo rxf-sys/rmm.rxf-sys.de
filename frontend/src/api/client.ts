@@ -26,6 +26,13 @@ import type {
   SessionInfo,
   Shell,
 } from '../types';
+import {
+  AlertsResponse,
+  DeviceDetailResponse,
+  DevicesResponse,
+  PatchSummaryResponse,
+  check,
+} from './schemas';
 
 /** Filters accepted by GET /api/audit. Everything is optional; an empty
  *  object is "the most recent 100 events". */
@@ -41,7 +48,7 @@ export interface AuditQuery {
   q?: string;
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public status: number,
     public body: string,
@@ -71,6 +78,15 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+/** GET with the response checked against a schema (see schemas.ts). */
+async function getChecked<T>(
+  schema: Parameters<typeof check<T>>[0],
+  path: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  return check(schema, path, await get<unknown>(path, signal));
+}
+
 async function send<T>(
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
@@ -90,9 +106,121 @@ const post = <T>(path: string, body?: unknown) => send<T>('POST', path, body);
 const patch = <T>(path: string, body?: unknown) => send<T>('PATCH', path, body);
 const del = <T>(path: string) => send<T>('DELETE', path);
 
-/** Pull a human-readable message out of an ApiError's JSON body. */
+/** Request fields as the forms name them. Anything else is quoted as sent. */
+const FIELD_LABEL: Record<string, string> = {
+  name: 'Name',
+  username: 'Benutzername',
+  password: 'Passwort',
+  email: 'E-Mail',
+  phone: 'Telefon',
+  notes: 'Notizen',
+  label: 'Bezeichnung',
+  hostname: 'Gerätename',
+  owner_label: 'Besitzer',
+  os_version: 'Betriebssystem-Version',
+  model: 'Modell',
+  serial: 'Seriennummer',
+  imei: 'IMEI',
+  tags: 'Tags',
+  tag: 'Tag',
+  rustdesk_id: 'RustDesk-ID',
+  command: 'Befehl',
+  content: 'Inhalt',
+  shell: 'Shell',
+  role: 'Rolle',
+  code: 'Code',
+  totp_code: 'Code',
+  ttl_hours: 'Gültigkeit',
+  minutes: 'Minuten',
+  hour: 'Stunde',
+  weekday: 'Wochentag',
+  threshold: 'Schwelle',
+  scope_kind: 'Geltungsbereich',
+  scope_value: 'Geltungsbereich',
+  base: 'Server-Adresse',
+  topic: 'Thema',
+  q: 'Suchbegriff',
+};
+
+/** How many problems of one rejection are named; the rest are counted. */
+const MAX_ISSUES = 3;
+
+const ctxNumber = (v: unknown) => (typeof v === 'number' ? v.toLocaleString('de-DE') : String(v ?? ''));
+
+/** One entry of FastAPI's 422 list ({type, loc, msg, ctx}), as a clause. */
+function validationIssue(raw: unknown): string {
+  const i = (raw !== null && typeof raw === 'object' ? raw : {}) as { type?: unknown; loc?: unknown; msg?: unknown; ctx?: unknown };
+  const type = typeof i.type === 'string' ? i.type : '';
+  if (type === 'json_invalid') return 'Die Anfrage ist kein gültiges JSON';
+  // loc starts with where the value came from (body, query, path).
+  const path = (Array.isArray(i.loc) ? i.loc.slice(1) : []).filter((p): p is string | number => typeof p === 'string' || typeof p === 'number');
+  const key = path.join('.');
+  const field = key === '' ? 'Die Anfrage' : (FIELD_LABEL[key] ?? `„${key}“`);
+  const ctx = (i.ctx !== null && typeof i.ctx === 'object' ? i.ctx : {}) as Record<string, unknown>;
+  switch (type) {
+    case 'missing':
+      return `${field} fehlt`;
+    case 'string_too_short':
+      return ctx.min_length === 1 ? `${field} darf nicht leer sein` : `${field} ist zu kurz (mindestens ${ctxNumber(ctx.min_length)} Zeichen)`;
+    case 'string_too_long':
+      return `${field} ist zu lang (höchstens ${ctxNumber(ctx.max_length)} Zeichen)`;
+    case 'too_short':
+      return `${field} hat zu wenige Einträge`;
+    case 'too_long':
+      return `${field} hat zu viele Einträge`;
+    case 'string_pattern_mismatch':
+      return `${field} hat ein ungültiges Format`;
+    case 'greater_than_equal':
+      return `${field} muss mindestens ${ctxNumber(ctx.ge)} sein`;
+    case 'less_than_equal':
+      return `${field} darf höchstens ${ctxNumber(ctx.le)} sein`;
+    case 'greater_than':
+      return `${field} muss größer als ${ctxNumber(ctx.gt)} sein`;
+    case 'less_than':
+      return `${field} muss kleiner als ${ctxNumber(ctx.lt)} sein`;
+    case 'int_parsing':
+    case 'int_type':
+    case 'int_from_float':
+      return `${field} muss eine ganze Zahl sein`;
+    case 'float_parsing':
+    case 'float_type':
+      return `${field} muss eine Zahl sein`;
+    case 'bool_parsing':
+    case 'bool_type':
+      return `${field} muss ja oder nein sein`;
+    case 'string_type':
+      return `${field} muss Text sein`;
+    case 'literal_error':
+    case 'enum':
+      return `${field} hat keinen erlaubten Wert`;
+    case 'value_error':
+    case 'assertion_error': {
+      // The server's own validators word these (in German); pydantic only
+      // puts its English prefix in front.
+      const msg = typeof i.msg === 'string' ? i.msg.replace(/^(Value error|Assertion failed), /, '') : '';
+      return msg ? `${field}: ${msg}` : `${field} ist ungültig`;
+    }
+    default:
+      return `${field} ist ungültig`;
+  }
+}
+
+/** FastAPI's 422 detail (a list, not a sentence) as one German sentence. */
+function validationMessage(detail: unknown[]): string {
+  const issues = [...new Set(detail.map(validationIssue))];
+  if (issues.length === 0) return 'Ungültige Eingabe.';
+  const named = issues.slice(0, MAX_ISSUES).join('; ');
+  const rest = issues.length - MAX_ISSUES;
+  return `Ungültige Eingabe: ${named}${rest > 0 ? ` und ${rest} weitere ${rest === 1 ? 'Angabe' : 'Angaben'}` : ''}.`;
+}
+
+/** Pull a human-readable message out of an ApiError's JSON body. Always a
+ *  string: callers render it as text. */
 export function apiErrorMessage(e: unknown): string {
+  // fetch() rejects with a TypeError when the network or the server is gone.
+  if (e instanceof TypeError) return 'Server nicht erreichbar';
   if (e instanceof ApiError) {
+    let parsed: unknown;
     try {
       const parsed = JSON.parse(e.body) as { detail?: unknown };
       if (typeof parsed.detail === 'string' && parsed.detail) return parsed.detail;
@@ -106,12 +234,23 @@ export function apiErrorMessage(e: unknown): string {
         if (msgs.length) return msgs.join(' · ');
       }
     } catch {
-      /* body wasn't JSON */
+      // Not JSON (a proxy's plain-text answer): the body is the message.
+      return e.body || `Fehler ${e.status}`;
     }
-    return e.body || `Fehler ${e.status}`;
+    const detail = parsed !== null && typeof parsed === 'object' ? (parsed as { detail?: unknown }).detail : undefined;
+    if (typeof detail === 'string' && detail) return detail;
+    // A rejected request body: FastAPI lists every violation. Passed on
+    // as it was, the list of objects reached toasts and ErrorNote as a
+    // React child, which throws.
+    if (Array.isArray(detail)) return validationMessage(detail);
+    return `Fehler ${e.status}`;
   }
   return e instanceof Error ? e.message : 'Unbekannter Fehler';
 }
+
+/** The server's upper bound for the resolved history (routers/alerts.py).
+ *  Without a limit it stopped at 50 rows. */
+const RESOLVED_ALERTS_MAX = 200;
 
 export const api = {
   login: (username: string, password: string, totpCode?: string) =>
@@ -135,12 +274,17 @@ export const api = {
   revokeSession: (prefix: string) => del<{ ok: boolean }>(`/api/auth/sessions/${prefix}`),
   revokeOtherSessions: () => post<{ ok: boolean; revoked: number }>('/api/auth/sessions/revoke-others'),
 
-  devices: (signal?: AbortSignal) => get<{ devices: Device[] }>('/api/devices', signal),
-  device: (id: number, signal?: AbortSignal) =>
-    get<DeviceDetail>(`/api/devices/${id}`, signal),
+  devices: (signal?: AbortSignal): Promise<{ devices: Device[] }> =>
+    getChecked(DevicesResponse, '/api/devices', signal),
+  device: (id: number, signal?: AbortSignal): Promise<DeviceDetail> =>
+    getChecked(DeviceDetailResponse, `/api/devices/${id}`, signal),
   deviceHistory: (id: number, hours: number, signal?: AbortSignal) =>
     get<{ samples: MetricSample[] }>(`/api/devices/${id}/history?hours=${hours}`, signal),
-  alerts: (signal?: AbortSignal) => get<{ alerts: Alert[] }>('/api/alerts', signal),
+  /** Every open and acknowledged alert, and as many of the most recently
+   *  resolved as the server hands out; `resolved_truncated` says older
+   *  resolved ones were left out. */
+  alerts: (signal?: AbortSignal): Promise<{ alerts: Alert[]; resolved_limit: number; resolved_truncated: boolean }> =>
+    getChecked(AlertsResponse, `/api/alerts?limit=${RESOLVED_ALERTS_MAX}`, signal),
   ackAlert: (id: number) => post<{ alert: Alert }>(`/api/alerts/${id}/ack`),
   createDevice: (body: NewDevice) => post<{ device: Device }>('/api/devices', body),
   updateDevice: (
@@ -208,11 +352,12 @@ export const api = {
 
   // Accounts (admin panel)
   accounts: (signal?: AbortSignal) => get<{ accounts: Account[] }>('/api/accounts', signal),
-  createAccount: (body: { username: string; password: string; role: string; email?: string }) =>
+  createAccount: (body: { username: string; password: string; role: string; email?: string; person_id?: number }) =>
     post<{ account: Account }>('/api/accounts', body),
+  /** `person_id: 0` unlinks the person; leaving it out keeps the link. */
   updateAccount: (
     id: number,
-    body: { role?: string; disabled?: boolean; password?: string; email?: string; reset_totp?: boolean },
+    body: { role?: string; disabled?: boolean; password?: string; email?: string; reset_totp?: boolean; person_id?: number },
   ) => patch<{ account: Account }>(`/api/accounts/${id}`, body),
   deleteAccount: (id: number) => del<{ ok: boolean }>(`/api/accounts/${id}`),
   deleteDevice: (id: number) => del<{ ok: boolean }>(`/api/devices/${id}`),
@@ -277,8 +422,8 @@ export const api = {
     get<{ hours: number; samples: FleetSample[] }>(`/api/fleet/metrics?hours=${hours}`, signal),
 
   // Patches
-  patchSummary: (signal?: AbortSignal) =>
-    get<{ summary: PatchSummary }>('/api/patches/summary', signal),
+  patchSummary: (signal?: AbortSignal): Promise<{ summary: PatchSummary }> =>
+    getChecked(PatchSummaryResponse, '/api/patches/summary', signal),
   devicePatches: (deviceId: number, signal?: AbortSignal) =>
     get<{ patches: Patch[]; installing_job: number | null; last_scan_at: number }>(
       `/api/devices/${deviceId}/patches`,

@@ -8,7 +8,8 @@ RustDesk).
 Alle acht ursprünglichen Phasen sind abgeschlossen. Maßgeblich sind:
 `docs/ARCHITECTURE.md` (Architektur, Datenmodell), `docs/API.md`
 (Endpunkte, WS-Protokoll), `docs/CONFIGURATION.md` (alle ENV-Variablen),
-`docs/OPERATIONS.md` (Betrieb), `docs/ROADMAP.md` (was offen ist). Der
+`docs/OPERATIONS.md` (Betrieb), `docs/ROADMAP.md` (was offen ist),
+`DESIGN.md` (Design-System: Tokens, Bausteine, Muster, Sprache). Der
 ursprüngliche Phasenplan liegt archiviert unter `docs/_archiv/RMM-PLAN.md`.
 
 ## Architektur-Grundsätze
@@ -83,6 +84,22 @@ der Default `production` und die Doku antwortet lokal mit 404.
 - **Der Fleet-WebSocket überträgt keine Nutzdaten**, nur
   `{"type":"refresh"}`. Das hält die Autorisierung vollständig in der
   REST-Schicht; bitte keine Daten durchschieben.
+- **Frontend: Seiten liegen unter `frontend/src/pages/<bereich>/`** mit
+  eigenem `<bereich>.css` und Klassenpräfix; Bausteine kommen aus `src/ui/`.
+  Neue Seiten folgen `DESIGN.md` — Status nie nur als Farbe, keine
+  Farbwerte außerhalb von `tokens.css`, kein Inline-`style` außer für
+  berechnete Werte.
+- **`Date.now()` im Render bricht das Lint-Gate** (react-hooks purity).
+  Die aktuelle Zeit kommt aus `useNow()`.
+- **Freitextfelder nicht direkt an die URL binden.** React Router 7 setzt
+  Suchparameter in einer Transition; ein davon gesteuertes Eingabefeld
+  verliert beim schnellen Tippen Zeichen. Eigener State, in die URL nur
+  schreiben (`pages/devices/DevicesPage.tsx`).
+- **`Modal` rendert per Portal in `<body>`** — sonst positioniert sich ein
+  Dialog aus einem fixierten oder transformierten Element (Bulk-Leiste)
+  relativ zu diesem.
+- **jsdom hat kein Layout**: `scrollIntoView` ist in `src/test/setup.ts`
+  ergänzt; Tests, die Maße brauchen, gehören in Playwright.
 - **Lokal gebaute Agents (`make build`) haben keinen eingebrannten Public
   Key** und lehnen deshalb jedes Update ab. Das ist kein Fehler.
 - **`make sign` scheitert absichtlich hart**, wenn nicht beide Schlüssel

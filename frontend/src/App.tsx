@@ -1,44 +1,47 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { AlertsPage } from './components/AlertsPage';
-import { CommandPalette } from './components/CommandPalette';
+import { Toaster } from 'sonner';
+import { CommandPalette } from './shell/palette/CommandPalette';
 import { ConnectionBanner } from './components/ConnectionBanner';
-import { DevicesPage } from './components/DevicesPage';
-import { EnrollModal } from './components/EnrollModal';
-import { Header } from './components/Header';
-import { LoginPage } from './components/LoginPage';
-import { OverviewPage } from './components/OverviewPage';
-import { Sidebar, type PageId } from './components/Sidebar';
+import { DevicesPage } from './pages/devices/DevicesPage';
+import { BootSequence, type BootSummary } from './boot/BootSequence';
+import { EnrollModal } from './shell/enroll/EnrollModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { LoginPage } from './pages/login/LoginPage';
+import { OverviewPage } from './pages/overview/OverviewPage';
 import { isAgent } from './deviceClass';
+import { deviceStatusKind } from './deviceStatus';
+import type { Device } from './types';
 import type { PatchSummary } from './types';
 import { Skeleton } from './ui';
+import { IconInfo, IconStatusDanger, IconStatusOk, IconStatusWarn } from './icons';
+import { BottomNav } from './shell/BottomNav';
+import { MoreSheet } from './shell/MoreSheet';
+import { Rail } from './shell/Rail';
+import { goShortcutsFor } from './shell/nav';
+import type { QuickTab } from './shell/palette/paletteModel';
+import { ShortcutsDialog } from './shell/ShortcutsDialog';
+import { Topbar, type Crumb } from './shell/Topbar';
+import { setToastNavigator } from './ui/toast';
+import { useShortcuts } from './hooks/useShortcuts';
 import { useAuth } from './hooks/useAuth';
 import { useFleet } from './hooks/useFleet';
 import { useTheme } from './hooks/useTheme';
-import { PAGE_LABEL, PAGE_PATH, devicePath, pageForPath } from './routes';
+import { PAGE_LABEL, PAGE_PATH, devicePath, pageForPath, type PageId } from './routes';
 
 // Übersicht und Geräteliste tragen das erste Bild und bleiben im Hauptbündel.
 // Alles andere wird beim ersten Aufruf nachgeladen: die Detailseite, die
 // Doku und die Administration machten zusammen den größten Teil eines
 // Bündels aus, das jeder Login vollständig herunterlud.
-const AdminPage = lazy(() => import('./components/AdminPage').then((m) => ({ default: m.AdminPage })));
-const AuditPage = lazy(() => import('./components/AuditPage').then((m) => ({ default: m.AuditPage })));
-const AutomationPage = lazy(() =>
-  import('./components/AutomationPage').then((m) => ({ default: m.AutomationPage })),
-);
-const DeviceDetail = lazy(() =>
-  import('./components/DeviceDetail').then((m) => ({ default: m.DeviceDetail })),
-);
-const DocsPage = lazy(() => import('./components/DocsPage').then((m) => ({ default: m.DocsPage })));
-const PatchesPage = lazy(() =>
-  import('./components/PatchesPage').then((m) => ({ default: m.PatchesPage })),
-);
-const PersonsPage = lazy(() =>
-  import('./components/PersonsPage').then((m) => ({ default: m.PersonsPage })),
-);
-const ScriptsPage = lazy(() =>
-  import('./components/ScriptsPage').then((m) => ({ default: m.ScriptsPage })),
-);
+const AlertsPage = lazy(() => import('./pages/alerts/AlertsPage').then((m) => ({ default: m.AlertsPage })));
+const AdminPage = lazy(() => import('./pages/admin/AdminPage').then((m) => ({ default: m.AdminPage })));
+const AuditPage = lazy(() => import('./pages/audit/AuditPage').then((m) => ({ default: m.AuditPage })));
+const AutomationPage = lazy(() => import('./pages/automation/AutomationPage').then((m) => ({ default: m.AutomationPage })));
+const DevicePage = lazy(() => import('./pages/device/DevicePage').then((m) => ({ default: m.DevicePage })));
+const DocsPage = lazy(() => import('./pages/docs/DocsPage').then((m) => ({ default: m.DocsPage })));
+const PatchesPage = lazy(() => import('./pages/patches/PatchesPage').then((m) => ({ default: m.PatchesPage })));
+const PersonsPage = lazy(() => import('./pages/persons/PersonsPage').then((m) => ({ default: m.PersonsPage })));
+const ScriptsPage = lazy(() => import('./pages/scripts/ScriptsPage').then((m) => ({ default: m.ScriptsPage })));
 
 const FAV_KEY = 'vulpexa-favorites';
 // Das Produkt hieß einmal anders; wer Favoriten hat, soll sie behalten.
@@ -74,41 +77,48 @@ function DeviceRoute({
   favorites,
   patchSummary,
   onToggleFavorite,
-  onLeave,
   onDeleted,
-  onLogout,
 }: {
   isAdmin: boolean;
   isOperator: boolean;
   favorites: number[];
   patchSummary: PatchSummary;
   onToggleFavorite: (id: number) => void;
-  onLeave: () => void;
   onDeleted: () => void;
-  onLogout: () => Promise<void> | void;
 }) {
   const { deviceId } = useParams();
   const id = Number(deviceId);
   if (!Number.isInteger(id) || id <= 0) return <Navigate to={PAGE_PATH.devices} replace />;
   return (
-    <DeviceDetail
+    <DevicePage
       deviceId={id}
       patchCounts={patchSummary[String(id)]}
       isAdmin={isAdmin}
       isOperator={isOperator}
       favorite={favorites.includes(id)}
       onToggleFavorite={() => onToggleFavorite(id)}
-      onBack={onLeave}
       onDeleted={onDeleted}
-      onLogout={onLogout}
     />
   );
 }
 
+/** What the boot sequence reports when it hands over. */
+function bootSummary(devices: Device[]): BootSummary {
+  const mix = { ok: 0, warn: 0, danger: 0, off: 0 };
+  let online = 0;
+  for (const d of devices) {
+    const k = deviceStatusKind(d);
+    if (k === 'noagent') continue;
+    mix[k] += 1;
+    if (d.online) online += 1;
+  }
+  return { devices: devices.length, online, attention: mix.warn + mix.danger + mix.off, mix };
+}
+
 export default function App() {
   const { user, status, login, logout } = useAuth();
-  const { theme, toggle: toggleTheme } = useTheme();
-  const fleet = useFleet();
+  const { preference: themePref, resolved: theme, setPreference: setTheme, toggle: toggleTheme } = useTheme();
+  const fleet = useFleet(user !== null);
   // Seiten, die von Agent-Telemetrie leben (Updates, Skripte, Alarmregeln),
   // bekommen nur die Geräte mit Agent: ein Telefon dort zu listen hieße, eine
   // Zeile anzubieten, auf der nichts passieren kann.
@@ -118,7 +128,21 @@ export default function App() {
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  // Overlays belong to the session that opened them. App stays mounted across
+  // sign-out and only swaps in the login page, so an open "Gerät hinzufügen"
+  // or navigation sheet used to come back for whoever signed in next, a
+  // viewer included. Reset while rendering, so not even one frame shows them.
+  const sessionId = user?.id ?? null;
+  const [overlaySession, setOverlaySession] = useState(sessionId);
+  if (overlaySession !== sessionId) {
+    setOverlaySession(sessionId);
+    setPaletteOpen(false);
+    setEnrollOpen(false);
+    setMoreOpen(false);
+    setHelpOpen(false);
+  }
   const [favorites, setFavorites] = useState<number[]>(loadFavorites);
 
   const toggleFavorite = useCallback((id: number) => {
@@ -133,29 +157,63 @@ export default function App() {
     });
   }, []);
 
-  // The fleet poller mounts before login, so its first fetch 401s and the
-  // next tick is 30 s out. Refetch immediately once a session exists.
-  const userId = user?.id ?? null;
-  const refresh = fleet.refresh;
   useEffect(() => {
-    if (userId !== null) refresh();
-  }, [userId, refresh]);
+    setToastNavigator((path) => navigate(path));
+    return () => setToastNavigator(null);
+  }, [navigate]);
 
-  // ⌘K / Ctrl+K toggles the palette. Escape is handled inside the dialogs
-  // themselves (components/Modal.tsx), so it is not intercepted here.
+  const role = user?.role ?? null;
+  const goShortcuts = useMemo(() => (role ? goShortcutsFor(role) : []), [role]);
+  const openPalette = useCallback(() => setPaletteOpen((o) => !o), []);
+  const openHelp = useCallback(() => setHelpOpen(true), []);
+  const goPath = useCallback((path: string) => navigate(path), [navigate]);
+  useShortcuts({ enabled: user !== null, go: goShortcuts, onNavigate: goPath, onPalette: openPalette, onHelp: openHelp });
+
+  // Startup sequence: plays until auth and (when signed in) the first fleet
+  // load are done, then hands over to the shell.
+  const [booted, setBooted] = useState(false);
+  const finishBoot = useCallback(() => setBooted(true), []);
+  const bootReady = status !== 'loading' && (status === 'anon' || !fleet.loading);
+  const summary = useMemo(() => bootSummary(fleet.devices), [fleet.devices]);
+
+  // The tab title names the page (and the device on device pages).
+  const titleDeviceId = /^\/devices\/(\d+)/.exec(location.pathname)?.[1];
+  const titleDevice = titleDeviceId ? fleet.devices.find((d) => d.id === Number(titleDeviceId))?.hostname : undefined;
+  const pageTitle = titleDeviceId ? (titleDevice ?? 'Gerät') : PAGE_LABEL[pageForPath(location.pathname)];
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setPaletteOpen((o) => !o);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+    document.title = `${pageTitle} · Vulpexa`;
+  }, [pageTitle]);
 
-  if (status === 'loading') return <div className="app-loading">Lade…</div>;
-  if (status === 'anon' || !user) return <LoginPage onLogin={login} />;
+  // A new page moves focus to the content, so a screen reader starts reading
+  // there instead of at the top of the shell. Not on the very first render.
+  const mainRef = useRef<HTMLElement>(null);
+  const firstPath = useRef(true);
+  useEffect(() => {
+    if (firstPath.current) {
+      firstPath.current = false;
+      return;
+    }
+    mainRef.current?.focus({ preventScroll: true });
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
+  const boot = booted ? null : (
+    <BootSequence
+      ready={bootReady}
+      signedIn={status === 'loading' ? null : status === 'authed'}
+      summary={summary}
+      error={fleet.error}
+      onDone={finishBoot}
+    />
+  );
+  if (status === 'loading') return boot;
+  if (status === 'anon' || !user)
+    return (
+      <>
+        <LoginPage onLogin={login} />
+        {boot}
+      </>
+    );
 
   const isAdmin = user.role === 'admin';
   // Techniker: hands-on device work (jobs, scripts, patches, remote, enrollment).
@@ -165,7 +223,7 @@ export default function App() {
   // drawer hanging over the new page is the one thing they must never do.
   const closeOverlays = () => {
     setPaletteOpen(false);
-    setNavOpen(false);
+    setMoreOpen(false);
   };
   // `query` trägt Filter mit (z. B. die Übersicht, die auf die Geräteseite mit
   // genau einem Filter verweist) — der Pfad bleibt die Wahrheit über die Seite.
@@ -177,58 +235,61 @@ export default function App() {
     closeOverlays();
     navigate(devicePath(id));
   };
+  const openDeviceTab = (id: number, tab?: QuickTab) => {
+    closeOverlays();
+    navigate(tab ? `${devicePath(id)}?tab=${tab}` : devicePath(id));
+  };
 
   const page = pageForPath(location.pathname);
-  const openAlerts = fleet.alerts.filter((a) => a.resolved_at === null).length;
+  // "Open" means what the Alarm-Center's first tab shows: not resolved and
+  // not acknowledged yet. Acknowledged alerts are someone's already.
+  const openAlerts = fleet.alerts.filter((a) => a.resolved_at === null && a.acked_at === null).length;
   const openPatches = Object.values(fleet.patchSummary).reduce((a, s) => a + s.pending, 0);
 
   const detailMatch = /^\/devices\/(\d+)/.exec(location.pathname);
   const detailIdRaw = detailMatch?.[1];
   const detailId = detailIdRaw ? Number(detailIdRaw) : null;
   const detailDevice = detailId !== null ? fleet.devices.find((d) => d.id === detailId) : undefined;
-  const crumbCur =
-    detailId !== null ? (detailDevice?.hostname ?? `Gerät ${detailId}`) : PAGE_LABEL[page];
-  const crumbPre = detailId !== null ? 'Vulpexa / Geräte / ' : 'Vulpexa / ';
+  const crumbs: Crumb[] =
+    detailId !== null
+      ? [
+          { label: PAGE_LABEL.devices, to: PAGE_PATH.devices },
+          { label: detailDevice?.hostname ?? `Gerät ${detailId}` },
+        ]
+      : [{ label: PAGE_LABEL[page] }];
 
   return (
-    <div className={navOpen ? 'app-shell nav-open' : 'app-shell'}>
-      {navOpen && (
-        <button
-          type="button"
-          className="nav-backdrop"
-          aria-label="Navigation schließen"
-          onClick={() => setNavOpen(false)}
-        />
-      )}
-      <Sidebar
-        page={page}
-        onNavigate={goPage}
+    <>
+    <div className="shell">
+      <a className="skip-link" href="#main">
+        Zum Inhalt springen
+      </a>
+      <Rail
         user={user}
         devices={fleet.devices}
         favorites={favorites}
         openAlerts={openAlerts}
         openPatches={openPatches}
-        onOpenDevice={openDevice}
-        theme={theme}
-        onToggleTheme={toggleTheme}
+        theme={themePref}
+        onTheme={setTheme}
+        onShortcuts={openHelp}
         onLogout={() => void logout()}
       />
-      <div className="main">
-        <Header
-          crumbPre={crumbPre}
-          crumbCur={crumbCur}
-          openAlerts={openAlerts}
+      <div className="shell-main">
+        <Topbar
+          crumbs={crumbs}
+          alerts={fleet.alerts}
+          devices={fleet.devices}
           canEnroll={isOperator}
           onOpenPalette={() => setPaletteOpen(true)}
-          onOpenAlerts={() => goPage('alerts')}
           onOpenEnroll={() => setEnrollOpen(true)}
-          onToggleNav={() => setNavOpen((o) => !o)}
         />
-        <div className="content">
+        <main id="main" ref={mainRef} className="shell-content" tabIndex={-1}>
           <ConnectionBanner error={fleet.error} loadedAt={fleet.loadedAt} onRetry={fleet.refresh} />
           {/* Ein Skelett statt eines leeren Rahmens, solange ein Seitenbündel
               unterwegs ist — im LAN ist das ein Wimpernschlag, über eine
               schlechte Leitung nicht. */}
+          <ErrorBoundary key={location.pathname} variant="page">
           <Suspense fallback={<div className="screen"><Skeleton h={160} /></div>}>
             <Routes>
             <Route
@@ -252,7 +313,10 @@ export default function App() {
                   patchSummary={fleet.patchSummary}
                   persons={fleet.persons}
                   loading={fleet.loading}
-                  onOpenDevice={openDevice}
+                  loadError={fleet.loadErrors.devices}
+                  onRetry={fleet.refresh}
+                  canOperate={isOperator}
+                  onOpenEnroll={isOperator ? () => setEnrollOpen(true) : undefined}
                 />
               }
             />
@@ -265,12 +329,10 @@ export default function App() {
                   favorites={favorites}
                   patchSummary={fleet.patchSummary}
                   onToggleFavorite={toggleFavorite}
-                  onLeave={() => navigate(PAGE_PATH.devices)}
                   onDeleted={() => {
                     navigate(PAGE_PATH.devices);
                     fleet.refresh();
                   }}
-                  onLogout={logout}
                 />
               }
             />
@@ -294,6 +356,7 @@ export default function App() {
                 <AlertsPage
                   persons={fleet.persons}
                   alerts={fleet.alerts}
+                  resolvedCap={fleet.resolvedAlertsCap}
                   devices={fleet.devices}
                   onOpenDevice={openDevice}
                   onRefresh={fleet.refresh}
@@ -317,11 +380,7 @@ export default function App() {
               path={PAGE_PATH.scripts}
               element={
                 isOperator ? (
-                  <ScriptsPage
-                    canManage={isOperator}
-                    devices={agentDevices}
-                    onOpenDevice={openDevice}
-                  />
+                  <ScriptsPage canManage={isOperator} devices={agentDevices} />
                 ) : (
                   <Forbidden />
                 )
@@ -344,7 +403,9 @@ export default function App() {
             <Route path="*" element={<Navigate to={PAGE_PATH.overview} replace />} />
             </Routes>
           </Suspense>
-        </div>
+          </ErrorBoundary>
+        </main>
+        <BottomNav openAlerts={openAlerts} moreOpen={moreOpen} onMore={() => setMoreOpen((o) => !o)} />
       </div>
 
       {paletteOpen && (
@@ -354,7 +415,7 @@ export default function App() {
           canEnroll={isOperator}
           onClose={() => setPaletteOpen(false)}
           onNavigate={goPage}
-          onOpenDevice={openDevice}
+          onOpenDevice={openDeviceTab}
           onOpenEnroll={() => {
             setPaletteOpen(false);
             setEnrollOpen(true);
@@ -362,7 +423,19 @@ export default function App() {
           onToggleTheme={toggleTheme}
         />
       )}
-      {enrollOpen && (
+      {moreOpen && (
+        <MoreSheet
+          user={user}
+          theme={themePref}
+          onTheme={setTheme}
+          onLogout={() => void logout()}
+          onClose={() => setMoreOpen(false)}
+          onOpenEnroll={isOperator ? () => setEnrollOpen(true) : undefined}
+        />
+      )}
+      {helpOpen && <ShortcutsDialog go={goShortcuts} onClose={() => setHelpOpen(false)} />}
+      {/* Only for roles that may enroll: the server refuses everyone else. */}
+      {enrollOpen && isOperator && (
         <EnrollModal
           onClose={() => {
             setEnrollOpen(false);
@@ -371,6 +444,22 @@ export default function App() {
           onDeviceCreated={() => fleet.refresh()}
         />
       )}
+      <Toaster
+        theme={theme}
+        position="bottom-right"
+        containerAriaLabel="Benachrichtigungen"
+        closeButton
+        visibleToasts={4}
+        mobileOffset={{ bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))', left: '12px', right: '12px' }}
+        icons={{
+          success: <IconStatusOk size={16} />,
+          error: <IconStatusDanger size={16} />,
+          warning: <IconStatusWarn size={16} />,
+          info: <IconInfo size={16} />,
+        }}
+      />
     </div>
+    {boot}
+    </>
   );
 }

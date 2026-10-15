@@ -1,6 +1,10 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '../../api/client';
+import { ApiError, api } from '../../api/client';
+import { createQueryClient, qk } from '../../api/queryClient';
+import type { QueryClient } from '@tanstack/react-query';
 import { createRefreshScheduler, useFleet } from '../useFleet';
 
 vi.mock('../../api/client', async () => {
@@ -72,13 +76,20 @@ describe('createRefreshScheduler', () => {
   });
 });
 
+/** One client per test; a client per render would itself change identities. */
+function makeWrapper(client: QueryClient = createQueryClient()) {
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client }, children);
+  };
+}
+
 describe('useFleet', () => {
   afterEach(() => vi.clearAllMocks());
 
   it('keeps refresh stable across renders', async () => {
     // A new refresh closure per render made App's login effect re-run on
     // every render — 569 requests per endpoint in ten idle seconds.
-    const { result, rerender } = renderHook(() => useFleet());
+    const { result, rerender } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     const first = result.current.refresh;
     rerender();
@@ -86,15 +97,75 @@ describe('useFleet', () => {
     expect(result.current.refresh).toBe(first);
   });
 
+  it('fetches nothing before there is a session', async () => {
+    const { result } = renderHook(() => useFleet(false), { wrapper: makeWrapper() });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(result.current.loading).toBe(false);
+    expect(vi.mocked(api.devices)).not.toHaveBeenCalled();
+  });
+
   it('does not refetch on its own after the first load', async () => {
-    const { result } = renderHook(() => useFleet());
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     await new Promise((r) => setTimeout(r, 50));
     expect(vi.mocked(api.devices)).toHaveBeenCalledTimes(1);
   });
 
-  it('runs an explicit refresh right away', async () => {
-    const { result } = renderHook(() => useFleet());
+  it('says how many resolved alerts the server kept when it left older ones out', async () => {
+    vi.mocked(api.alerts).mockResolvedValueOnce({ alerts: [], resolved_limit: 200, resolved_truncated: true });
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.resolvedAlertsCap).toBe(200);
+  });
+
+  it('reports no cut when the history is complete', async () => {
+    vi.mocked(api.alerts).mockResolvedValueOnce({ alerts: [], resolved_limit: 200, resolved_truncated: false });
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.resolvedAlertsCap).toBeNull();
+  });
+
+  it('keeps the last patch summary when a refresh fails, and lets the retry policy see the error', async () => {
+    // A failure used to resolve to an empty summary: every device read as
+    // up to date, and nothing retried.
+    vi.mocked(api.patchSummary)
+      .mockResolvedValueOnce({ summary: { '1': { pending: 12, security: 12 } } })
+      .mockRejectedValue(new ApiError(502, 'Bad Gateway'));
+    const client = createQueryClient();
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper(client) });
+    await waitFor(() => expect(result.current.patchSummary['1']?.pending).toBe(12));
+    act(() => result.current.refresh());
+    await waitFor(() => expect(client.getQueryState(qk.patchSummary)?.fetchFailureCount).toBeGreaterThan(0));
+    expect(result.current.patchSummary['1']?.pending).toBe(12);
+    await client.cancelQueries();
+  });
+
+  it('keeps the last persons list when a refresh fails', async () => {
+    const anna = { id: 1, name: 'Anna', email: '', phone: '', notes: '', created_at: 0, device_count: 0 };
+    vi.mocked(api.persons)
+      .mockResolvedValueOnce({ persons: [anna] })
+      .mockRejectedValue(new ApiError(502, 'Bad Gateway'));
+    const client = createQueryClient();
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper(client) });
+    await waitFor(() => expect(result.current.persons).toEqual([anna]));
+    act(() => result.current.refresh());
+    await waitFor(() => expect(client.getQueryState(qk.persons)?.fetchFailureCount).toBeGreaterThan(0));
+    expect(result.current.persons).toEqual([anna]);
+    await client.cancelQueries();
+  });
+
+  it('tells a device list that never arrived from an empty one', async () => {
+    // A 4xx is not retried, so the first load fails at once.
+    vi.mocked(api.devices).mockRejectedValueOnce(new ApiError(400, 'kaputt'));
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.devices).toEqual([]);
+    expect(result.current.loadErrors.devices).toBeInstanceOf(ApiError);
+    expect(result.current.loadErrors.patchSummary).toBeNull();
+  });
+
+  it('refetches on an explicit refresh', async () => {
+    const { result } = renderHook(() => useFleet(true), { wrapper: makeWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
     act(() => result.current.refresh());
     await waitFor(() => expect(vi.mocked(api.devices)).toHaveBeenCalledTimes(2));

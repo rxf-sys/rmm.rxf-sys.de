@@ -4,7 +4,7 @@
  * component and non-component exports breaks React Fast Refresh, which is
  * what react-refresh/only-export-components warns about. */
 
-import type { Device } from './types';
+import type { Alert, Device } from './types';
 
 export type DeviceState = 'ok' | 'warn' | 'crit' | 'off';
 
@@ -34,17 +34,6 @@ export function hasProblem(d: Device): boolean {
   return s === 'warn' || s === 'crit';
 }
 
-/** CSS color var for a device state dot. */
-export function stateColor(s: DeviceState): string {
-  return s === 'off'
-    ? 'var(--tx3)'
-    : s === 'crit'
-      ? 'var(--dangerS)'
-      : s === 'warn'
-        ? 'var(--warn)'
-        : 'var(--ok)';
-}
-
 /** The three load metrics shown as bars. */
 export type LoadKind = 'cpu' | 'ram' | 'disk';
 
@@ -56,7 +45,7 @@ export type LoadKind = 'cpu' | 'ram' | 'disk';
  * CPU tolerates more than RAM — a box pinned at 80 % CPU is working, a box at
  * 90 % RAM is about to start swapping.
  */
-const LOAD_THRESHOLDS: Record<LoadKind, { warn: number; crit: number }> = {
+export const LOAD_THRESHOLDS: Record<LoadKind, { warn: number; crit: number }> = {
   cpu: { warn: 70, crit: 90 },
   ram: { warn: 75, crit: 90 },
   disk: { warn: 80, crit: 90 },
@@ -67,13 +56,6 @@ export function loadLevel(pct: number, kind: LoadKind): 'ok' | 'warn' | 'crit' {
   if (pct >= t.crit) return 'crit';
   if (pct >= t.warn) return 'warn';
   return 'ok';
-}
-
-/** Bar colour for a load percentage: green while fine, yellow on warning,
- *  red once critical. */
-export function loadColor(pct: number, kind: LoadKind): string {
-  const level = loadLevel(pct, kind);
-  return level === 'crit' ? 'var(--dangerS)' : level === 'warn' ? 'var(--warn)' : 'var(--ok)';
 }
 
 const OS_SHORT: Record<string, string> = {
@@ -87,4 +69,26 @@ const OS_SHORT: Record<string, string> = {
 };
 export function osShort(os: string): string {
   return OS_SHORT[os] ?? os.slice(0, 3).toUpperCase();
+}
+
+/** Status kind for StatusBadge: devices without an agent have no live state. */
+export function deviceStatusKind(d: Device): 'ok' | 'warn' | 'danger' | 'off' | 'noagent' {
+  if (d.device_class === 'mobile') return 'noagent';
+  const s = deviceState(d);
+  return s === 'off' ? 'off' : s === 'crit' ? 'danger' : s === 'warn' ? 'warn' : 'ok';
+}
+
+const STATUS_WORD = { ok: 'OK', warn: 'Warnung', danger: 'Kritisch', off: 'Offline', noagent: 'Ohne Agent' } as const;
+
+/** The word for a device's status, as shown next to its icon. */
+export function deviceStatusLabel(d: Device): string {
+  return STATUS_WORD[deviceStatusKind(d)];
+}
+
+/** Severity of an alert as the device's current state tells it: a disk
+ *  alert on a device that is critical right now is critical. */
+export function alertStatusKind(a: Alert, device: Device | undefined): 'off' | 'danger' | 'warn' {
+  if (a.rule === 'offline') return 'off';
+  if (a.rule === 'disk' && device && deviceStatusKind(device) === 'danger') return 'danger';
+  return 'warn';
 }

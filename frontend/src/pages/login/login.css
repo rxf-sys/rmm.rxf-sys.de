@@ -1,0 +1,170 @@
+/* Anmeldung (pages/login). */
+
+/* Two columns on wide screens: the brand in the rail's ink — the startup
+   sequence ends on that same ink, so the fox lands without a change of
+   scene — and the form on the page background. */
+.lg {
+  display: grid;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+
+/* ---- Brand ---- */
+.lg-brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-10) var(--sp-8);
+  background: var(--shell);
+  color: var(--shell-tx);
+}
+.lg-mark {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.lg-logo {
+  display: block;
+  flex: none;
+  border-radius: var(--r-md);
+}
+.lg-word {
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.lg-tag {
+  color: var(--shell-tx-2);
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+.lg-facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  max-width: 34ch;
+  margin: auto 0 0;
+  padding: var(--sp-6) 0 0;
+  border-top: 1px solid var(--shell-line);
+  list-style: none;
+  color: var(--shell-tx-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+}
+.lg-facts li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+.lg-facts svg {
+  margin-top: 2px;
+  color: var(--shell-tx);
+}
+
+/* ---- Form ---- */
+.lg-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-5);
+  min-width: 0;
+  padding: var(--sp-10) var(--sp-6);
+}
+.lg-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  width: min(380px, 100%);
+  padding: var(--sp-8);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+}
+.lg-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.lg-title {
+  font-size: var(--fs-2xl);
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+.lg-lead {
+  color: var(--tx-2);
+}
+.lg-host {
+  color: var(--tx);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.lg-caps {
+  font-size: var(--fs-sm);
+}
+.lg-code {
+  letter-spacing: 0.12em;
+}
+.lg-switch {
+  align-self: flex-start;
+}
+.lg-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+}
+.lg-submit {
+  width: 100%;
+  min-height: calc(var(--hit) + var(--sp-1));
+}
+/* Busy, not disabled: a disabled button drops the focus it holds, and the
+   person would have to find their place again after an error. */
+.lg-submit[aria-disabled='true'] {
+  opacity: 0.7;
+  cursor: progress;
+}
+.lg-help {
+  width: min(380px, 100%);
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+
+/* One column: the brand shrinks to a mark above the form, on the page
+   background; the facts are a desktop luxury. */
+@media (max-width: 900px) {
+  .lg {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+  .lg-brand {
+    align-items: center;
+    gap: var(--sp-1);
+    padding: var(--sp-10) var(--sp-4) 0;
+    background: none;
+    color: var(--tx);
+  }
+  .lg-tag {
+    color: var(--tx-3);
+    font-size: var(--fs-sm);
+  }
+  .lg-facts {
+    display: none;
+  }
+  .lg-main {
+    justify-content: flex-start;
+    padding: var(--sp-6) var(--sp-4) var(--sp-10);
+  }
+}
+@media (max-width: 480px) {
+  .lg-brand {
+    padding-top: var(--sp-8);
+  }
+  .lg-card {
+    padding: var(--sp-6) var(--sp-4);
+    border-radius: var(--r-lg);
+  }
+}

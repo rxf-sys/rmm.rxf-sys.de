@@ -1,0 +1,256 @@
+/* ============================================================
+   Vulpexa design tokens — palette "Tinte"
+
+   Light values live on :root. Dark values are declared twice with the same
+   content: under prefers-color-scheme (the "System" preference, no
+   data-theme attribute) and under :root[data-theme='dark'] (explicit
+   choice). An explicit 'light' wins over a dark OS via the :not() guard.
+
+   Rules of use
+   - Accent marks selection, primary action and focus only — never status.
+   - Status colours (ok / warn / danger / off) mean exactly that and always
+     travel with an icon and a word. *-tx is for text, the bare token for
+     fills and marks, *-soft for backgrounds.
+   - Series colours (s1–s3) are for charts only; validated for colour
+     vision deficiency as a set (dataviz validator, --pairs all).
+   - Fox orange lives in the logo, not in the interface.
+   ============================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* --- Type --- */
+  --font: 'Manrope Variable', 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+  /* rem scale on a 13 px root (15 px on touch / narrow screens), ratio ≈ 1.15 */
+  --fs-xs: 0.846rem;
+  --fs-sm: 0.923rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.154rem;
+  --fs-xl: 1.385rem;
+  --fs-2xl: 1.692rem;
+  --fs-3xl: 2.154rem;
+  --lh-tight: 1.2;
+  --lh-body: 1.45;
+
+  /* --- Space (4 px grid) --- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+
+  /* --- Shape --- */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-pill: 999px;
+
+  /* --- Hit area: 32 px with a mouse, 44 px on touch --- */
+  --hit: 32px;
+  --hit-sm: 28px;
+
+  /* --- Motion --- */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 240ms;
+
+  /* --- Layers --- */
+  --z-sticky: 10;
+  --z-rail: 20;
+  --z-popover: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+  --z-boot: 100;
+
+  /* --- Layout --- */
+  --rail-w: 240px;
+  --topbar-h: 56px;
+  /* Phone navigation bar at the bottom edge (shell.css .bottomnav). */
+  --bottomnav-h: 68px;
+  --content-max: 1520px;
+
+  /* --- Colour: neutrals --- */
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-2: #f0eee9;
+  --surface-3: #e7e4dd;
+  --line: #e3e0da;
+  --line-strong: #cdc9c0;
+  --hover: rgba(22, 24, 31, 0.045);
+  --press: rgba(22, 24, 31, 0.08);
+  --tx: #16181f;
+  --tx-2: #4a4d57;
+  --tx-3: #676a73;
+  --tx-disabled: #9a9ca4;
+
+  /* --- Colour: accent (indigo ink) --- */
+  --accent: #3f4bc9;
+  --accent-hover: #3540ad;
+  --accent-tx: #3741b8;
+  --accent-soft: #e9ebfb;
+  --accent-line: #b9bef2;
+  --on-accent: #ffffff;
+  --focus: #3f4bc9;
+
+  /* --- Colour: shell (navigation rail) --- */
+  --shell: #1c1f33;
+  --shell-2: rgba(255, 255, 255, 0.06);
+  --shell-line: rgba(255, 255, 255, 0.1);
+  --shell-tx: #ecedf6;
+  --shell-tx-2: #a9adc6;
+  --shell-active: rgba(255, 255, 255, 0.12);
+  --shell-focus: #aab1f8;
+
+  /* --- Colour: status --- */
+  --ok: #2f9e55;
+  --ok-tx: #1d7339;
+  --ok-soft: #e3f3e8;
+  --warn: #e0a100;
+  --warn-tx: #875200;
+  --warn-soft: #fcf1d9;
+  --danger: #d92d20;
+  --danger-tx: #b42318;
+  --danger-soft: #fde8e6;
+  --danger-hover: #b42318;
+  --off: #8b8e98;
+  --off-tx: #676a73;
+  --off-soft: #efede9;
+  --info: var(--accent);
+  --info-tx: var(--accent-tx);
+  --info-soft: var(--accent-soft);
+
+  /* --- Colour: data series (dataviz reference slots 1–3) --- */
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --grid: #ebe8e2;
+
+  /* --- Colour: terminal output (dark in both themes) --- */
+  --console-bg: #11131c;
+  --console-tx: #d9dbe6;
+  --console-tx-2: #9aa0b6;
+  --console-line: rgba(255, 255, 255, 0.08);
+  --console-ok: #6ad48f;
+  --console-err: #ff8a7e;
+
+  /* --- Elevation (overlays only; panels are flat) --- */
+  --shadow-sm: 0 1px 2px rgba(22, 24, 31, 0.06);
+  --shadow-md: 0 8px 24px rgba(28, 31, 51, 0.14), 0 1px 3px rgba(28, 31, 51, 0.08);
+  --shadow-lg: 0 24px 64px rgba(28, 31, 51, 0.22), 0 2px 8px rgba(28, 31, 51, 0.1);
+  --scrim: rgba(17, 18, 25, 0.42);
+}
+
+@media (pointer: coarse), (max-width: 720px) {
+  :root {
+    --hit: 44px;
+    --hit-sm: 40px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #111219;
+    --surface: #181a23;
+    --surface-2: #1f2230;
+    --surface-3: #282b3b;
+    --line: #2a2d3b;
+    --line-strong: #383c4e;
+    --hover: rgba(255, 255, 255, 0.045);
+    --press: rgba(255, 255, 255, 0.08);
+    --tx: #ecedf3;
+    --tx-2: #b0b3c2;
+    --tx-3: #9195a6;
+    --tx-disabled: #61657a;
+    --accent: #8d96f5;
+    --accent-hover: #a3abf7;
+    --accent-tx: #a3abf7;
+    --accent-soft: #252a4a;
+    --accent-line: #444c8c;
+    --on-accent: #10122a;
+    --focus: #a3abf7;
+    --shell: #0c0d13;
+    --shell-tx: #e3e5f0;
+    --shell-tx-2: #9a9eb5;
+    --ok: #3fb56a;
+    --ok-tx: #5ccb85;
+    --ok-soft: #16291f;
+    --warn: #e8a92a;
+    --warn-tx: #f0b43c;
+    --warn-soft: #2d2614;
+    --danger: #e5484d;
+    --danger-tx: #f47a6e;
+    --danger-soft: #33191a;
+    --danger-hover: #f0646a;
+    --off: #6f7386;
+    --off-tx: #9195a6;
+    --off-soft: #22243a;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --grid: #23263a;
+    --console-bg: #0b0c12;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+    --scrim: rgba(5, 6, 10, 0.6);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #111219;
+  --surface: #181a23;
+  --surface-2: #1f2230;
+  --surface-3: #282b3b;
+  --line: #2a2d3b;
+  --line-strong: #383c4e;
+  --hover: rgba(255, 255, 255, 0.045);
+  --press: rgba(255, 255, 255, 0.08);
+  --tx: #ecedf3;
+  --tx-2: #b0b3c2;
+  --tx-3: #9195a6;
+  --tx-disabled: #61657a;
+  --accent: #8d96f5;
+  --accent-hover: #a3abf7;
+  --accent-tx: #a3abf7;
+  --accent-soft: #252a4a;
+  --accent-line: #444c8c;
+  --on-accent: #10122a;
+  --focus: #a3abf7;
+  --shell: #0c0d13;
+  --shell-tx: #e3e5f0;
+  --shell-tx-2: #9a9eb5;
+  --ok: #3fb56a;
+  --ok-tx: #5ccb85;
+  --ok-soft: #16291f;
+  --warn: #e8a92a;
+  --warn-tx: #f0b43c;
+  --warn-soft: #2d2614;
+  --danger: #e5484d;
+  --danger-tx: #f47a6e;
+  --danger-soft: #33191a;
+  --danger-hover: #f0646a;
+  --off: #6f7386;
+  --off-tx: #9195a6;
+  --off-soft: #22243a;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --grid: #23263a;
+  --console-bg: #0b0c12;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --scrim: rgba(5, 6, 10, 0.6);
+}

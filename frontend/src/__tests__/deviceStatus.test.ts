@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deviceState, hasProblem, loadColor, loadLevel } from '../deviceStatus';
+import { deviceState, hasProblem, loadLevel } from '../deviceStatus';
 import type { Device } from '../types';
 
 function device(over: Partial<Device> = {}): Device {
@@ -55,23 +55,12 @@ describe('loadLevel', () => {
   });
 });
 
-describe('loadColor', () => {
-  it('is green while fine and red once critical', () => {
-    expect(loadColor(10, 'cpu')).toBe('var(--ok)');
-    expect(loadColor(80, 'cpu')).toBe('var(--warn)');
-    expect(loadColor(95, 'cpu')).toBe('var(--dangerS)');
-  });
-});
-
-describe('disk colour and deviceState', () => {
-  // If these two disagreed, one row would show a green status dot next to a
-  // red disk bar for the same device.
+describe('disk level and deviceState', () => {
+  // If these two disagreed, one row would show a green status next to a red
+  // disk bar for the same device.
   it.each([50, 79, 80, 89, 90, 100])('agree at %i%%', (pct) => {
     const d = device({ heartbeat: { disks: [{ mount: '/', used_pct: pct, total_b: 1 }] } });
-    const state = deviceState(d);
-    const expected =
-      state === 'crit' ? 'var(--dangerS)' : state === 'warn' ? 'var(--warn)' : 'var(--ok)';
-    expect(loadColor(pct, 'disk')).toBe(expected);
+    expect(loadLevel(pct, 'disk')).toBe(deviceState(d));
   });
 });
 
