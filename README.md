@@ -86,7 +86,7 @@ cd agent && make build && ./rmm-agent version
 ```bash
 cd backend  && ruff check . && mypy app && pytest -v --cov=app --cov-fail-under=70
 cd frontend && npm run lint && npm test && npm run build
-cd agent    && make vet test
+cd agent    && make vet lint && go test -race ./... && make release
 ```
 
 Genau diese Kommandos laufen auch in CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).

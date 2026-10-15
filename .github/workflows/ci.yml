@@ -76,10 +76,38 @@ jobs:
         with:
           go-version-file: agent/go.mod
           cache-dependency-path: agent/go.sum
-      - name: Vet
-        run: go vet ./...
-      - name: Test
-        run: go test ./...
+      - name: Vet (linux, windows, darwin)
+        # Files behind a build tag are only type-checked for their own GOOS;
+        # vetting Linux alone left the Windows and macOS code unchecked.
+        run: make vet
+      # golangci-lint, once per GOOS for the same reason as vet: the Windows
+      # code had findings a Linux run never sees. The version is pinned like
+      # ruff and govulncheck — a new linter release brings new findings, and
+      # the gate should only move when we bump it. Config:
+      # agent/.golangci.yml.
+      - name: Lint (linux)
+        uses: golangci/golangci-lint-action@v9.3.0
+        with:
+          version: v2.14.0
+          working-directory: agent
+      - name: Lint (windows)
+        uses: golangci/golangci-lint-action@v9.3.0
+        env:
+          GOOS: windows
+        with:
+          version: v2.14.0
+          working-directory: agent
+      - name: Lint (darwin)
+        uses: golangci/golangci-lint-action@v9.3.0
+        env:
+          GOOS: darwin
+        with:
+          version: v2.14.0
+          working-directory: agent
+      - name: Test (race detector)
+        # The agent is concurrent by design (socket reader, outbox drain, job
+        # goroutines); -race catches what the plain run cannot.
+        run: go test -race ./...
       - name: Cross-compile (all targets)
         run: make release
 

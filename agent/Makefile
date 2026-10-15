@@ -12,14 +12,21 @@ ifneq ($(strip $(AGENT_UPDATE_PUBKEY)),)
 LDFLAGS += -X main.updatePublicKey=$(AGENT_UPDATE_PUBKEY)
 endif
 
-.PHONY: build vet test release clean keygen sign check-sign-env dev-manifest \
+.PHONY: build vet lint test release clean keygen sign check-sign-env dev-manifest \
         linux-amd64 linux-arm64 windows-amd64 darwin-amd64 darwin-arm64
 
 build:
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o rmm-agent .
 
+# Every target OS: a file behind a build tag is only checked for its own GOOS.
+TARGET_OSES = linux windows darwin
+
 vet:
-	go vet ./...
+	@set -e; for os in $(TARGET_OSES); do echo "go vet ($$os)"; GOOS=$$os go vet ./...; done
+
+# Config in .golangci.yml; CI pins the linter version (.github/workflows/ci.yml).
+lint:
+	@set -e; for os in $(TARGET_OSES); do echo "golangci-lint ($$os)"; GOOS=$$os golangci-lint run ./...; done
 
 test:
 	go test ./...

@@ -43,8 +43,11 @@ Ein PR ist fertig, wenn diese Blöcke grün sind — es sind exakt die CI-Gates:
 ```bash
 cd backend  && ruff check . && mypy app && pytest -v --cov=app --cov-fail-under=70
 cd frontend && npm run lint && npm test && npm run build
-cd agent    && make vet test
+cd agent    && make vet lint && go test -race ./... && make release
 ```
+
+`make vet` und `make lint` prüfen Linux, Windows und macOS; `make lint`
+braucht golangci-lint v2 (CI nutzt 2.14.0), `-race` einen C-Compiler.
 
 Dazu laufen in CI die Dependency-Audits (`pip-audit`, `npm audit`,
 `govulncheck`) als eigener Job. Lokal:

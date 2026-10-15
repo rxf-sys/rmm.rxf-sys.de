@@ -44,7 +44,7 @@ cd backend && ruff check . && mypy app && pytest -v --cov=app --cov-fail-under=7
 cd frontend && npm run build
 
 # Agent
-cd agent && make vet test && make release   # CGO off, 5 Targets
+cd agent && make vet lint && go test -race ./... && make release   # vet/lint je OS, Release: CGO off, 5 Targets
 ```
 
 ## Lokale Entwicklung
