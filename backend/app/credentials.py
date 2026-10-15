@@ -232,7 +232,9 @@ async def reveal(cred_id: int, device_id: int) -> str | None:
     try:
         return _vault().decrypt(bytes(row["secret_enc"])).decode("utf-8")
     except (InvalidToken, ValueError):
-        log.error("credentials.decrypt_failed", cred_id=cred_id)
+        # The traceback tells a swapped credentials.key (InvalidToken) from a
+        # secret that decrypts but is not UTF-8 (UnicodeDecodeError).
+        log.exception("credentials.decrypt_failed", cred_id=cred_id)
         return None
 
 

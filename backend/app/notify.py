@@ -23,10 +23,11 @@ log = structlog.get_logger("notify")
 _NTFY_KEY = "ntfy_config"
 
 
-async def get_ntfy_config(settings: Settings) -> dict[str, str]:
+async def get_ntfy_config(settings: Settings) -> dict[str, str | bool]:
     """Effective ntfy config: UI override if set, otherwise the .env values.
     The token is never returned in full — callers that need it use
-    ``_resolve`` internally."""
+    ``_resolve`` internally. ``has_token`` is a bool (the dashboard types it
+    as one), which is why the values are not all strings."""
     cfg = await _resolve(settings)
     return {
         "base": cfg["base"],

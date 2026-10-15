@@ -97,6 +97,14 @@ export function describeAudit(e: AuditEvent, names: AuditNames = {}): string {
     // --- Geräte ---
     case 'agent.enrolled':
       return `Gerät enrollt: ${str(d.hostname) ?? ''}${d.os ? ` (${d.os})` : ''}`;
+    case 'agent.job_mismatch': {
+      // Das meldende Gerät steht in device_id; der Job gehört (falls es ihn
+      // gibt) einem anderen — deshalb die Job-Nummer statt eines Namens.
+      const id = num(d.job_id);
+      const job = id === undefined ? 'Job' : `Job #${id}`;
+      const which = d.reason === 'unknown' ? 'unbekanntem' : 'fremdem';
+      return `Meldung von ${device()} zu ${which} ${job} abgewiesen`;
+    }
     case 'devices.token_created':
       return `Enrollment-Token erzeugt${d.label ? ` (${d.label})` : ''}`;
     case 'devices.token_deleted':

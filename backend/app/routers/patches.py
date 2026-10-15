@@ -10,10 +10,11 @@ require the operator role (admin or techniker). All of it is audited.
 from __future__ import annotations
 
 import json
+from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .. import device_policy, devices, jobs, patch_scan, patches
 from ..agents_ws import manager
@@ -75,9 +76,30 @@ async def scan_patches(
     return {"ok": True}
 
 
+# One patch id as agents report it: a Windows UpdateID (a GUID), an apt
+# package name or a macOS softwareupdate label — all far shorter than this.
+MAX_PATCH_ID_LEN = 128
+# An explicit selection reaches the agent in one message, and twice: as the
+# JSON string in ``command`` and as the ``patch_ids`` list. Agents read at most
+# 1 MiB per server message (maxServerMessage in agent/client.go) and lose the
+# connection on anything larger. One character of an id costs at most 18 bytes
+# there: a non-BMP character is a 12-character surrogate escape in
+# ``command``, whose backslashes send_json escapes once more (14 bytes), plus 4
+# UTF-8 bytes in ``patch_ids``. 400 ids of 128 such characters make 925,313
+# bytes; 500 would not fit. Nobody ticks 400 patches by hand, and installing
+# everything pending sends no ids at all.
+MAX_INSTALL_IDS = 400
+
+
 class InstallRequest(BaseModel):
     # Empty patch_ids + security_only=False means "all pending".
-    patch_ids: list[str] | None = None
+    patch_ids: (
+        Annotated[
+            list[Annotated[str, Field(max_length=MAX_PATCH_ID_LEN)]],
+            Field(max_length=MAX_INSTALL_IDS),
+        ]
+        | None
+    ) = None
     security_only: bool = False
 
 
@@ -95,8 +117,18 @@ async def install_patches(
     if await jobs.active_job_of_kind(device_id, "patch_install") is not None:
         raise HTTPException(status_code=409, detail="Es läuft bereits eine Installation")
 
-    ids = body.patch_ids
-    if not ids:
+    if body.patch_ids:
+        # Only what this device reported as pending goes to its agent: anything
+        # else is a typo, a stale list or another device's patch.
+        ids = list(dict.fromkeys(body.patch_ids))
+        pending = set(await patches.pending_ids(device_id))
+        unknown = [pid for pid in ids if pid not in pending]
+        if unknown:
+            more = f" und {len(unknown) - 5} weitere" if len(unknown) > 5 else ""
+            raise HTTPException(
+                status_code=422, detail=f"Nicht ausstehend: {', '.join(unknown[:5])}{more}"
+            )
+    else:
         ids = await patches.pending_ids(device_id, only_security=body.security_only)
     if not ids:
         raise HTTPException(status_code=422, detail="Keine passenden Patches ausstehend")

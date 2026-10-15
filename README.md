@@ -84,7 +84,7 @@ cd agent && make build && ./rmm-agent version
 ### Checks
 
 ```bash
-cd backend  && ruff check . && pytest -v --cov=app --cov-fail-under=70
+cd backend  && ruff check . && mypy app && pytest -v --cov=app --cov-fail-under=70
 cd frontend && npm run lint && npm test && npm run build
 cd agent    && make vet lint && go test -race ./... && make release
 ```

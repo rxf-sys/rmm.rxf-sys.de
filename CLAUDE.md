@@ -38,7 +38,7 @@ ursprüngliche Phasenplan liegt archiviert unter `docs/_archiv/RMM-PLAN.md`.
 
 ```bash
 # Backend
-cd backend && ruff check . && pytest -v --cov=app --cov-fail-under=70
+cd backend && ruff check . && mypy app && pytest -v --cov=app --cov-fail-under=70
 
 # Frontend (tsc -b strict + vite build ist das CI-Gate)
 cd frontend && npm run build
@@ -71,8 +71,8 @@ der Default `production` und die Doku antwortet lokal mit 404.
   gemacht. Neue Regeln bewusst aufnehmen.
 - **`sqlite3.Row.__contains__` prüft Werte, nicht Spaltennamen.** Für
   „Spalte vorhanden?" ist `"col" in row.keys()` richtig; Ruffs
-  SIM118-Autofix liegt hier falsch. Deshalb vier begründete
-  `# noqa: SIM118` in `devices.py` und `persons.py`.
+  SIM118-Autofix liegt hier falsch. Deshalb sechs begründete
+  `# noqa: SIM118`: fünf in `devices.py`, eins in `persons.py`.
 - **`app/main.py` ist von der Coverage ausgenommen** — neue Logik gehört
   deshalb nicht dorthin.
 - **Tests fahren den Lifespan nicht.** `tests/conftest.py` ruft alle
