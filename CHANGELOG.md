@@ -306,6 +306,20 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   zurückfällt, wenn `TRUST_PROXY_HEADERS` aus ist.
 - Das Dashboard bietet keinen kopierbaren Download-Link mit Token in der URL
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
+- **Der Agent nimmt vom Server höchstens 1 MiB pro Nachricht an.**
+  gorilla/websocket hält eine Nachricht vollständig im Speicher und setzt ab
+  Werk keine Grenze; ein defekter Server oder etwas zwischen Server und Gerät
+  konnte so jeden Agent der Flotte beliebig viel Speicher belegen lassen. Die
+  größte legitime Nachricht, ein Skript mit 64.000 Zeichen, kommt JSON-kodiert
+  auf höchstens 384.000 Byte.
+- **Der Agent prüft Patch-IDs, bevor er sie weitergibt.** Unter Windows
+  landeten sie in einem PowerShell-String in einfachen Anführungszeichen, und
+  maskiert wurde nur `'` — PowerShell beendet einen solchen String aber auch
+  an `‘`, `’`, `‚` und `‛`. Unter Linux gingen sie ohne `--` an apt, eine ID
+  wie `-o…` war also eine Option. Jetzt nimmt der Agent nur die Form an, die
+  sein eigener Scan meldet (Windows: GUID; Linux: Debian-Paketname, optional
+  mit `:arch`), und lehnt den Job sonst mit der abgelehnten ID in der Ausgabe
+  ab; vor den Paketnamen steht zusätzlich `--`.
 - **Ein Secret aus einer `##RMM-CRED##`-Zeile konnte zum Teil im Job-Log
   landen.** Der Filter zerlegte die Ausgabe mit `str.splitlines()`, das auch
   an U+2028, NEL, Seitenvorschub und ähnlichen Zeichen trennt — JSON erlaubt
