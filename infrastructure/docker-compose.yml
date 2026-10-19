@@ -21,6 +21,12 @@ services:
       # of `make sign` here (host path ./agent-releases). Read-only — the
       # backend only serves from it. See agent/install/README.md.
       - ./agent-releases:/data/agent-releases:ro
+      # Das Push-Zertifikat, nur lesend. Daraus liest das Backend den
+      # APNs-Topic für das Enrollment-Profil — er steckt als UID im Subject,
+      # und eine von Hand gepflegte Kopie wäre nach der ersten Verlängerung
+      # still falsch. Solange MDM nicht eingerichtet ist, ist das Verzeichnis
+      # leer und /api/mdm/profile antwortet mit 409.
+      - ./mdm:/mdm:ro
     # Hardening. The image already runs as uid 10001 (see backend/Dockerfile);
     # these three lines take away what the process does not need at runtime.
     # An existing rxf-rmm-data volume is root-owned and needs a ONE-TIME

@@ -10,6 +10,14 @@ const { personsMock, createDeviceMock } = vi.hoisted(() => ({
   personsMock: vi.fn<() => Promise<{ persons: Person[] }>>(),
   createDeviceMock: vi.fn<(body: NewDevice) => Promise<unknown>>(),
 }));
+const { fetchProfileMock, saveBlobMock } = vi.hoisted(() => ({
+  fetchProfileMock: vi.fn<() => Promise<Blob>>(),
+  saveBlobMock: vi.fn<(blob: Blob, name: string) => void>(),
+}));
+vi.mock('../agentDownload', async () => {
+  const actual = await vi.importActual<typeof import('../agentDownload')>('../agentDownload');
+  return { ...actual, fetchMdmProfile: () => fetchProfileMock(), saveBlob: saveBlobMock };
+});
 vi.mock('../../../api/client', async () => {
   const actual = await vi.importActual<typeof import('../../../api/client')>('../../../api/client');
   return {
@@ -146,5 +154,30 @@ describe('MobileDeviceForm', () => {
     const { user, onCancel } = show();
     await user.click(screen.getByRole('button', { name: 'Abbrechen' }));
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Enrollment-Profil', () => {
+  beforeEach(() => {
+    fetchProfileMock.mockReset();
+    saveBlobMock.mockReset();
+  });
+
+  it('lädt das Profil herunter', async () => {
+    const blob = new Blob(['<plist/>']);
+    fetchProfileMock.mockResolvedValue(blob);
+    const { user } = show();
+    await user.click(screen.getByRole('button', { name: /Enrollment-Profil/ }));
+    expect(saveBlobMock).toHaveBeenCalledWith(blob, 'vulpexa-enrollment.mobileconfig');
+  });
+
+  it('zeigt den Satz des Servers, solange die Einrichtung offen ist', async () => {
+    // Genau dafür wird von Hand geholt statt verlinkt: ein Download-Link
+    // würde diese Meldung als .mobileconfig speichern.
+    fetchProfileMock.mockRejectedValue(new Error('Push-Zertifikat nicht lesbar (/mdm/push.pem).'));
+    const { user } = show();
+    await user.click(screen.getByRole('button', { name: /Enrollment-Profil/ }));
+    expect(await screen.findByText(/Push-Zertifikat nicht lesbar/)).toBeInTheDocument();
+    expect(saveBlobMock).not.toHaveBeenCalled();
   });
 });

@@ -6,6 +6,7 @@ import { IconCheck } from '../../icons';
 import type { NewDevice } from '../../types';
 import { ErrorNote } from '../../ui';
 import { notify } from '../../ui/toast';
+import { MDM_PROFILE_FILE_NAME, fetchMdmProfile, saveBlob } from './agentDownload';
 import { DEVICE_LIMITS, MOBILE_OS_OPTIONS, PERSON_PICKER_KEY, enrollErrorText } from './enrollText';
 
 interface Props {
@@ -38,6 +39,8 @@ export function MobileDeviceForm({ onCreated, onCancel }: Props) {
   const [missingName, setMissingName] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileBusy, setProfileBusy] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   const persons = useQuery({
@@ -89,6 +92,23 @@ export function MobileDeviceForm({ onCreated, onCancel }: Props) {
       setError(enrollErrorText(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Das Enrollment-Profil meldet ein iPhone bei der Verwaltung an. Es ist
+  // für alle Geräte dasselbe und erscheint hier, weil hier steht, wer es
+  // gerade braucht. Solange Push-Zertifikat oder Challenge fehlen, sagt der
+  // Server in einem Satz, welcher Schritt offen ist.
+  const downloadProfile = async () => {
+    if (profileBusy) return;
+    setProfileBusy(true);
+    setProfileError(null);
+    try {
+      saveBlob(await fetchMdmProfile(), MDM_PROFILE_FILE_NAME);
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : 'Profil nicht verfügbar');
+    } finally {
+      setProfileBusy(false);
     }
   };
 
@@ -254,6 +274,24 @@ export function MobileDeviceForm({ onCreated, onCancel }: Props) {
           <span>„{done}“ angelegt. Weitere Geräte lassen sich direkt erfassen.</span>
         </p>
       )}
+
+      <div className="field">
+        <span className="field-label">Verwaltung (optional)</span>
+        <button
+          type="button"
+          className="btn"
+          style={{ alignSelf: 'flex-start' }}
+          onClick={() => void downloadProfile()}
+          aria-disabled={profileBusy || undefined}
+        >
+          {profileBusy ? 'Wird erzeugt …' : 'Enrollment-Profil herunterladen'}
+        </button>
+        <span className="field-hint">
+          Auf dem Telefon öffnen und installieren, um es fernverwalten zu können. Dasselbe Profil gilt für jedes Gerät; es
+          lässt sich auf dem Telefon jederzeit wieder entfernen.
+        </span>
+        {profileError && <ErrorNote error={profileError} />}
+      </div>
 
       <div className="modal-actions">
         <button type="button" className="btn" onClick={onCancel}>

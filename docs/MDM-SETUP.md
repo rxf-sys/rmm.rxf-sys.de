@@ -23,10 +23,10 @@ NanoMDM ein **Push-Zertifikat**, das nur Apple ausstellt — das ist der
 ganze Aufwand unten. **Caddy** entscheidet, was von außen erreichbar ist:
 `/mdm` und `/checkin` ja, die Verwaltungs-API `/v1/*` niemals.
 
-Dazu kommt ein **SCEP-Server**, der jedem Gerät sein Identitätszertifikat
-ausstellt (Teil 4) — er läuft im selben Profil. Was danach noch fehlt, ist
-das **Enrollment-Profil**, das die Geräte überhaupt erst zu diesem Server
-schickt (Teil 6).
+Dazu kommen ein **SCEP-Server**, der jedem Gerät sein Identitätszertifikat
+ausstellt (Teil 4), und das **Enrollment-Profil**, das die Geräte überhaupt
+erst zu diesem Server schickt (Teil 6). Beides ist da; was fehlt, ist das
+Push-Zertifikat von Apple — und das kann nur der Betreiber besorgen.
 
 ---
 
@@ -121,12 +121,20 @@ ist, was gesichert werden muss. Das Verzeichnis ist in `.gitignore`.
 ```bash
 cd /opt/rxf-rmm/infrastructure
 mkdir -p mdm/db
-chmod 700 mdm
+chmod 755 mdm
 
 cp ~/mdm-cert/MDM_*_Certificate.pem  mdm/push.pem
 cp ~/mdm-cert/mdmcert.download.push.key  mdm/push.key
-chmod 600 mdm/push.pem mdm/push.key
+chmod 644 mdm/push.pem        # Zertifikat: öffentlich
+chmod 600 mdm/push.key        # Schlüssel: nur root
 ```
+
+Die Rechte sind Absicht. Das Verzeichnis wird read-only auch in den
+Backend-Container gemountet, und der läuft unprivilegiert als uid 10001 —
+mit `chmod 700` auf dem Verzeichnis käme er an das Zertifikat nicht heran
+und `/api/mdm/profile` antwortete dauerhaft mit „nicht lesbar". Ein
+Zertifikat ist öffentlich; geheim ist der Schlüssel daneben, und der bleibt
+es.
 
 Dazu in `infrastructure/.env`:
 
@@ -183,8 +191,8 @@ openssl x509 -in scep-depot/ca.pem -noout -subject -enddate
 — das Verzeichnis `mdm/` wird in den NanoMDM-Container gemountet:
 
 ```bash
-mkdir -p mdm/db && chmod 700 mdm
-cp scep-depot/ca.pem mdm/ca.pem
+mkdir -p mdm/db && chmod 755 mdm
+cp scep-depot/ca.pem mdm/ca.pem && chmod 644 mdm/ca.pem
 ```
 
 **Challenge setzen.** In `infrastructure/.env`:
@@ -251,26 +259,48 @@ curl -si https://rmm.rxf-sys.de/v1/pushcert      # muss 404 sein
 
 ---
 
-## Teil 6 — Was dann noch fehlt
+## Teil 6 — Das Enrollment-Profil
 
-Ein registriertes Gerät braucht ein **Enrollment-Profil**: ein
-`.mobileconfig`, das auf `https://rmm.rxf-sys.de/mdm` zeigt, die SCEP-Payload
-enthält und — wichtig für diesen Aufbau — `SignMessage = true` setzt. Damit
-schickt das Gerät sein Identitätszertifikat als `Mdm-Signature`-Header
-statt über mTLS. Das ist kein Detail, sondern der Grund für diesen Aufbau:
-TLS-Client-Zertifikate überleben den Cloudflare-Tunnel nicht, der Header
-schon.
+Ein Telefon kommt nicht von selbst auf die Idee, sich zu melden. Es braucht
+ein `.mobileconfig`: darin steht, wo es sein Identitätszertifikat holt
+(SCEP), wohin es sich danach meldet (NanoMDM) und unter welchem
+APNs-Topic Apple es aufwecken soll.
 
-Dafür darf `NANOMDM_CERT_HEADER` **nicht** gesetzt sein — auch nicht auf
-`Mdm-Signature`. NanoMDM entscheidet umgekehrt, als der Name nahelegt: mit
-gesetztem `-cert-header` erwartet es ein PEM-Zertifikat in diesem Header,
-und nur mit leerem Flag prüft es die CMS-Signatur. Das Compose-File lässt
-die Variable deshalb bewusst weg.
+Das erzeugt Vulpexa selbst. Im Dashboard unter **Gerät hinzufügen →
+Telefon oder Tablet** steht der Knopf **„Enrollment-Profil
+herunterladen"**; derselbe Inhalt kommt aus
+`GET /api/mdm/profile` (Operator-Rolle). Es ist **ein Profil für alle**
+Geräte — welches Telefon dahintersteckt, klärt die Registrierung selbst.
 
-Dieses Profil zu erzeugen und die Kommandos aus dem Dashboard
-abzuschicken — abgestuft nach Besitzverhältnis, auf einem Privatgerät
-niemals Komplett-Löschen — ist der Code-Teil von Etappe 1 und steht in
-[`ROADMAP.md`](ROADMAP.md).
+Die Datei auf das Telefon bringen (Mail an sich selbst, AirDrop,
+Download im Safari) und in den Einstellungen installieren. Dabei holt sich
+das Gerät sein Zertifikat beim SCEP-Dienst und meldet sich anschließend
+bei NanoMDM.
+
+Drei Dinge, die in diesem Profil absichtlich so stehen:
+
+- **`SignMessage = true`.** Das Gerät legt seine Identität als signierte
+  Nachricht in den `Mdm-Signature`-Header statt als TLS-Client-Zertifikat.
+  Nur deshalb funktioniert der Aufbau hinter dem Cloudflare-Tunnel.
+- **Das Profil ist entfernbar** (`PayloadRemovalDisallowed = false`).
+  Überwiegend Privatgeräte: ein Profil, das sich nicht löschen lässt, wäre
+  auf fremder Hardware das falsche Signal — und ohne Supervision ohnehin
+  nicht durchsetzbar.
+- **`AccessRights` umfasst den vollen Satz.** Ein Profil für alle muss den
+  Rahmen aller Besitzverhältnisse abdecken. Die Abstufung — auf einem
+  Privatgerät niemals Komplett-Löschen — setzt Vulpexa serverseitig durch,
+  nicht das Gerät. Wer die Grenze auf dem Gerät selbst ziehen will, braucht
+  Profile je Besitzverhältnis; das ist bewusst nicht gebaut.
+
+Beim Installieren zeigt iOS **„Nicht überprüft"** in Rot. Das ist kein
+Fehler: das Profil ist nicht signiert. Signieren würde ein weiteres
+Zertifikat erfordern (ein S/MIME- oder Code-Signing-Zertifikat), das mit
+der Verwaltung selbst nichts zu tun hat — für eine Handvoll Geräte, die man
+selbst installiert, ist der Hinweis zumutbar. Wer ihn loswerden will,
+signiert die Datei nachträglich mit `openssl smime -sign`.
+
+Solange Push-Zertifikat oder Challenge fehlen, antwortet der Endpunkt mit
+409 und einem Satz, der sagt, welcher Schritt offen ist.
 
 ---
 
@@ -290,6 +320,7 @@ derselbe; das neue `.pem` wie oben hochladen.
 | Symptom | Wahrscheinliche Ursache |
 |---|---|
 | `curl http://127.0.0.1:9000/version` im LXC schlägt fehl | Das Profil läuft nicht (`docker compose --profile mdm ps`) |
+| `/api/mdm/profile` meldet „Push-Zertifikat nicht lesbar", obwohl die Datei da ist | Rechte: `chmod 755 mdm` und `chmod 644 mdm/push.pem`. Das Backend liest sie als uid 10001, nicht als root |
 | SCEP-Container startet nicht oder schreibt „permission denied" auf `/depot` | Das Depot gehört nicht der uid 10001: `chown -R 10001:10001 scep-depot` |
 | Gerät bekommt beim Registrieren kein Zertifikat | Challenge im Profil stimmt nicht mit `SCEP_CHALLENGE_PASSWORD` überein |
 | Container startet nicht, Log sagt „must supply CA cert path flag" oder nennt `/mdm/ca.pem` | `-ca` ist bei NanoMDM Pflicht: ohne lesbare `mdm/ca.pem` beendet es sich sofort. Erst die SCEP-CA erzeugen (Teil 4), dann starten |

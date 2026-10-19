@@ -27,6 +27,31 @@ export async function fetchWindowsAgent(origin: string, token: string): Promise<
   return r.blob();
 }
 
+export const MDM_PROFILE_FILE_NAME = 'vulpexa-enrollment.mobileconfig';
+
+/**
+ * Fetch the MDM enrollment profile.
+ *
+ * Same reason as the agent above: while the push certificate or the SCEP
+ * challenge is still missing, the server answers 409 with a sentence that
+ * says which step is open. A plain download link would save that sentence
+ * as a .mobileconfig and the phone would reject it without explanation.
+ */
+export async function fetchMdmProfile(): Promise<Blob> {
+  const r = await fetch('/api/mdm/profile', { credentials: 'include' });
+  if (!r.ok) {
+    let detail = `Fehler ${r.status}`;
+    try {
+      const j = (await r.json()) as { detail?: unknown };
+      if (typeof j.detail === 'string' && j.detail) detail = j.detail;
+    } catch {
+      // Not JSON (a proxy's error page): the status code is all there is.
+    }
+    throw new Error(detail);
+  }
+  return r.blob();
+}
+
 /** Hand a blob to the browser as a file download. */
 export function saveBlob(blob: Blob, fileName: string): void {
   const url = URL.createObjectURL(blob);

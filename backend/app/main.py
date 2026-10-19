@@ -38,6 +38,7 @@ from .routers import fleet as fleet_router
 from .routers import health as health_router
 from .routers import inventory as inventory_router
 from .routers import jobs as jobs_router
+from .routers import mdm as mdm_router
 from .routers import patches as patches_router
 from .routers import persons as persons_router
 from .routers import remote as remote_router
@@ -198,3 +199,4 @@ app.include_router(settings_router.router)
 app.include_router(inventory_router.router)
 app.include_router(fleet_router.router)
 app.include_router(remote_router.router)
+app.include_router(mdm_router.router)

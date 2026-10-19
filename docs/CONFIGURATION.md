@@ -178,6 +178,12 @@ Container nicht. Einrichtung: [`MDM-SETUP.md`](MDM-SETUP.md).
 | `SCEP_CA_PASS` | Passwort des CA-Schlüssels im SCEP-Depot, vergeben bei `scepserver ca -init` | leer | ja, sobald SCEP läuft | 🔴 |
 | `SCEP_CHALLENGE_PASSWORD` | Challenge, die ein Gerät beim Registrieren mitschicken muss | leer | **ja** — leer heißt: jeder bekommt ein Zertifikat | 🔴 |
 | `SCEP_CERT_VALID` | Laufzeit der ausgestellten Gerätezertifikate in Tagen | `365` | nein | ⚪ |
+| `MDM_PUSH_CERT_PATH` | Pfad des Push-Zertifikats **im Backend-Container**. Daraus liest `/api/mdm/profile` den APNs-Topic | `/mdm/push.pem` | nein | ⚪ |
+| `MDM_ORGANIZATION` | Name, der im Enrollment-Profil als Herausgeber erscheint | `rxf-sys` | nein | ⚪ |
+
+`SCEP_CHALLENGE_PASSWORD` liest auch das Backend: derselbe Wert muss im
+Enrollment-Profil stehen, den der SCEP-Dienst prüft. Deshalb ein Name für
+beide Container.
 
 Leerer `NANOMDM_API_KEY` heißt: jeder, der im Docker-Netz `nanomdm:9000`
 erreicht, kann jedes eingebuchte Telefon kommandieren. Von außen sperrt der

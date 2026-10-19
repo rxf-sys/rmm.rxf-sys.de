@@ -97,6 +97,22 @@ Feld `ownership`: `private` oder `company`. Heute Information für die
 Umfang (privat: Inventar, Sperren, Verloren-Modus, Richtlinien — Firma
 zusätzlich Komplett-Löschen und Zwangs-Updates).
 
+### MDM
+
+| Methode | Pfad | Auth | Zweck |
+|---|---|---|---|
+| GET | `/api/mdm/profile` | Operator | Das Enrollment-Profil (`.mobileconfig`) für iPhones und iPads. Ein Profil für alle Geräte |
+
+Antwortet mit **409** und einem Klartextsatz, solange die Einrichtung offen
+ist: fehlendes oder unlesbares Push-Zertifikat, Zertifikat ohne UID, oder
+leere `SCEP_CHALLENGE_PASSWORD`. Der APNs-Topic wird bei jedem Aufruf aus
+`mdm/push.pem` gelesen — er steckt dort als UID im Subject und wird
+deshalb nicht konfiguriert, damit er nach einer Verlängerung nicht still
+falsch ist.
+
+Operator-only, weil das Profil die SCEP-Challenge im Klartext enthält: wer
+sie hat, bekommt ein Gerätezertifikat und gilt damit bei NanoMDM als Gerät.
+
 ## Jobs und Skripte
 
 | Methode | Pfad | Auth | Zweck |

@@ -8,6 +8,19 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **Enrollment-Profil für iPhones und iPads.** `GET /api/mdm/profile`
+  (Operator) liefert das `.mobileconfig`, das ein Telefon bei der Verwaltung
+  anmeldet; im Dashboard hängt der Knopf dort, wo man ein Telefon erfasst.
+  Ein Profil für alle Geräte. Der APNs-Topic wird bei jedem Aufruf aus
+  `mdm/push.pem` gelesen statt konfiguriert — er steckt dort als UID im
+  Subject, und eine von Hand gepflegte Kopie wäre nach der ersten
+  Verlängerung still falsch. Fehlt das Zertifikat oder die SCEP-Challenge,
+  antwortet der Endpunkt mit 409 und einem Satz, der sagt welcher Schritt
+  offen ist, statt eine unbrauchbare Datei auszuliefern. Im Profil stehen
+  `SignMessage = true` (Identität über den signierten Header, weil
+  TLS-Client-Zertifikate den Tunnel nicht überleben) und
+  `PayloadRemovalDisallowed = false` — auf überwiegend privaten Geräten
+  muss sich das Profil entfernen lassen.
 - **SCEP-Dienst für die Geräte-Identitätszertifikate.** Ohne ihn kann sich
   kein Apple-Gerät registrieren, und NanoMDM startet ohne seine CA nicht
   einmal. Da `micromdm/scep` kein Container-Image veröffentlicht, baut

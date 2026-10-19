@@ -126,6 +126,17 @@ class Settings(BaseSettings):
     ntfy_topic: str = "rxf-rmm"
     ntfy_token: str = ""
 
+    # ---- MDM (iOS/iPadOS, Compose-Profil `mdm`) ----
+    # Das Push-Zertifikat von Apple, read-only in den Backend-Container
+    # gemountet. Daraus kommt der APNs-Topic fürs Enrollment-Profil — er
+    # steckt als UID im Subject und wird deshalb nicht konfiguriert.
+    mdm_push_cert_path: str = "/mdm/push.pem"
+    # Dieselbe Challenge, die der SCEP-Dienst prüft: derselbe Name, damit
+    # beide Container denselben Wert aus der .env lesen.
+    scep_challenge_password: str = ""
+    # Erscheint im Profil als Herausgeber.
+    mdm_organization: str = "rxf-sys"
+
 
     @field_validator("cors_origins", mode="before")
     @classmethod
