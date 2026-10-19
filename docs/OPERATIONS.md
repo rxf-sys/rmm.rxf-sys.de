@@ -315,7 +315,7 @@ erster Start, Verlängerung: [`MDM-SETUP.md`](MDM-SETUP.md).
 | Prüfung | Kommando | Erwartung |
 |---|---|---|
 | Läuft das Profil? | `docker compose --profile mdm ps` | `rxf-rmm-mdm` als `Up`, oder gar keine Zeile |
-| Server erreichbar | `curl -s https://rmm.rxf-sys.de/version` | JSON mit der NanoMDM-Version |
+| Server erreichbar | `curl -s http://127.0.0.1:9000/version` **im LXC** | JSON mit der NanoMDM-Version. Von außen geht das nicht: `/version` ist keiner MDM-Route zugeordnet und liefert die SPA |
 | Verwaltungs-API dicht | `curl -si https://rmm.rxf-sys.de/v1/pushcert` | **404** — alles andere ist ein Fehler |
 
 Die dritte Zeile ist die wichtige: `/v1/*` verschickt Pushes und Kommandos
