@@ -23,9 +23,9 @@ NanoMDM ein **Push-Zertifikat**, das nur Apple ausstellt — das ist der
 ganze Aufwand unten. **Caddy** entscheidet, was von außen erreichbar ist:
 `/mdm` und `/checkin` ja, die Verwaltungs-API `/v1/*` niemals.
 
-Was noch fehlt, ehrlich benannt: ein **SCEP-Server**, der jedem Gerät sein
-Identitätszertifikat ausstellt (siehe Teil 4), und das
-**Enrollment-Profil**, das die Geräte überhaupt erst zu diesem Server
+Dazu kommt ein **SCEP-Server**, der jedem Gerät sein Identitätszertifikat
+ausstellt (Teil 4) — er läuft im selben Profil. Was danach noch fehlt, ist
+das **Enrollment-Profil**, das die Geräte überhaupt erst zu diesem Server
 schickt (Teil 6).
 
 ---
@@ -143,23 +143,63 @@ still unter einer Flotte von Telefonen".
 
 ---
 
-## Teil 4 — Der offene Punkt: SCEP
+## Teil 4 — SCEP: die eigene CA und der Dienst
 
 Ein Apple-Gerät weist sich gegenüber dem MDM-Server mit einem eigenen
 Client-Zertifikat aus. Das stellt ein SCEP-Server aus, und NanoMDM prüft
-die Geräte gegen dessen CA (`NANOMDM_CA=/mdm/ca.pem` im Compose-File).
-**Ohne SCEP kann sich kein Gerät registrieren.**
+die Geräte gegen dessen CA (`NANOMDM_CA=/mdm/ca.pem`). **Ohne SCEP kann
+sich kein Gerät registrieren** — und ohne lesbare `ca.pem` startet NanoMDM
+nicht einmal: `-ca` ist Pflicht, fehlt die Datei, beendet es sich sofort.
+Dieser Teil kommt deshalb **vor** dem ersten Start.
 
-Dafür gibt es bewusst noch keinen Compose-Service, weil die Entscheidung
-noch aussteht: `micromdm/scep` veröffentlicht weder auf Docker Hub noch in
-der GitHub Container Registry ein fertiges Image (beides am 23.09.2026
-geprüft). Es bleiben zwei Wege — Release-Binary im LXC betreiben, oder das
-Image einmal selbst bauen (`CGO_ENABLED=0 make docker`) und in die eigene
-Registry legen. Die CA wird einmalig mit `scepserver ca -init` erzeugt; die
-entstehende `ca.pem` gehört dann als `infrastructure/mdm/ca.pem` neben das
-Push-Zertifikat.
+`micromdm/scep` veröffentlicht kein Container-Image (weder Docker Hub noch
+GHCR, geprüft am 19.10.2026). Das Compose-File baut es deshalb selbst aus
+`infrastructure/scep/Dockerfile`, mit auf `v2.3.0` gepinnter Version.
 
-Das ist der nächste Schritt, nicht dieser.
+**Depot anlegen.** Dort liegen CA-Schlüssel, Seriennummern und jedes
+ausgestellte Gerätezertifikat. Es muss der uid des Containers gehören,
+sonst startet der Dienst nicht:
+
+```bash
+cd /opt/rxf-rmm/infrastructure
+mkdir -p scep-depot && chmod 700 scep-depot && chown 10001:10001 scep-depot
+```
+
+**CA erzeugen.** Einmalig, mit demselben Image — kein Go auf dem LXC nötig.
+Das Passwort schützt den CA-Schlüssel im Depot; es gehört in den
+Passwortmanager und später als `SCEP_CA_PASS` in die `.env`:
+
+```bash
+read -rs -p 'CA-Key-Passwort: ' KP; echo
+docker compose --profile mdm run --rm scep ca -init -depot /depot \
+  -key-password "$KP" -common_name "Vulpexa MDM SCEP CA" \
+  -organization rxf-sys -country DE -years 10
+unset KP
+ls -l scep-depot            # ca.key und ca.pem
+openssl x509 -in scep-depot/ca.pem -noout -subject -enddate
+```
+
+**Die öffentliche CA zu NanoMDM kopieren.** Nur `ca.pem`, niemals `ca.key`
+— das Verzeichnis `mdm/` wird in den NanoMDM-Container gemountet:
+
+```bash
+mkdir -p mdm/db && chmod 700 mdm
+cp scep-depot/ca.pem mdm/ca.pem
+```
+
+**Challenge setzen.** In `infrastructure/.env`:
+
+```bash
+SCEP_CA_PASS=<das Passwort von oben>
+SCEP_CHALLENGE_PASSWORD=<openssl rand -hex 24>
+```
+
+Das Challenge-Passwort ist die einzige Hürde vor dem Dienst: ohne es stellt
+er jedem ein Zertifikat aus, der die URL kennt — und wer ein Zertifikat
+hat, gilt bei NanoMDM als Gerät. Es gehört später ins Enrollment-Profil.
+
+`ca.key` zusammen mit `push.key` sichern. Geht er verloren, müssen alle
+Geräte neu registriert werden.
 
 ---
 
@@ -170,8 +210,8 @@ Der Container läuft **nicht** im Normalbetrieb; er hängt am Compose-Profil
 
 ```bash
 cd /opt/rxf-rmm/infrastructure
-docker compose --profile mdm up -d nanomdm
-docker compose --profile mdm logs -f nanomdm
+docker compose --profile mdm up -d --build scep nanomdm
+docker compose --profile mdm logs --tail 30 scep nanomdm
 ```
 
 Push-Zertifikat und Schlüssel einspielen — NanoMDM nimmt beides als einen
@@ -189,7 +229,15 @@ absichtlich 404.
 Dass der Server lebt, zeigt sich deshalb auch nur von innen:
 
 ```bash
-curl -s http://127.0.0.1:9000/version            # JSON mit der NanoMDM-Version
+curl -s http://127.0.0.1:9000/version                  # JSON mit der NanoMDM-Version
+docker compose --profile mdm ps scep                   # Up, nicht Restarting
+```
+
+Und von einem anderen Rechner muss der SCEP-Pfad antworten — ohne ihn kommt
+kein Enrollment zustande:
+
+```bash
+curl -si https://rmm.rxf-sys.de/scep?operation=GetCACert | head -1
 ```
 
 `https://rmm.rxf-sys.de/version` ist **nicht** diese Prüfung: `/version` ist
@@ -242,6 +290,8 @@ derselbe; das neue `.pem` wie oben hochladen.
 | Symptom | Wahrscheinliche Ursache |
 |---|---|
 | `curl http://127.0.0.1:9000/version` im LXC schlägt fehl | Das Profil läuft nicht (`docker compose --profile mdm ps`) |
+| SCEP-Container startet nicht oder schreibt „permission denied" auf `/depot` | Das Depot gehört nicht der uid 10001: `chown -R 10001:10001 scep-depot` |
+| Gerät bekommt beim Registrieren kein Zertifikat | Challenge im Profil stimmt nicht mit `SCEP_CHALLENGE_PASSWORD` überein |
 | Container startet nicht, Log sagt „must supply CA cert path flag" oder nennt `/mdm/ca.pem` | `-ca` ist bei NanoMDM Pflicht: ohne lesbare `mdm/ca.pem` beendet es sich sofort. Erst die SCEP-CA erzeugen (Teil 4), dann starten |
 | `-decrypt` meldet „error decoding hex" | Die `.p7` ist Hex-Text und verträgt kein abschließendes Zeilenende: `tr -d '\r\n \t' < datei.p7 > datei.hex` und die bereinigte Datei verwenden |
 | Geräte melden sich nie | Push-Zertifikat nicht hochgeladen, oder abgelaufen |

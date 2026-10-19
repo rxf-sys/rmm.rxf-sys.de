@@ -7,6 +7,20 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Hinzugefügt
+- **SCEP-Dienst für die Geräte-Identitätszertifikate.** Ohne ihn kann sich
+  kein Apple-Gerät registrieren, und NanoMDM startet ohne seine CA nicht
+  einmal. Da `micromdm/scep` kein Container-Image veröffentlicht, baut
+  `infrastructure/scep/Dockerfile` es selbst, auf `v2.3.0` gepinnt und
+  unprivilegiert. Der Service hängt am selben Compose-Profil `mdm` und
+  startet ebenso wenig von allein; Caddy reicht `/scep` durch, weil das
+  Gerät diesen Pfad beim Registrieren braucht. Die CA wird einmalig mit
+  demselben Image erzeugt (`docker compose --profile mdm run --rm scep ca
+  -init`), das Depot ist gitignored. `SCEP_CHALLENGE_PASSWORD` ist die
+  einzige Hürde vor dem Dienst — leer heißt: jeder, der die URL kennt,
+  bekommt ein Zertifikat und gilt damit bei NanoMDM als Gerät.
+  `docs/MDM-SETUP.md` Teil 4 führt durch Depot, CA und Challenge.
+
 ### Behoben
 - **MDM: `NANOMDM_CERT_HEADER` wieder entfernt.** Die Variable war auf
   `Mdm-Signature` gesetzt, in der Annahme, damit den Header zu benennen, über

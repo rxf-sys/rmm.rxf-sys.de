@@ -175,6 +175,9 @@ Container nicht. Einrichtung: [`MDM-SETUP.md`](MDM-SETUP.md).
 |---|---|---|---|---|
 | `NANOMDM_TAG` | Image-Tag von `ghcr.io/micromdm/nanomdm`. Das Projekt veröffentlicht keine Versions-Tags, nur `main` und `sha-<commit>` | `main` | nein, aber ein `sha-`-Tag gehört gepinnt | ⚪ |
 | `NANOMDM_API_KEY` | Passwort für die Verwaltungs-API (`/v1/*`: Push, Kommandos, Zertifikats-Upload), Benutzername ist `nanomdm` | leer | **ja, bevor das Profil startet** | 🔴 |
+| `SCEP_CA_PASS` | Passwort des CA-Schlüssels im SCEP-Depot, vergeben bei `scepserver ca -init` | leer | ja, sobald SCEP läuft | 🔴 |
+| `SCEP_CHALLENGE_PASSWORD` | Challenge, die ein Gerät beim Registrieren mitschicken muss | leer | **ja** — leer heißt: jeder bekommt ein Zertifikat | 🔴 |
+| `SCEP_CERT_VALID` | Laufzeit der ausgestellten Gerätezertifikate in Tagen | `365` | nein | ⚪ |
 
 Leerer `NANOMDM_API_KEY` heißt: jeder, der im Docker-Netz `nanomdm:9000`
 erreicht, kann jedes eingebuchte Telefon kommandieren. Von außen sperrt der

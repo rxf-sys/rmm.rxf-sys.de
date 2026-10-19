@@ -145,6 +145,52 @@ services:
     networks:
       - rmm
 
+  # --- SCEP für die Geräte-Identitätszertifikate (Etappe 1) ----------------
+  # Gehört zum selben Profil wie NanoMDM und startet ebenso wenig von selbst.
+  # Ohne diesen Dienst kann sich kein Apple-Gerät registrieren: es holt sich
+  # hier das Client-Zertifikat, mit dem es sich danach bei NanoMDM ausweist.
+  #
+  # Die CA wird einmalig mit demselben Image erzeugt, bevor irgendetwas
+  # startet — NanoMDM beendet sich ohne lesbare ca.pem sofort:
+  #
+  #   docker compose --profile mdm run --rm scep ca -init -depot /depot \
+  #     -common_name "Vulpexa MDM SCEP CA" -organization rxf-sys -country DE
+  #
+  # Schritt für Schritt: docs/MDM-SETUP.md, Teil 4.
+  scep:
+    profiles: ["mdm"]
+    build:
+      context: ./scep
+    image: rxf-sys/rmm-scep:latest
+    container_name: rxf-rmm-scep
+    restart: unless-stopped
+    environment:
+      # scepserver liest jedes Flag auch aus der Umgebung.
+      SCEP_FILE_DEPOT: "/depot"
+      SCEP_HTTP_LISTEN_PORT: "8080"
+      # Passwort des CA-Schlüssels im Depot (bei `ca -init` vergeben).
+      SCEP_CA_PASS: ${SCEP_CA_PASS:-}
+      # Ohne Challenge stellt der Dienst JEDEM ein Zertifikat aus, der die
+      # URL kennt — und wer ein Zertifikat hat, gilt bei NanoMDM als Gerät.
+      # Der Wert gehört ins Enrollment-Profil und in .env, nicht hierher.
+      SCEP_CHALLENGE_PASSWORD: ${SCEP_CHALLENGE_PASSWORD:-}
+      # Laufzeit der ausgestellten Gerätezertifikate in Tagen; erneuert wird
+      # ab 14 Tage vor Ablauf (Standard des Dienstes).
+      SCEP_CERT_VALID: ${SCEP_CERT_VALID:-365}
+      SCEP_LOG_JSON: "true"
+    expose:
+      - "8080"
+    volumes:
+      # CA-Schlüssel, ausgestellte Zertifikate, Seriennummern. Muss der uid
+      # 10001 des Containers gehören, sonst startet er nicht.
+      - ./scep-depot:/depot
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - rmm
+
   # --- RustDesk self-hosted relay (Phase 5) --------------------------------
   # RustDesk speaks raw TCP/UDP, which cannot ride the Cloudflare tunnel — so
   # this is the one exception to "kein direkter Port nach außen". Forward on

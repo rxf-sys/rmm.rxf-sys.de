@@ -40,6 +40,14 @@
 		reverse_proxy nanomdm:9000
 	}
 
+	# SCEP: hier holt sich ein Gerät beim Registrieren sein
+	# Identitätszertifikat. Der Pfad muss von außen erreichbar sein, sonst
+	# kommt kein Enrollment zustande; wer darf, entscheidet das
+	# Challenge-Passwort aus dem Enrollment-Profil, nicht die Erreichbarkeit.
+	handle /scep* {
+		reverse_proxy scep:8080
+	}
+
 	handle {
 		@assets path /assets/*
 		header @assets Cache-Control "public, max-age=31536000, immutable"

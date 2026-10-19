@@ -171,8 +171,9 @@ docker exec rxf-rmm-backend rm -f /tmp/check.db
 
 ### Was das Backup nicht enthält
 
-- `infrastructure/mdm/` — APNs-Push-Zertifikat, dessen privater Schlüssel
-  und die SCEP-CA (nur relevant, wenn das Profil `mdm` läuft). `push.key`
+- `infrastructure/mdm/` und `infrastructure/scep-depot/` — APNs-Push-Zertifikat,
+  dessen privater Schlüssel, die SCEP-CA samt Schlüssel und die ausgestellten
+  Gerätezertifikate (nur relevant, wenn das Profil `mdm` läuft). `push.key`
   ist unersetzbar: ohne ihn ist auch das Zertifikat von Apple wertlos.
   Separat und verschlüsselt sichern, siehe [`MDM-SETUP.md`](MDM-SETUP.md).
 - `infrastructure/.env` — enthält Secrets und liegt nur im LXC. Separat und
@@ -316,6 +317,7 @@ erster Start, Verlängerung: [`MDM-SETUP.md`](MDM-SETUP.md).
 |---|---|---|
 | Läuft das Profil? | `docker compose --profile mdm ps` | `rxf-rmm-mdm` als `Up`, oder gar keine Zeile |
 | Server erreichbar | `curl -s http://127.0.0.1:9000/version` **im LXC** | JSON mit der NanoMDM-Version. Von außen geht das nicht: `/version` ist keiner MDM-Route zugeordnet und liefert die SPA |
+| SCEP erreichbar | `curl -si 'https://rmm.rxf-sys.de/scep?operation=GetCACert'` | 200 — ohne diesen Pfad kann sich kein Gerät registrieren |
 | Verwaltungs-API dicht | `curl -si https://rmm.rxf-sys.de/v1/pushcert` | **404** — alles andere ist ein Fehler |
 
 Die dritte Zeile ist die wichtige: `/v1/*` verschickt Pushes und Kommandos
@@ -324,6 +326,12 @@ beantwortet diese Pfade deshalb mit 404, und zusätzlich schützt
 `NANOMDM_API_KEY` sie innerhalb des Docker-Netzes. Wenn dort jemals etwas
 anderes als 404 zurückkommt, gehört der Tunnel zu, bevor irgendetwas
 anderes passiert.
+
+Was gesichert sein muss, liegt in zwei Verzeichnissen und in keinem
+Backup-Lauf: `infrastructure/mdm/` (Push-Zertifikat und sein Schlüssel) und
+`infrastructure/scep-depot/` (CA-Schlüssel und jedes ausgestellte
+Gerätezertifikat). Geht die SCEP-CA verloren, müssen alle Geräte neu
+registriert werden.
 
 **Das Push-Zertifikat läuft nach einem Jahr ab.** Danach bleiben die Geräte
 registriert, reagieren aber auf kein Kommando mehr — es gibt keine Meldung,
