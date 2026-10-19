@@ -30,6 +30,7 @@ from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..config import Settings, get_settings
 from ..fleet_ws import hub as fleet_hub
+from ..origin import public_base
 from ..ratelimit import SlidingWindowLimiter, client_ip
 
 log = structlog.get_logger("agent_api")
@@ -221,21 +222,6 @@ Write-Host "Fertig — das Gerät erscheint in Kürze im Dashboard."
 """
 
 
-def _public_base(request: Request) -> str:
-    """Origin the CLIENT used, reconstructed behind the Cloudflare tunnel
-    (X-Forwarded-Proto) so generated URLs point at https://rmm.rxf-sys.de,
-    not the container-internal address.
-
-    In production the public origin is always HTTPS — even when the
-    forwarded header is missing (e.g. Caddy stripped it because
-    TRUSTED_PROXY_CIDR isn't configured yet). An http:// base would break
-    enrollment: the redirect to https turns the enroll POST into a GET
-    (405)."""
-    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
-    host = request.headers.get("host") or request.url.netloc
-    if get_settings().app_env == "production":
-        proto = "https"
-    return f"{proto}://{host}"
 
 
 async def _validate_setup_token(token: str, request: Request) -> None:
@@ -283,7 +269,7 @@ async def setup_script(
     (stays out of proxy logs); query fallback kept for hand-typed URLs."""
     token = x_enroll_token or token
     await _validate_setup_token(token, request)
-    server = _public_base(request)
+    server = public_base(request)
     if platform in ("linux", "darwin"):
         body = (
             _SETUP_SH.replace("__SERVER__", shlex.quote(server))
