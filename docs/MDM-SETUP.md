@@ -184,10 +184,20 @@ cat mdm/push.pem mdm/push.key | curl -T - -u nanomdm:$NANOMDM_API_KEY \
 
 Das geht **nur aus dem LXC heraus**: der Container veröffentlicht Port 9000
 ausschließlich auf `127.0.0.1`, und von außen liefert Caddy auf `/v1/*`
-absichtlich 404. Gegenprobe, beides von einem anderen Rechner:
+absichtlich 404.
+
+Dass der Server lebt, zeigt sich deshalb auch nur von innen:
 
 ```bash
-curl -s  https://rmm.rxf-sys.de/version          # NanoMDM meldet seine Version
+curl -s http://127.0.0.1:9000/version            # JSON mit der NanoMDM-Version
+```
+
+`https://rmm.rxf-sys.de/version` ist **nicht** diese Prüfung: `/version` ist
+im Caddyfile keiner MDM-Route zugeordnet und landet im SPA-Catch-all — es
+antwortet mit 200 und der Dashboard-Seite, egal ob NanoMDM läuft. Von außen
+zählt genau eine Zeile, und zwar diese:
+
+```bash
 curl -si https://rmm.rxf-sys.de/v1/pushcert      # muss 404 sein
 ```
 
@@ -201,8 +211,13 @@ enthält und — wichtig für diesen Aufbau — `SignMessage = true` setzt. Dami
 schickt das Gerät sein Identitätszertifikat als `Mdm-Signature`-Header
 statt über mTLS. Das ist kein Detail, sondern der Grund für diesen Aufbau:
 TLS-Client-Zertifikate überleben den Cloudflare-Tunnel nicht, der Header
-schon. Der Container ist entsprechend konfiguriert
-(`NANOMDM_CERT_HEADER=Mdm-Signature`).
+schon.
+
+Dafür darf `NANOMDM_CERT_HEADER` **nicht** gesetzt sein — auch nicht auf
+`Mdm-Signature`. NanoMDM entscheidet umgekehrt, als der Name nahelegt: mit
+gesetztem `-cert-header` erwartet es ein PEM-Zertifikat in diesem Header,
+und nur mit leerem Flag prüft es die CMS-Signatur. Das Compose-File lässt
+die Variable deshalb bewusst weg.
 
 Dieses Profil zu erzeugen und die Kommandos aus dem Dashboard
 abzuschicken — abgestuft nach Besitzverhältnis, auf einem Privatgerät
@@ -226,7 +241,9 @@ derselbe; das neue `.pem` wie oben hochladen.
 
 | Symptom | Wahrscheinliche Ursache |
 |---|---|
-| `/version` von außen liefert 502 | Das Profil läuft nicht (`docker compose --profile mdm ps`) |
+| `curl http://127.0.0.1:9000/version` im LXC schlägt fehl | Das Profil läuft nicht (`docker compose --profile mdm ps`) |
+| Container startet nicht, Log sagt „must supply CA cert path flag" oder nennt `/mdm/ca.pem` | `-ca` ist bei NanoMDM Pflicht: ohne lesbare `mdm/ca.pem` beendet es sich sofort. Erst die SCEP-CA erzeugen (Teil 4), dann starten |
+| `-decrypt` meldet „error decoding hex" | Die `.p7` ist Hex-Text und verträgt kein abschließendes Zeilenende: `tr -d '\r\n \t' < datei.p7 > datei.hex` und die bereinigte Datei verwenden |
 | Geräte melden sich nie | Push-Zertifikat nicht hochgeladen, oder abgelaufen |
 | Gerät wird beim Registrieren abgewiesen | `ca.pem` fehlt oder passt nicht zur SCEP-CA |
 | `401` auf `/v1/*` im LXC | `NANOMDM_API_KEY` in `.env` weicht vom laufenden Container ab — Container neu starten |

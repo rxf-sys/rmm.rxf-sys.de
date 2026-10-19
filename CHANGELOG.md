@@ -8,6 +8,21 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Behoben
+- **MDM: `NANOMDM_CERT_HEADER` wieder entfernt.** Die Variable war auf
+  `Mdm-Signature` gesetzt, in der Annahme, damit den Header zu benennen, über
+  den sich ein Gerät ausweist. NanoMDM entscheidet genau andersherum: mit
+  gesetztem `-cert-header` erwartet es ein PEM-Zertifikat in diesem Header,
+  nur mit leerem Flag prüft es die CMS-Signatur aus `SignMessage = true`.
+  Jede Geräteanfrage wäre abgelehnt worden. Aufgefallen ist es vor dem ersten
+  Start — der Container läuft ja erst mit Push-Zertifikat.
+- **MDM-Prüfung korrigiert:** `https://rmm.rxf-sys.de/version` zeigt nicht
+  NanoMDM, sondern das Dashboard — `/version` ist im Caddyfile keiner
+  MDM-Route zugeordnet und fällt in den SPA-Catch-all. Die Prüfung lief also
+  erfolgreich ins Leere. `docs/MDM-SETUP.md` und `docs/OPERATIONS.md` fragen
+  jetzt `http://127.0.0.1:9000/version` im LXC; von außen zählt weiterhin nur
+  `/v1/pushcert` → 404. Dazu zwei neue Zeilen in der Fehlertabelle: NanoMDM
+  startet ohne lesbare `ca.pem` gar nicht (`-ca` ist Pflicht), und die
+  `.p7`-Datei aus der mdmcert-Mail verträgt kein abschließendes Zeilenende.
 - **Menüs und Aufklapp-Fenster ließen sich mit der Tastatur schlecht
   bedienen.** Beim ersten Öffnen eines Menüs („Weitere Aktionen", „Aktionen"
   der Auswahl, Zeilenmenüs) blieb der Fokus auf dem Knopf, Pfeiltasten und

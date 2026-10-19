@@ -114,10 +114,15 @@ services:
       # eines statt des anderen.
       NANOMDM_API: ${NANOMDM_API_KEY:-}
       NANOMDM_LISTEN: ":9000"
-      # Gerätezertifikate kommen als Header, nicht über mTLS: Client-
-      # Zertifikate überleben den Cloudflare-Tunnel nicht. Dazu muss das
-      # Enrollment-Profil `SignMessage = true` setzen.
-      NANOMDM_CERT_HEADER: "Mdm-Signature"
+      # Hier steht mit Absicht KEIN NANOMDM_CERT_HEADER. Das Gerät weist sich
+      # über den `Mdm-Signature`-Header aus (Enrollment-Profil mit
+      # `SignMessage = true`), weil TLS-Client-Zertifikate den
+      # Cloudflare-Tunnel nicht überleben. NanoMDM entscheidet aber genau
+      # andersherum, als der Name vermuten lässt: ist `-cert-header` gesetzt,
+      # erwartet es ein PEM-Zertifikat in diesem Header
+      # (CertExtractPEMHeaderMiddleware); nur wenn das Flag leer ist, prüft es
+      # die CMS-Signatur (CertExtractMdmSignatureMiddleware). Gesetzt auf
+      # "Mdm-Signature" würde also jede Geräteanfrage abgelehnt.
       # CA, gegen die Geräte-Identitätszertifikate geprüft werden (SCEP).
       NANOMDM_CA: "/mdm/ca.pem"
       NANOMDM_STORAGE: "filekv"
