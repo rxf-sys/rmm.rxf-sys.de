@@ -7,6 +7,27 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Hinzugefügt
+- **MDM: SCEP-Server als Compose-Service `scep`** (Profil `mdm`, startet
+  nicht mit einem normalen Deploy). `micromdm/scep` hat kein
+  Container-Image; `infrastructure/scep/` baut das gepinnte Release v2.3.0
+  und läuft als uid 10001. Das Depot mit dem CA-Schlüssel liegt in
+  `infrastructure/scep-depot/`, getrennt von `infrastructure/mdm/`, damit
+  NanoMDM `ca.key` nicht lesen kann. Der Entrypoint verweigert den Start ohne
+  `SCEP_CHALLENGE_PASSWORD` — ohne Challenge würde `scepserver` jeden CSR
+  signieren. Caddy leitet `/scep*` an den Container.
+- **MDM: `infrastructure/mdm-test-profile.sh`** schreibt ein unsigniertes
+  Enrollment-Profil für ein erstes Testgerät (SCEP-Payload, `ServerURL` und
+  `CheckInURL` auf `/mdm`, `SignMessage = true`, APNs-Topic aus
+  `mdm/push.pem`).
+
+### Geändert
+- **`docs/MDM-SETUP.md`:** Teil 4 beschreibt jetzt CA, `.env` und Start des
+  SCEP-Servers statt eines offenen Punkts; Teil 6 das Test-Profil. Neu
+  festgehalten: `/checkin` gibt es bei NanoMDM nur mit `-checkin`, beide
+  URLs im Profil zeigen auf `/mdm`. `CONFIGURATION.md`, `OPERATIONS.md`
+  (Backup, Prüfung) und `ROADMAP.md` nachgezogen.
+
 ### Sicherheit
 - Go-Toolchain für den Agent von 1.26.9 auf 1.26.10 angehoben
   (CVE-2026-111943, go.dev/issue/82345). `crypto/x509` vertraut damit einer
