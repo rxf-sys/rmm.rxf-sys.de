@@ -9,10 +9,15 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/json"
+	"encoding/pem"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type attribute struct {
@@ -135,5 +140,47 @@ func TestRunBackendDown(t *testing.T) {
 	err := run(strings.NewReader(string(makeCSR(t, "x", "c"))), func(k string) string { return env[k] })
 	if err == nil {
 		t.Fatal("expected error when backend is unreachable")
+	}
+}
+
+// writeCA writes a self-signed CA certificate with the given key usage.
+func writeCA(t *testing.T, usage x509.KeyUsage) string {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Test CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              usage,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "ca.pem")
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestCheckCA(t *testing.T) {
+	// What `scepserver ca -init` produces: iOS refuses it.
+	initCA := writeCA(t, x509.KeyUsageCertSign|x509.KeyUsageCRLSign|x509.KeyUsageDigitalSignature)
+	if err := checkCA(initCA); err == nil || !strings.Contains(err.Error(), "scep-ca-reissue.sh") {
+		t.Fatalf("expected a refusal naming the fix, got %v", err)
+	}
+	fixed := writeCA(t, x509.KeyUsageCertSign|x509.KeyUsageCRLSign|x509.KeyUsageDigitalSignature|x509.KeyUsageKeyEncipherment)
+	if err := checkCA(fixed); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkCA(filepath.Join(t.TempDir(), "missing.pem")); err == nil {
+		t.Fatal("expected an error for a missing file")
 	}
 }

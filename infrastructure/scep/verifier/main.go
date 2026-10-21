@@ -11,6 +11,9 @@
 //
 //	SCEP_VERIFY_URL    default http://backend:8080/api/mdm/scep/verify
 //	SCEP_VERIFY_TOKEN  bearer token, same value as MDM_SCEP_VERIFY_TOKEN
+//
+// "scep-csr-verifier check-ca <ca.pem>" is a second mode, run by the
+// container entrypoint before scepserver starts: see checkCA.
 package main
 
 import (
@@ -18,6 +21,7 @@ import (
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -35,10 +39,43 @@ const (
 var oidChallengePassword = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 7}
 
 func main() {
-	if err := run(os.Stdin, os.Getenv); err != nil {
+	var err error
+	if len(os.Args) == 3 && os.Args[1] == "check-ca" {
+		err = checkCA(os.Args[2])
+	} else {
+		err = run(os.Stdin, os.Getenv)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "scep-csr-verifier:", err)
 		os.Exit(1)
 	}
+}
+
+// checkCA refuses a CA certificate that Apple devices cannot use.
+//
+// iOS encrypts its SCEP request to a certificate marked for Key
+// Encipherment. `scepserver ca -init` (v2.3.0, file depot) leaves that bit
+// out, and iOS then aborts the profile installation with "The SCEP server
+// configuration is not supported" before sending anything. Better a
+// container that does not start and says why than one that looks healthy.
+func checkCA(path string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	block, _ := pem.Decode(raw)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return fmt.Errorf("%s: no PEM certificate", path)
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	if cert.KeyUsage&x509.KeyUsageKeyEncipherment == 0 {
+		return fmt.Errorf("%s lacks Key Usage \"Key Encipherment\"; iOS rejects this CA "+
+			"(\"SCEP server configuration is not supported\"). Run infrastructure/scep-ca-reissue.sh", path)
+	}
+	return nil
 }
 
 func run(stdin io.Reader, getenv func(string) string) error {

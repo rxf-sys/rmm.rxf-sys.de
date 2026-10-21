@@ -188,7 +188,24 @@ unset KP
 
 cp scep-depot/ca.pem mdm/ca.pem
 chmod 600 mdm/ca.pem
+
+# Pflicht: Key Encipherment ergänzen (gleicher Schlüssel, gleicher Name)
+bash scep-ca-reissue.sh
 ```
+
+**Warum der letzte Schritt.** `scepserver ca -init` stellt die CA nur für
+Signieren aus (Key Usage: Digital Signature, Certificate Sign, CRL Sign).
+iPhones verschlüsseln ihren Zertifikatsantrag aber an ein Zertifikat, das
+für **Key Encipherment** freigegeben ist. Fehlt das Bit, bricht iOS die
+Profilinstallation ab, noch bevor ein Antrag den Server erreicht: „Die
+SCEP-Serverkonfiguration wird nicht unterstützt". `scepclient` verschlüsselt
+ohne diese Prüfung und merkt davon nichts, deshalb fiel es beim Test mit
+`scepclient` nicht auf. `scep-ca-reissue.sh` stellt das CA-Zertifikat mit
+demselben Schlüssel, demselben Namen und demselben Key Identifier neu aus:
+Bereits ausgestellte Gerätezertifikate bleiben gültig, niemand muss neu
+registrieren. Die alten Dateien bleiben als `ca.pem.<Datum>.bak` liegen, und
+das Skript startet `scep` und `nanomdm` neu. Der `scep`-Container startet
+mit einer CA ohne dieses Bit gar nicht mehr und nennt das Skript.
 
 Das CA-Key-Passwort gehört in den Passwortmanager — und in die `.env`
 (Schritt 2), weil der Server den Schlüssel bei jedem Start lesen muss.
@@ -430,6 +447,8 @@ derselbe; das neue `.pem` wie oben hochladen.
 | Container startet nicht, Log sagt „must supply CA cert path flag" oder nennt `/mdm/ca.pem` | `-ca` ist bei NanoMDM Pflicht: ohne lesbare `mdm/ca.pem` beendet es sich sofort. Erst die SCEP-CA erzeugen (Teil 4), dann starten |
 | `-decrypt` meldet „error decoding hex" | Die `.p7` ist Hex-Text und verträgt kein abschließendes Zeilenende: `tr -d '\r\n \t' < datei.p7 > datei.hex` und die bereinigte Datei verwenden |
 | Geräte melden sich nie | Push-Zertifikat nicht hochgeladen, oder abgelaufen |
+| iPhone: „Profilinstallation fehlgeschlagen — Die SCEP-Serverkonfiguration wird nicht unterstützt" | Das CA-Zertifikat hat kein Key Encipherment (so erzeugt es `ca -init`). `bash scep-ca-reissue.sh` im LXC, danach einen neuen Link erzeugen. Prüfen: `openssl x509 -in scep-depot/ca.pem -noout -ext keyUsage` muss „Key Encipherment" zeigen |
+| `scep` beendet sich mit „… lacks Key Usage Key Encipherment …" | Absicht, siehe Zeile darüber: `bash scep-ca-reissue.sh` |
 | Gerät wird beim Registrieren abgewiesen | `mdm/ca.pem` ist nicht dieselbe Datei wie `scep-depot/ca.pem` (Fingerprints vergleichen, Teil 4), oder es wurde ein älteres Profil installiert als das zuletzt geladene (SCEP-Log: „CSR verify failed", Audit-Log: `mdm.scep_rejected`). Neuen Link erzeugen, nur das neue Profil installieren |
 | Dashboard: „MDM ist nicht eingerichtet — es fehlt: …" | Die genannten Werte fehlen in `.env` oder das Backend wurde danach nicht neu gestartet (Teil 6) |
 | Status bleibt bei „Zertifikat ausgestellt" | NanoMDM erreicht den Webhook nicht oder signiert falsch: `docker compose --profile mdm logs nanomdm` nach `webhook` durchsuchen; `MDM_WEBHOOK_SECRET` muss für `nanomdm` und `backend` derselbe sein (beide neu starten) |

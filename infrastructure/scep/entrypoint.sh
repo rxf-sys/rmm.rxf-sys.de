@@ -41,5 +41,9 @@ if [ ! -r "${SCEP_FILE_DEPOT:-depot}/ca.key" ]; then
 	echo "scep: ${SCEP_FILE_DEPOT:-depot}/ca.key missing or not readable for uid $(id -u)" >&2
 	exit 1
 fi
+# A CA without Key Encipherment is what `ca -init` creates, and iOS rejects it
+# ("SCEP server configuration is not supported"). Refuse instead of serving a
+# CA no iPhone can use; the message names the fix.
+/usr/local/bin/scep-csr-verifier check-ca "${SCEP_FILE_DEPOT:-depot}/ca.pem" || exit 1
 
 exec /usr/local/bin/scepserver "$@"
