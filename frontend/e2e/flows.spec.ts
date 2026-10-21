@@ -155,3 +155,18 @@ test('updates queued for an offline device wait for it and show up on the patche
   await page.getByRole('button', { name: 'Zurückziehen' }).click();
   await expect(page.getByRole('list', { name: 'Vorgemerkte Aktionen' }).getByText('Zurückgezogen')).toBeVisible();
 });
+
+test('a managed iPad shows MDM status, its security state and the iOS card', async ({ page }, info) => {
+  test.skip(info.project.name === 'phone', 'same data on every size');
+  await signIn(page);
+  await page.goto('/devices/12?tab=mdm');
+  await expect(page.getByRole('region', { name: 'Sicherheit' }).getByText('Gerätecode gesetzt')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Apps' }).getByText('Kochbuch')).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Löschen erlauben' })).toBeChecked();
+
+  await page.goto('/devices');
+  await expect(page.getByRole('row', { name: /iPad Küche/ }).getByText('MDM', { exact: true })).toBeVisible();
+
+  await page.goto('/patches');
+  await expect(page.getByText('iPhone und iPad')).toBeVisible();
+});

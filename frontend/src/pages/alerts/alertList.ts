@@ -53,6 +53,9 @@ const LONG_STANDING_AFTER_S: Record<string, number> = {
   offline: 24 * 3600,
   disk: 6 * 3600,
   patch_age: 0,
+  mdm_silent: 0,
+  mdm_passcode: 0,
+  mdm_identity: 0,
 };
 
 export function isLongStanding(a: Alert, now: number): boolean {

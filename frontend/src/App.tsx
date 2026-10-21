@@ -108,7 +108,7 @@ function bootSummary(devices: Device[]): BootSummary {
   let online = 0;
   for (const d of devices) {
     const k = deviceStatusKind(d);
-    if (k === 'noagent') continue;
+    if (k === 'noagent' || k === 'mdm') continue;
     mix[k] += 1;
     if (d.online) online += 1;
   }
@@ -123,6 +123,12 @@ export default function App() {
   // bekommen nur die Geräte mit Agent: ein Telefon dort zu listen hieße, eine
   // Zeile anzubieten, auf der nichts passieren kann.
   const agentDevices = useMemo(() => fleet.devices.filter(isAgent), [fleet.devices]);
+  // Phones under MDM: the patch page shows their iOS state, the phone alarm
+  // rules count them.
+  const mdmPhones = useMemo(
+    () => fleet.devices.filter((d) => !isAgent(d) && d.mdm != null && d.mdm.checked_out_at === null),
+    [fleet.devices],
+  );
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -370,6 +376,7 @@ export default function App() {
                   onRefresh={fleet.refresh}
                   isOperator={isOperator}
                   devices={agentDevices}
+                  phones={mdmPhones}
                   patchSummary={fleet.patchSummary}
                   persons={fleet.persons}
                   onOpenDevice={openDevice}
@@ -389,7 +396,7 @@ export default function App() {
             <Route
               path={PAGE_PATH.automation}
               element={
-                <AutomationPage devices={agentDevices} persons={fleet.persons} isAdmin={isAdmin} />
+                <AutomationPage devices={agentDevices} phones={mdmPhones} persons={fleet.persons} isAdmin={isAdmin} />
               }
             />
             <Route path={PAGE_PATH.docs} element={<DocsPage />} />

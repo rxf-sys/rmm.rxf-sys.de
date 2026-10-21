@@ -11,6 +11,9 @@ import type {
   Device,
   DeviceDetail,
   DeviceMdm,
+  MdmEraseRequest,
+  MdmLockRequest,
+  MdmPermission,
   PendingAction,
   QueueActionRequest,
   EnrollToken,
@@ -379,6 +382,16 @@ export const api = {
   createMdmEnrollment: (deviceId: number) =>
     post<CreatedMdmEnrollment>(`/api/devices/${deviceId}/mdm/enrollment`, {}),
   revokeMdmEnrollment: (deviceId: number) => del<{ revoked: number }>(`/api/devices/${deviceId}/mdm/enrollment`),
+  mdmRefresh: (deviceId: number) => post<{ request_types: string[] }>(`/api/devices/${deviceId}/mdm/refresh`, {}),
+  mdmLock: (deviceId: number, body: MdmLockRequest) =>
+    post<{ command_uuid: string }>(`/api/devices/${deviceId}/mdm/lock`, body),
+  mdmErase: (deviceId: number, body: MdmEraseRequest) =>
+    post<{ command_uuid: string }>(`/api/devices/${deviceId}/mdm/erase`, body),
+  mdmClearPasscode: (deviceId: number) =>
+    post<{ command_uuid: string }>(`/api/devices/${deviceId}/mdm/clear-passcode`, {}),
+  mdmRenew: (deviceId: number) => post<{ command_uuid: string }>(`/api/devices/${deviceId}/mdm/renew`, {}),
+  mdmPermissions: (deviceId: number, denied: MdmPermission[]) =>
+    send<{ denied: MdmPermission[] }>('PUT', `/api/devices/${deviceId}/mdm/permissions`, { denied }),
 
   // Jobs
   deviceJobs: (deviceId: number, signal?: AbortSignal) =>

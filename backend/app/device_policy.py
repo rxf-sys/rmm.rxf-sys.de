@@ -9,10 +9,9 @@ der Disziplin dessen, der das Dashboard bedient: die Oberfläche blendet die
 Knöpfe aus, aber ein direkter Aufruf des Endpunkts läuft trotzdem gegen
 diese Prüfung.
 
-Das Besitzverhältnis (``private`` | ``company``) ist heute Information für
-die Übersicht. Ab der MDM-Etappe entscheidet es über den Befehlsumfang —
-privat: Inventar, Sperren, Verloren-Modus, Richtlinien; Firma zusätzlich
-Komplett-Löschen und Zwangs-Updates.
+Das Besitzverhältnis (``private`` | ``company``) ist Information für die
+Übersicht. Was per MDM an einem Telefon erlaubt ist, entscheiden seine
+MDM-Befugnisse — geprüft in ``mdm_commands.deny_reason``.
 """
 
 from __future__ import annotations

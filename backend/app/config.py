@@ -147,6 +147,18 @@ class Settings(BaseSettings):
     mdm_enrollment_ttl_hours: int = Field(default=24, ge=1, le=24 * 7)
     # Organisation shown in the profile and in the certificate subject.
     mdm_organization: str = "rxf-sys"
+    # Lifetime of a device identity certificate; must match the scep
+    # container's SCEP_CERT_VALID (compose passes the same value to both).
+    # Only a fallback: a CertificateList answer tells the real date.
+    mdm_identity_valid_days: int = Field(default=365, ge=30, le=3650)
+    # Renew the identity this many days before it expires.
+    mdm_renew_before_days: int = Field(default=30, ge=7, le=180)
+    # Inventory, security state, profiles and certificates are asked for
+    # again after this many hours.
+    mdm_refresh_hours: int = Field(default=24, ge=1, le=24 * 14)
+    # Compare iOS versions with Apple's public list (gdmf.apple.com), once
+    # a day. Off = no outbound request; the patch page only lists versions.
+    mdm_ios_version_check: bool = True
 
 
     @field_validator("cors_origins", mode="before")

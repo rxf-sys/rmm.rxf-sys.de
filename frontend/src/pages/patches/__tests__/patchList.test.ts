@@ -10,6 +10,7 @@ import {
   currentPct,
   emptyText,
   formatSort,
+  iosStats,
   isForbidden,
   isOsFilter,
   isStateFilter,
@@ -254,5 +255,22 @@ describe('Texte', () => {
     expect(isForbidden(new ApiError(403, '{"detail":"nope"}'))).toBe(true);
     expect(isForbidden(new ApiError(409, ''))).toBe(false);
     expect(isForbidden(new Error('x'))).toBe(false);
+  });
+});
+
+describe('iosStats', () => {
+  const phone = (id: number, os_status: NonNullable<Device['mdm']>['os_status']) =>
+    ({
+      id,
+      hostname: `iPhone ${id}`,
+      device_class: 'mobile',
+      os: 'ios',
+      mdm: { os_status, os_version: '18.6', os_latest: '26.0.1' },
+    }) as Device;
+
+  it('counts each state and lists outdated phones first', () => {
+    const s = iosStats([phone(1, 'major_behind'), phone(2, 'current'), phone(3, 'outdated'), phone(4, 'unknown')]);
+    expect(s).toMatchObject({ total: 4, current: 1, majorBehind: 1, outdated: 1, unknown: 1 });
+    expect(s.behind.map((d) => d.id)).toEqual([3, 1]);
   });
 });

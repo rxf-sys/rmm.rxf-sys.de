@@ -133,7 +133,7 @@ export function nextSort(current: Sort, key: SortKey): Sort {
   return { key, dir: FIRST_DIR[key] };
 }
 
-const SEVERITY = { danger: 4, warn: 3, off: 2, ok: 1, noagent: 0 } as const;
+const SEVERITY = { danger: 4, warn: 3, off: 2, ok: 1, mdm: 1, noagent: 0 } as const;
 
 export interface ListContext {
   patchSummary: PatchSummary;

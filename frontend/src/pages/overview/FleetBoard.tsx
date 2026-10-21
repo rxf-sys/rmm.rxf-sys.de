@@ -2,7 +2,8 @@ import { useId, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { FilterBar } from '../../components/FilterBar';
 import { formatAgo, formatDateTime, osLabel } from '../../format';
-import { IconBell, IconClock, IconRestart, IconShield, IconShieldCheck, IconStatusDanger, IconWrench, OsIcon } from '../../icons';
+import { isAgent } from '../../deviceClass';
+import { IconBell, IconClock, IconLock, IconRestart, IconShield, IconShieldCheck, IconStatusDanger, IconWrench, OsIcon } from '../../icons';
 import { devicePath } from '../../routes';
 import type { Alert, Device, PatchSummary, Person } from '../../types';
 import { StatusBadge } from '../../ui';
@@ -47,9 +48,38 @@ function LoadBars({ tile }: { tile: Tile }) {
 }
 
 /** What is open on the device, each fact with its own icon and word. */
+type Fact = { key: string; tone: string; icon: ReactNode; text: string; title?: string };
+
+/** What a phone under MDM says about itself: passcode and iOS. */
+function phoneFacts(d: Device, facts: Fact[]) {
+  const m = d.mdm;
+  if (!m || m.checked_out_at) return;
+  if (m.passcode_present === false)
+    facts.push({ key: 'code', tone: 'warn', icon: <IconLock size={13} />, text: 'Kein Gerätecode' });
+  if (m.os_status === 'outdated')
+    facts.push({
+      key: 'ios',
+      tone: 'warn',
+      icon: <IconShield size={13} />,
+      text: 'iOS veraltet',
+      title: m.os_latest ? `${m.os_latest} verfügbar` : undefined,
+    });
+  else if (m.os_status === 'major_behind')
+    facts.push({ key: 'ios', tone: 'neutral', icon: <IconShield size={13} />, text: `iOS ${m.os_latest ?? ''} verfügbar` });
+  else if (m.os_status === 'current')
+    facts.push({ key: 'ios', tone: 'ok', icon: <IconShieldCheck size={13} />, text: 'iOS aktuell' });
+}
+
+function phoneNote(d: Device, tile: Tile): string {
+  if (!d.mdm) return 'Ohne Agent, von Hand gepflegt.';
+  if (d.mdm.checked_out_at) return 'Das MDM-Profil wurde vom Gerät entfernt.';
+  if (tile.kind === 'warn') return 'Meldet sich nicht mehr per MDM.';
+  return 'Per MDM verwaltet.';
+}
+
 function Facts({ tile, now }: { tile: Tile; now: number }) {
   const d = tile.device;
-  const facts: { key: string; tone: string; icon: ReactNode; text: string; title?: string }[] = [];
+  const facts: Fact[] = [];
   if (tile.openAlerts > 0)
     facts.push({
       key: 'alerts',
@@ -57,7 +87,9 @@ function Facts({ tile, now }: { tile: Tile; now: number }) {
       icon: <IconBell size={13} />,
       text: `${fmt.format(tile.openAlerts)} ${tile.openAlerts === 1 ? 'Alarm' : 'Alarme'}`,
     });
-  if (tile.kind !== 'noagent') {
+  if (!isAgent(d)) {
+    phoneFacts(d, facts);
+  } else {
     if (tile.security > 0)
       facts.push({
         key: 'patch',
@@ -90,10 +122,12 @@ function Facts({ tile, now }: { tile: Tile; now: number }) {
         </li>
       ))}
       <li className="fb-seen" title={d.last_seen_at ? formatDateTime(d.last_seen_at) : undefined}>
-        {tile.kind === 'noagent'
-          ? d.checked_at
-            ? `geprüft ${formatAgo(d.checked_at, now)}`
-            : 'nie geprüft'
+        {!isAgent(d)
+          ? d.mdm
+            ? `MDM ${formatAgo(d.mdm.last_seen_at, now)}`
+            : d.checked_at
+              ? `geprüft ${formatAgo(d.checked_at, now)}`
+              : 'nie geprüft'
           : d.online
             ? `gemeldet ${formatAgo(d.last_seen_at, now)}`
             : `still seit ${formatAgo(d.last_seen_at, now).replace(/^vor /, '')}`}
@@ -106,7 +140,7 @@ function DeviceTile({ tile, personName, now }: { tile: Tile; personName: string;
   const d = tile.device;
   // The version usually names the system already ("Debian GNU/Linux 12"),
   // so the generic label only stands in when it is missing.
-  const sub = [personName, tile.kind === 'noagent' ? d.model || d.os_version || osLabel(d.os) : d.os_version || osLabel(d.os)]
+  const sub = [personName, isAgent(d) ? d.os_version || osLabel(d.os) : d.model || d.os_version || osLabel(d.os)]
     .filter(Boolean)
     .join(' · ');
   return (
@@ -129,8 +163,8 @@ function DeviceTile({ tile, personName, now }: { tile: Tile; personName: string;
         <LoadBars tile={tile} />
       ) : tile.kind === 'off' ? (
         <p className="fb-note">Meldet sich nicht — keine aktuellen Messwerte.</p>
-      ) : tile.kind === 'noagent' ? (
-        <p className="fb-note">Ohne Agent, von Hand gepflegt.</p>
+      ) : !isAgent(d) ? (
+        <p className="fb-note">{phoneNote(d, tile)}</p>
       ) : null}
       <Facts tile={tile} now={now} />
     </li>
@@ -148,7 +182,7 @@ export function FleetBoard({ devices, alerts, patchSummary, persons, now }: Prop
   const [personId, setPersonId] = useState<number | null>(null);
   const [showAll, setShowAll] = useState(false);
 
-  const tiles = useMemo(() => buildTiles(devices, patchSummary, alerts), [devices, patchSummary, alerts]);
+  const tiles = useMemo(() => buildTiles(devices, patchSummary, alerts, now), [devices, patchSummary, alerts, now]);
   const personNames = useMemo(() => new Map(persons.map((p) => [p.id, p.name])), [persons]);
   const counts = useMemo(() => countByKind(filterTiles(tiles, 'alle', personId)), [tiles, personId]);
   const shown = filterTiles(tiles, filter, personId);

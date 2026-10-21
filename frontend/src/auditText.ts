@@ -33,6 +33,25 @@ export function auditNamesFrom(
   };
 }
 
+/** MDM commands and permissions in the words of the device page. */
+const MDM_REQUEST: Record<string, string> = {
+  DeviceLock: 'Sperren',
+  EraseDevice: 'Löschen',
+  ClearPasscode: 'Code entfernen',
+  InstallProfile: 'Zertifikatserneuerung',
+  DeviceInformation: 'Inventar-Abfrage',
+  SecurityInfo: 'Sicherheitsabfrage',
+  ProfileList: 'Profil-Abfrage',
+  CertificateList: 'Zertifikats-Abfrage',
+  InstalledApplicationList: 'App-Abfrage',
+};
+const MDM_PERMISSION_WORD: Record<string, string> = {
+  lock: 'Sperren',
+  erase: 'Löschen',
+  clear_passcode: 'Code entfernen',
+  apps: 'App-Liste',
+};
+
 /** Human summary of an audit row from its event type + detail blob.
  *
  * Lives outside AuditPage.tsx so that file exports components only (see
@@ -130,6 +149,51 @@ export function describeAudit(e: AuditEvent, names: AuditNames = {}): string {
     }
     case 'device.agent_logs':
       return `Agent-Logs von ${device()} abgerufen`;
+
+    // --- Apple MDM ---
+    case 'mdm.enrollment_created':
+      return `MDM-Registrierungslink für ${device()} erzeugt`;
+    case 'mdm.enrollment_revoked':
+      return `MDM-Registrierungslink für ${device()} widerrufen`;
+    case 'mdm.profile_downloaded':
+      return `MDM-Profil für ${device()} geladen${d.ip ? ` (${d.ip})` : ''}`;
+    case 'mdm.scep_rejected':
+      return `Zertifikatsanfrage${e.device_id !== null ? ` für ${device()}` : ''} abgewiesen`;
+    case 'mdm.enrolled':
+      return `${device()} per MDM registriert`;
+    case 'mdm.checked_out':
+      return `MDM-Profil auf ${device()} entfernt`;
+    case 'mdm.refresh_requested':
+      return `Inventar von ${device()} abgefragt`;
+    case 'mdm.refresh_failed':
+    case 'mdm.command_failed':
+      return `MDM-Befehl an ${device()} nicht verschickt${str(d.error) ? `: ${str(d.error)}` : ''}`;
+    case 'mdm.command_queued':
+      return `MDM-Befehl an ${device()} verschickt`;
+    case 'mdm.command_result': {
+      const what = MDM_REQUEST[str(d.request_type) ?? ''] ?? str(d.request_type) ?? 'Befehl';
+      return d.status === 'error'
+        ? `${what} auf ${device()} fehlgeschlagen${str(d.error) ? `: ${str(d.error)}` : ''}`
+        : `${what} auf ${device()} ausgeführt`;
+    }
+    case 'mdm.device_lock':
+      return `${device()} per MDM gesperrt`;
+    case 'mdm.device_erase':
+      return `Löschbefehl an ${device()} geschickt`;
+    case 'mdm.passcode_cleared':
+      return `Gerätecode von ${device()} entfernt`;
+    case 'mdm.permissions_updated': {
+      const off = Array.isArray(d.denied) ? d.denied.filter((x): x is string => typeof x === 'string') : [];
+      return off.length
+        ? `MDM-Befugnisse von ${device()} geändert — aus: ${off.map((x) => MDM_PERMISSION_WORD[x] ?? x).join(', ')}`
+        : `MDM-Befugnisse von ${device()} geändert — alles erlaubt`;
+    }
+    case 'mdm.renewal_started':
+      return `MDM-Zertifikat von ${device()} wird erneuert`;
+    case 'mdm.renewal_done':
+      return `MDM-Zertifikat von ${device()} erneuert`;
+    case 'mdm.renewal_failed':
+      return `Erneuerung des MDM-Zertifikats von ${device()} fehlgeschlagen${str(d.error) ? `: ${str(d.error)}` : ''}`;
 
     // --- Jobs und Skripte ---
     case 'job.created':

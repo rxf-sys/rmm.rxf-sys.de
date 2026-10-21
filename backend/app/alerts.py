@@ -24,7 +24,7 @@ from typing import Any
 import aiosqlite
 import structlog
 
-from . import automation, device_policy, devices, patches
+from . import automation, device_policy, devices, mdm_commands, patches
 from .audit import record as audit_record
 from .config import Settings
 from .db import connect as db_connect
@@ -186,15 +186,20 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
             await _resolve(row["id"])
             del open_alerts[(device_id, rule_type)]
 
+    mdm_state = await mdm_commands.summaries(settings)
+
     for d in fleet:
         if d["id"] in maintenance:
             continue
-        # Alle drei Regeln lesen Telemetrie, die nur ein Agent liefert:
-        # Heartbeat, Plattenbelegung, Patch-Stand. Ein Gerät ohne Agent hat
-        # davon nichts und darf davon auch nicht beurteilt werden.
-        if device_policy.class_of(d) != device_policy.CLASS_AGENT:
-            continue
         name = _device_name(d)
+        # Die drei Agent-Regeln lesen Telemetrie, die nur ein Agent liefert:
+        # Heartbeat, Plattenbelegung, Patch-Stand. Ein Telefon hat davon
+        # nichts; es wird nach dem beurteilt, was es per MDM meldet.
+        if device_policy.class_of(d) != device_policy.CLASS_AGENT:
+            state = mdm_state.get(d["id"])
+            if state is not None:
+                await _evaluate_mdm(d, name, state, rules, open_alerts, now, notify)
+            continue
 
         # --- offline rule -------------------------------------------------
         rule = automation.effective_rule(rules, d, "offline")
@@ -266,12 +271,89 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
             "SELECT id, rule, message FROM alerts WHERE notified = 0 AND resolved_at IS NULL"
         ) as cur:
             unsent = await cur.fetchall()
-    tag_by_rule = {"offline": "red_circle", "disk": "floppy_disk", "patch_age": "package"}
+    tag_by_rule = {
+        "offline": "red_circle",
+        "disk": "floppy_disk",
+        "patch_age": "package",
+        "mdm_silent": "iphone",
+        "mdm_passcode": "lock",
+        "mdm_identity": "hourglass",
+    }
     # Not `row`: that name already holds the _open_alerts() dicts above.
     for pending in unsent:
         tags = tag_by_rule.get(pending["rule"], "warning")
         if await notify("RMM: Alarm", str(pending["message"]), tags, "high"):
             await _mark_notified(int(pending["id"]))
+
+
+def _days(rule: dict[str, Any]) -> int:
+    return int(rule["threshold"] or automation.MDM_RULE_DEFAULT_DAYS.get(rule["type"], 7))
+
+
+async def _evaluate_mdm(
+    d: dict[str, Any],
+    name: str,
+    state: dict[str, Any],
+    rules: list[dict[str, Any]],
+    open_alerts: dict[tuple[int, str], dict[str, Any]],
+    now: float,
+    notify: Notifier,
+) -> None:
+    """The three phone rules, same fire/resolve shape as the agent rules."""
+    removed = bool(state.get("checked_out_at"))
+
+    # --- silent phone (or profile removed) ---------------------------------
+    rule = automation.effective_rule(rules, d, "mdm_silent")
+    if rule is not None and rule["enabled"]:
+        key = (d["id"], "mdm_silent")
+        silent_s = now - int(state["last_seen_at"])
+        if removed or silent_s > _days(rule) * 86400:
+            if key not in open_alerts:
+                message = (
+                    f"{name}: MDM-Profil wurde vom Gerät entfernt"
+                    if removed
+                    else f"{name} meldet sich seit {int(silent_s / 86400)} Tagen nicht per MDM"
+                )
+                await _fire(d["id"], "mdm_silent", message)
+        elif key in open_alerts:
+            await _resolve(open_alerts[key]["id"])
+            await notify(
+                "RMM: wieder erreichbar", f"{name} meldet sich wieder per MDM", "white_check_mark", ""
+            )
+    if removed:
+        return
+
+    # --- no passcode -------------------------------------------------------
+    rule = automation.effective_rule(rules, d, "mdm_passcode")
+    if rule is not None and rule["enabled"]:
+        key = (d["id"], "mdm_passcode")
+        present = state.get("passcode_present")
+        if present is False and key not in open_alerts:
+            await _fire(d["id"], "mdm_passcode", f"{name}: kein Gerätecode gesetzt")
+        elif present is True and key in open_alerts:
+            await _resolve(open_alerts[key]["id"])
+            await notify(
+                "RMM: Gerätecode gesetzt", f"{name} hat wieder einen Gerätecode", "white_check_mark", ""
+            )
+
+    # --- identity certificate about to expire ------------------------------
+    rule = automation.effective_rule(rules, d, "mdm_identity")
+    if rule is not None and rule["enabled"]:
+        key = (d["id"], "mdm_identity")
+        expires = state.get("identity_expires_at")
+        if expires is not None and int(expires) - now < _days(rule) * 86400:
+            if key not in open_alerts:
+                left = max(0, int((int(expires) - now) / 86400))
+                await _fire(
+                    d["id"],
+                    "mdm_identity",
+                    f"{name}: MDM-Zertifikat läuft in {left} Tagen ab — Erneuerung kam nicht durch",
+                )
+        elif key in open_alerts:
+            await _resolve(open_alerts[key]["id"])
+            await notify(
+                "RMM: Zertifikat erneuert", f"{name}: MDM-Zertifikat ist erneuert", "white_check_mark", ""
+            )
 
 
 def _row_to_dict(r: aiosqlite.Row) -> dict[str, Any]:

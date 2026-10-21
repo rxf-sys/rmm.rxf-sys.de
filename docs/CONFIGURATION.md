@@ -170,6 +170,10 @@ Namen weiter (Tabelle im Abschnitt „MDM“).
 | `MDM_SCEP_VERIFY_TOKEN` | Bearer-Token, mit dem der SCEP-CSR-Verifier fragt, ob eine Challenge gilt. Leer: keine neue Registrierung möglich | *(leer)* | **ja für MDM** | 🔴 |
 | `MDM_ENROLLMENT_TTL_HOURS` | Gültigkeit eines Registrierungslinks (1–168) | `24` | nein | 🟡 |
 | `MDM_ORGANIZATION` | Organisation im Profil und im Zertifikats-Subject | `rxf-sys` | nein | ⚪ |
+| `MDM_IDENTITY_VALID_DAYS` | Laufzeit der Geräte-Identitäten (30–3650). Compose setzt hier denselben Wert wie `SCEP_CERT_VALID`; nur Rückfall, bis das Telefon seine Zertifikatsliste geschickt hat | `365` | nein | ⚪ |
+| `MDM_RENEW_BEFORE_DAYS` | So viele Tage vor Ablauf bekommt ein Telefon automatisch ein neues Profil (7–180) | `30` | nein | ⚪ |
+| `MDM_REFRESH_HOURS` | Abstand der automatischen Inventar-Runden je Telefon (1–336) | `24` | nein | ⚪ |
+| `MDM_IOS_VERSION_CHECK` | Einmal täglich Apples öffentliche Versionsliste (`gdmf.apple.com`, Root-Zertifikate von `www.apple.com`) abrufen. `false`: keine ausgehende Verbindung, die Patch-Seite zeigt nur Versionen | `true` | nein | ⚪ |
 
 > Fehlt einer der vier Pflichtwerte, legt das Dashboard keinen
 > Registrierungslink an (503) und nennt Admins die fehlenden Namen. Ein
@@ -200,7 +204,8 @@ Container nicht. Einrichtung: [`MDM-SETUP.md`](MDM-SETUP.md).
 | `MDM_WEBHOOK_SECRET` | → nanomdm `NANOMDM_WEBHOOK_HMAC_KEY`; signiert jeden Webhook an `http://backend:8080/api/mdm/webhook` (`NANOMDM_WEBHOOK_URL`, fest im Compose-File) | leer | **ja** | 🔴 |
 | `MDM_SCEP_VERIFY_TOKEN` | → scep `SCEP_VERIFY_TOKEN`; schaltet die Einmal-Challenges ein (`scep-csr-verifier` fragt das Backend) | leer | **ja** — genau eins von beiden, siehe unten | 🔴 |
 | `SCEP_CHALLENGE_PASSWORD` | Statische Challenge, nur noch für das archivierte Test-Profil. Nur `[A-Za-z0-9]` | leer | **nein** — nicht zusammen mit `MDM_SCEP_VERIFY_TOKEN` | 🔴 |
-| `SCEP_CERT_VALID` | Laufzeit der Geräte-Identitätszertifikate in Tagen | `365` | nein | ⚪ |
+| `SCEP_CERT_VALID` | Laufzeit der Geräte-Identitätszertifikate in Tagen; geht auch als `MDM_IDENTITY_VALID_DAYS` an das Backend | `365` | nein | ⚪ |
+| `SCEP_CERT_RENEW` | Fest `0` im Compose-File, keine `.env`-Variable: `scepserver` stellt dann auch ein zweites Zertifikat mit gleichem Subject aus, solange das alte noch gilt — das braucht die Erneuerung. Was sie absichert, ist die Einmal-Challenge des Backends | `0` | — | 🟡 |
 
 Leerer `NANOMDM_API_KEY` heißt: jeder, der im Docker-Netz `nanomdm:9000`
 erreicht, kann jedes eingebuchte Telefon kommandieren. Von außen sperrt der

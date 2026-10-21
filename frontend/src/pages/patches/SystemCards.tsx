@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { AppleLogo, IconClock, IconShieldCheck, IconStatusDanger, LinuxLogo, ServerRack, WindowsLogo } from '../../icons';
-import { OS_CATEGORY_LABEL, currentLevel, currentPct, type CategoryStat, type OsCategory, type OsFilter } from './patchList';
+import { devicePath } from '../../routes';
+import { OS_CATEGORY_LABEL, currentLevel, currentPct, type CategoryStat, type IosStat, type OsCategory, type OsFilter } from './patchList';
 
 const fmt = new Intl.NumberFormat('de-DE');
 
@@ -49,6 +51,70 @@ interface Props {
   groups: CategoryStat[];
   active: OsFilter;
   onSelect: (os: OsFilter) => void;
+  /** iPhones and iPads under MDM; no card without any. */
+  ios?: IosStat;
+}
+
+/** Phones are not in the table below (no agent, no update list), so their
+ *  card is no filter: it says how current iOS is and links the phones that
+ *  are behind. */
+function IosCard({ s }: { s: IosStat }) {
+  const known = s.total - s.unknown;
+  // Newest of an older major version still gets security updates.
+  const ok = s.current + s.majorBehind;
+  const pct = currentPct(ok, known);
+  const detail = known ? `${fmt.format(ok)} von ${fmt.format(known)} aktuell` : 'noch kein Abgleich';
+  return (
+    <div className="pt-sys-card pt-sys-static">
+      <span className="pt-sys-head">
+        <span className="pt-sys-ico ios" aria-hidden>
+          <AppleLogo size={20} />
+        </span>
+        <span className="pt-sys-name">iPhone und iPad</span>
+        <span className="pt-sys-count">
+          {fmt.format(s.total)} {s.total === 1 ? 'Gerät' : 'Geräte'}
+        </span>
+      </span>
+      <span className="pt-sys-body">
+        <Ring pct={pct} label="iPhone und iPad" detail={detail} />
+        <span className="pt-sys-facts">
+          <span className="pt-sys-fact strong">{detail}</span>
+          {s.outdated > 0 ? (
+            <span className="pt-sys-fact danger">
+              <IconStatusDanger size={13} />
+              {fmt.format(s.outdated)} mit veraltetem iOS
+            </span>
+          ) : known > 0 ? (
+            <span className="pt-sys-fact ok">
+              <IconShieldCheck size={13} />
+              kein veraltetes iOS
+            </span>
+          ) : null}
+          {s.majorBehind > 0 && (
+            <span className="pt-sys-fact">{fmt.format(s.majorBehind)} können auf eine neue Hauptversion</span>
+          )}
+          {s.unknown > 0 && (
+            <span className="pt-sys-fact warn">
+              <IconClock size={13} />
+              {fmt.format(s.unknown)} ohne Abgleich
+            </span>
+          )}
+        </span>
+      </span>
+      {s.behind.length > 0 && (
+        <ul className="pt-sys-links" aria-label="iPhones und iPads mit älterem iOS">
+          {s.behind.slice(0, 5).map((d) => (
+            <li key={d.id}>
+              <Link to={`${devicePath(d.id)}?tab=mdm`}>{d.hostname}</Link>{' '}
+              <span className="muted num">
+                {d.mdm?.os_version} → {d.mdm?.os_latest}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -56,7 +122,7 @@ interface Props {
  * what is open and what is overdue. A card is also the system filter of the
  * table below — a second click lets go of it.
  */
-export function SystemCards({ groups, active, onSelect }: Props) {
+export function SystemCards({ groups, active, onSelect, ios }: Props) {
   return (
     <ul className="pt-sys">
       {groups.map((g) => {
@@ -113,6 +179,11 @@ export function SystemCards({ groups, active, onSelect }: Props) {
           </li>
         );
       })}
+      {ios && ios.total > 0 && (
+        <li>
+          <IosCard s={ios} />
+        </li>
+      )}
     </ul>
   );
 }

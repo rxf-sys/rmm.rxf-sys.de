@@ -21,6 +21,7 @@ from .. import (
     device_policy,
     devices,
     jobs,
+    mdm_commands,
     metrics,
     patch_scan,
     patches,
@@ -37,7 +38,11 @@ from ..config import Settings, get_settings
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 
-def _with_connected(device: dict[str, Any], open_actions: int | None = None) -> dict[str, Any]:
+def _with_connected(
+    device: dict[str, Any],
+    open_actions: int | None = None,
+    mdm_state: dict[int, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Attach the live-socket flag. ``online`` (heartbeat recency) drives the
     UI status; ``connected`` is the raw 'socket open right now' signal."""
     device["connected"] = manager.is_connected(device["id"])
@@ -54,6 +59,10 @@ def _with_connected(device: dict[str, Any], open_actions: int | None = None) -> 
     # only the list and the detail view count them.
     if open_actions is not None:
         device["open_actions"] = open_actions
+    # Phones: whether MDM manages them and when they last checked in — the
+    # status in list and overview comes from this, not from a heartbeat.
+    if mdm_state is not None and device_policy.class_of(device) == device_policy.CLASS_MOBILE:
+        device["mdm"] = mdm_state.get(device["id"])
     return device
 
 
@@ -68,7 +77,8 @@ async def list_devices(
     if scope is not None:
         items = [d for d in items if d["person_id"] == scope]
     queued = await pending_actions.open_counts()
-    return {"devices": [_with_connected(d, queued.get(d["id"], 0)) for d in items]}
+    mdm_state = await mdm_commands.summaries(settings)
+    return {"devices": [_with_connected(d, queued.get(d["id"], 0), mdm_state) for d in items]}
 
 
 # --- Enrollment tokens -------------------------------------------------------
@@ -181,8 +191,9 @@ async def get_device(
 ) -> dict:
     device = await _visible_or_404(device_id, user, settings)
     queued = await pending_actions.open_counts()
+    mdm_state = await mdm_commands.summaries(settings)
     return {
-        "device": _with_connected(device, queued.get(device_id, 0)),
+        "device": _with_connected(device, queued.get(device_id, 0), mdm_state),
         "inventory": await devices.get_inventory(device_id),
     }
 

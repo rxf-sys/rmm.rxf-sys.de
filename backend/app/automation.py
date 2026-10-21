@@ -84,7 +84,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
 }
 
-RULE_TYPES = ("offline", "disk", "patch_age")
+RULE_TYPES = ("offline", "disk", "patch_age", "mdm_silent", "mdm_passcode", "mdm_identity")
+#: Rule types about phones under MDM. Their thresholds are days; no
+#: threshold falls back to MDM_RULE_DEFAULT_DAYS.
+MDM_RULE_TYPES = ("mdm_silent", "mdm_passcode", "mdm_identity")
+MDM_RULE_DEFAULT_DAYS = {"mdm_silent": 7, "mdm_identity": 14}
+_MDM_SEEDED_KEY = "mdm_rules_seeded"
 SCOPE_KINDS = ("all", "tag", "person")
 
 # Higher wins when multiple rules of one type match a device.
@@ -103,6 +108,7 @@ async def ensure_schema(settings: Settings) -> None:
         await db.executescript(_SCHEMA)
         await db.commit()
     await _seed_default_rules()
+    await _seed_mdm_rules()
     log.info("automation.ready", db=_db_path)
 
 
@@ -142,6 +148,25 @@ async def _seed_default_rules() -> None:
 def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
     """Shared connection helper — see app/db.py."""
     return db_connect(_db_path)
+
+
+async def _seed_mdm_rules() -> None:
+    """Once per installation, also on upgrades: one rule per MDM type for all
+    devices. A marker rather than "none of this type exists", so a rule an
+    admin deleted stays deleted."""
+    if await _get_raw(_MDM_SEEDED_KEY):
+        return
+    now = int(time.time())
+    async with _connect() as db:
+        for rule_type in MDM_RULE_TYPES:
+            await db.execute(
+                "INSERT INTO alert_rules (type, enabled, scope_kind, scope_value, created_at)"
+                " VALUES (?, 1, 'all', '', ?)",
+                (rule_type, now),
+            )
+        await db.commit()
+    await _set_raw(_MDM_SEEDED_KEY, str(now))
+    log.info("automation.mdm_rules_seeded")
 
 
 async def _get_raw(key: str) -> str | None:

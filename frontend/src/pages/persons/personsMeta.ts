@@ -139,14 +139,14 @@ export interface Verdict {
  */
 export function personVerdict(devices: Device[], openAlerts: number): Verdict {
   if (devices.length === 0) return { kind: 'neutral', label: 'Kein Gerät' };
-  const kinds = devices.map(deviceStatusKind);
+  const kinds = devices.map((d) => deviceStatusKind(d));
   const count = (k: StatusKind) => kinds.filter((x) => x === k).length;
   const devs = (n: number) => plural(n, 'Gerät', 'Geräte');
   if (count('danger') > 0) return { kind: 'danger', label: `${devs(count('danger'))} kritisch` };
   if (openAlerts > 0) return { kind: 'warn', label: plural(openAlerts, 'offener Alarm', 'offene Alarme') };
   if (count('warn') > 0) return { kind: 'warn', label: `${devs(count('warn'))} mit Warnung` };
   if (count('off') > 0) return { kind: 'off', label: `${devs(count('off'))} offline` };
-  if (count('noagent') === devices.length) return { kind: 'neutral', label: 'Nur Geräte ohne Agent' };
+  if (count('noagent') + count('mdm') === devices.length) return { kind: 'neutral', label: 'Nur Geräte ohne Agent' };
   return { kind: 'ok', label: 'Alles in Ordnung' };
 }
 

@@ -18,11 +18,22 @@ export const RULE_META: Record<RuleType, { label: string; unit: string; defaultH
     unit: 'Tage',
     defaultHint: 'Standard: 30 Tage',
   },
+  mdm_silent: { label: 'Telefon meldet sich nicht (MDM)', unit: 'Tage', defaultHint: 'Standard: 7 Tage' },
+  // No threshold: a phone has a code or it has not.
+  mdm_passcode: { label: 'Telefon ohne Gerätecode', unit: '', defaultHint: '' },
+  mdm_identity: { label: 'MDM-Zertifikat läuft ab', unit: 'Tage', defaultHint: 'Standard: 14 Tage' },
 };
 
 /** Serverseitige Vorgaben, wenn eine Regel keinen eigenen Schwellwert hat
  *  (OFFLINE_ALERT_AFTER_S, DISK_ALERT_PCT, PATCH_ALERT_AGE_DAYS). */
-const RULE_DEFAULT: Record<RuleType, number> = { offline: 300, disk: 90, patch_age: 30 };
+const RULE_DEFAULT: Record<RuleType, number> = {
+  offline: 300,
+  disk: 90,
+  patch_age: 30,
+  mdm_silent: 7,
+  mdm_passcode: 0,
+  mdm_identity: 14,
+};
 
 /** Sekunden in eine Angabe, die ein Mensch vorliest. */
 export function humanSeconds(s: number): string {
@@ -53,6 +64,12 @@ export function ruleSentence(type: RuleType, threshold: number | null): string {
       return `Überschreitet eine Platte ${value} %${suffix}, löst das einen Alarm aus.`;
     case 'patch_age':
       return `Ist ein Sicherheitsupdate länger als ${value} Tage${suffix} offen, löst das einen Alarm aus.`;
+    case 'mdm_silent':
+      return `Meldet sich ein Telefon länger als ${value} Tage${suffix} nicht per MDM oder wird das Profil entfernt, löst das einen Alarm aus.`;
+    case 'mdm_passcode':
+      return 'Hat ein Telefon keinen Gerätecode, löst das einen Alarm aus.';
+    case 'mdm_identity':
+      return `Läuft das MDM-Zertifikat eines Telefons in weniger als ${value} Tagen${suffix} ab, ohne erneuert zu sein, löst das einen Alarm aus.`;
   }
 }
 
@@ -66,6 +83,12 @@ export function ruleShort(type: RuleType, threshold: number | null): string {
       return `Disk-Belegung ab ${value} %`;
     case 'patch_age':
       return `Sicherheitsupdates ab ${value} Tagen`;
+    case 'mdm_silent':
+      return `Telefon stumm ab ${value} Tagen`;
+    case 'mdm_passcode':
+      return 'Telefon ohne Gerätecode';
+    case 'mdm_identity':
+      return `MDM-Zertifikat ${value} Tage vor Ablauf`;
   }
 }
 

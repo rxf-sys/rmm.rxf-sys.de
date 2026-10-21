@@ -225,6 +225,24 @@ describe('describeAudit', () => {
       'automation.schedule_created',
       'automation.schedule_updated',
       'automation.schedule_deleted',
+      'mdm.enrollment_created',
+      'mdm.enrollment_revoked',
+      'mdm.profile_downloaded',
+      'mdm.scep_rejected',
+      'mdm.enrolled',
+      'mdm.checked_out',
+      'mdm.refresh_requested',
+      'mdm.refresh_failed',
+      'mdm.command_queued',
+      'mdm.command_failed',
+      'mdm.command_result',
+      'mdm.device_lock',
+      'mdm.device_erase',
+      'mdm.passcode_cleared',
+      'mdm.permissions_updated',
+      'mdm.renewal_started',
+      'mdm.renewal_done',
+      'mdm.renewal_failed',
     ];
     for (const name of events) {
       expect(describeAudit(event({ event: name, device_id: 1 }))).not.toBe(name);
@@ -247,5 +265,23 @@ describe('describeAudit: queued actions', () => {
     expect(d('action.done', { note: 'Kein Neustart nötig' })).toBe('Vormerkung auf laptop erledigt: Kein Neustart nötig');
     expect(d('action.expired', {})).toBe('Vormerkung auf laptop abgelaufen — das Gerät war nicht online');
     expect(d('action.cancelled', {})).toBe('Vormerkung auf laptop zurückgezogen');
+  });
+});
+
+describe('describeAudit: MDM', () => {
+  const at = (name: string, detail: Record<string, unknown> = {}) =>
+    describeAudit(event({ event: name, device_id: 3, detail: { hostname: 'iPhone Oma', ...detail } }));
+
+  it('names command results and permission changes in plain words', () => {
+    expect(at('mdm.command_result', { request_type: 'DeviceLock', status: 'acknowledged' })).toBe(
+      'Sperren auf iPhone Oma ausgeführt',
+    );
+    expect(at('mdm.command_result', { request_type: 'EraseDevice', status: 'error', error: 'Nicht erlaubt' })).toBe(
+      'Löschen auf iPhone Oma fehlgeschlagen: Nicht erlaubt',
+    );
+    expect(at('mdm.permissions_updated', { denied: ['erase', 'apps'] })).toBe(
+      'MDM-Befugnisse von iPhone Oma geändert — aus: Löschen, App-Liste',
+    );
+    expect(at('mdm.permissions_updated', { denied: [] })).toBe('MDM-Befugnisse von iPhone Oma geändert — alles erlaubt');
   });
 });

@@ -6,7 +6,7 @@
  */
 
 import { deviceClass } from './deviceClass';
-import type { Device, DeviceMdm, MdmEnrollmentState } from './types';
+import type { Device, DeviceMdm, IosStatus, MdmCommandStatus, MdmEnrollmentState, MdmPermission } from './types';
 import type { StatusKind } from './ui';
 
 /** AccessRights bit "Device erase" (Apple MDM payload reference). */
@@ -64,8 +64,22 @@ export const MDM_INFO_LABELS: [key: string, label: string][] = [
   ['AvailableDeviceCapacity', 'Davon frei'],
   ['BatteryLevel', 'Akku'],
   ['WiFiMAC', 'WLAN-MAC'],
+  ['PhoneNumber', 'Rufnummer'],
+  ['CurrentCarrierNetwork', 'Mobilfunknetz'],
+  ['ICCID', 'ICCID (SIM)'],
+  ['IsRoaming', 'Roaming'],
+  ['DataRoamingEnabled', 'Daten-Roaming erlaubt'],
+  ['PersonalHotspotEnabled', 'Persönlicher Hotspot'],
   ['IsSupervised', 'Betreut (Supervised)'],
+];
+
+/** Security facts from DeviceInformation that belong next to SecurityInfo. */
+export const MDM_SECURITY_INFO_LABELS: [key: string, label: string][] = [
   ['IsActivationLockEnabled', 'Aktivierungssperre'],
+  ['IsDeviceLocatorServiceEnabled', '„Wo ist?“'],
+  ['IsCloudBackupEnabled', 'iCloud-Backup'],
+  ['LastCloudBackupDate', 'Letztes iCloud-Backup'],
+  ['IsMDMLostModeEnabled', 'Verloren-Modus'],
 ];
 
 const GB = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
@@ -78,7 +92,67 @@ export function formatMdmInfo(key: string, value: string | number | boolean): st
   if (typeof value === 'number') {
     if (key === 'BatteryLevel') return value < 0 ? 'unbekannt' : PCT.format(value);
     if (key === 'DeviceCapacity' || key === 'AvailableDeviceCapacity') return `${GB.format(value)} GB`;
+    if (key === 'LastCloudBackupDate') return new Date(value * 1000).toLocaleString('de-DE');
     return String(value);
   }
   return value;
 }
+
+/** Passcode and data protection, from the SecurityInfo answer. Each row says
+ *  whether the value is the good one, so the panel can mark it. */
+export function securityRows(
+  security: Record<string, string | number | boolean>,
+): { label: string; text: string; ok: boolean | null }[] {
+  const rows: { label: string; text: string; ok: boolean | null }[] = [];
+  const yesNo = (v: unknown) => (v === true ? 'ja' : v === false ? 'nein' : 'unbekannt');
+  if ('PasscodePresent' in security)
+    rows.push({ label: 'Gerätecode gesetzt', text: yesNo(security.PasscodePresent), ok: security.PasscodePresent === true });
+  if ('PasscodeCompliant' in security)
+    rows.push({
+      label: 'Code erfüllt die Regeln',
+      text: yesNo(security.PasscodeCompliant),
+      ok: security.PasscodeCompliant === true,
+    });
+  const caps = security.HardwareEncryptionCaps;
+  if (typeof caps === 'number') {
+    // Bit 2: file-level Data Protection — on iOS on as soon as a code is set.
+    const fileLevel = (caps & 2) !== 0;
+    rows.push({ label: 'Datenschutz (Verschlüsselung)', text: fileLevel ? 'aktiv' : 'nicht aktiv', ok: fileLevel });
+  }
+  return rows;
+}
+
+export const IOS_STATUS: Record<IosStatus, { label: string; kind: StatusKind }> = {
+  current: { label: 'aktuell', kind: 'ok' },
+  major_behind: { label: 'neue Hauptversion verfügbar', kind: 'info' },
+  outdated: { label: 'veraltet', kind: 'warn' },
+  unknown: { label: 'unbekannt', kind: 'neutral' },
+};
+
+/** Commands as the history lists them. */
+export const MDM_COMMAND_LABEL: Record<string, string> = {
+  DeviceInformation: 'Geräteinformationen',
+  SecurityInfo: 'Sicherheitsstatus',
+  ProfileList: 'Profile',
+  CertificateList: 'Zertifikate',
+  InstalledApplicationList: 'App-Liste',
+  DeviceLock: 'Sperren',
+  EraseDevice: 'Löschen',
+  ClearPasscode: 'Code entfernen',
+  InstallProfile: 'Zertifikat erneuern',
+};
+
+export const MDM_COMMAND_STATUS: Record<MdmCommandStatus, { label: string; kind: StatusKind }> = {
+  queued: { label: 'Wartet auf das Gerät', kind: 'info' },
+  acknowledged: { label: 'Ausgeführt', kind: 'ok' },
+  notnow: { label: 'Gerät gesperrt, später', kind: 'info' },
+  error: { label: 'Fehler', kind: 'danger' },
+  failed: { label: 'Nicht verschickt', kind: 'danger' },
+};
+
+export const MDM_PERMISSION: Record<MdmPermission, { label: string; text: string }> = {
+  lock: { label: 'Sperren', text: 'Gerät aus der Ferne sperren, mit Nachricht auf dem Sperrbildschirm.' },
+  clear_passcode: { label: 'Code entfernen', text: 'Den Gerätecode löschen, wenn er vergessen wurde.' },
+  erase: { label: 'Löschen', text: 'Das Gerät auf Werkseinstellungen zurücksetzen. Alle Daten sind danach weg.' },
+  apps: { label: 'App-Liste', text: 'Abfragen, welche Apps installiert sind.' },
+};

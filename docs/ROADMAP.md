@@ -45,9 +45,17 @@ Verwaltungs-API, das Push-Zertifikat ist eingespielt (gültig bis
 Gerät einen Einmal-Link als QR-Code, das Profil trägt eine Challenge, die
 genau einmal gilt, und der NanoMDM-Webhook ordnet das Telefon seiner
 Karteikarte zu und füllt das Inventar (Anleitung in
-[`MDM-SETUP.md`](MDM-SETUP.md), Teil 6). Was noch fehlt: die Kommandos im
-Dashboard, Inventar auf Abruf und die Erneuerung der
-Geräte-Identitätszertifikate vor ihrem Ablauf.
+[`MDM-SETUP.md`](MDM-SETUP.md), Teil 6). Seit Oktober 2026 dazu: Sperren,
+Löschen und Code entfernen aus dem Dashboard, tägliche Inventar-Runden
+(Geräteinformationen, Sicherheitsstatus, Profile, Zertifikate, Apps), der
+iOS-Abgleich mit Apples Versionsliste, drei Alarmregeln für Telefone und die
+automatische Erneuerung der Geräte-Identitäten vor ihrem Ablauf.
+
+Offen für iOS: Konfigurationsprofile verteilen (WLAN, VPN, Mail,
+Code-Richtlinie — alles ohne Betreuung möglich) und erzwungene iOS-Updates
+über Declarative Device Management. Apples Schema erlaubt
+`softwareupdate.enforcement.specific` ab iOS 17 auch für nicht betreute
+Geräte; das gehört zuerst an einem echten Gerät ausprobiert.
 
 **Betreuung (Supervision).** Per Profil registrierte Geräte sind nicht
 betreut. Verloren-Modus (`EnableLostMode`) und erzwungene Updates
@@ -58,12 +66,12 @@ Manager (NanoDEP) der Weg zu Betreuung und Zero-Touch: Gerät einschalten,
 fertig. Bestandsgeräte kommen dorthin nur über Apple Configurator, und dabei
 werden sie gelöscht.
 
-**Befugnisse nach Besitzverhältnis.** Privat: Inventar, Sperren,
-Richtlinien (Verloren-Modus nur betreut, s. o.). Firma: zusätzlich
-Komplett-Löschen und erzwungene Updates. Das Profil eines Privatgeräts
-enthält das Löschrecht gar nicht erst. Die Grenze gehört in den Server, nicht in die Disziplin
-dessen, der das Dashboard bedient — dieselbe Stelle, die heute schon die
-agentgebundenen Befehle abweist.
+**Befugnisse je Gerät (umgesetzt).** Statt am Besitzverhältnis hängt, was
+an einem Telefon erlaubt ist, an seinen MDM-Befugnissen: Sperren, Code
+entfernen, Löschen und App-Liste lassen sich je Gerät abschalten und wieder
+einschalten. Jedes neue Profil trägt dafür alle Rechte — fehlende Rechte
+ließen sich später nur mit einer neuen Registrierung ergänzen. Die Grenze
+sitzt im Server (`app/mdm_commands.py`), nicht in der Oberfläche.
 
 **Etappe 2 — Android.** Über die Android Management API mit Arbeitsprofil,
 damit auf einem Privatgerät nur der dienstliche Teil verwaltet wird. Eigener

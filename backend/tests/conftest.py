@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import plistlib
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -13,6 +15,7 @@ from app import (
     automation,
     credentials,
     devices,
+    ios_versions,
     job_secrets,
     jobs,
     mdm,
@@ -38,6 +41,33 @@ hypothesis_settings.register_profile(
     "rmm", hypothesis_settings(), max_examples=200, deadline=None
 )
 hypothesis_settings.load_profile("rmm")
+
+# Shared by the MDM tests: a configured MDM, and NanoMDM replaced by a list
+# of the commands that would have been enqueued.
+WEBHOOK_SECRET = "hook-secret"
+VERIFY_TOKEN = "verify-token"
+
+
+@pytest.fixture
+def mdm_settings(settings: Settings) -> Settings:
+    settings.mdm_base_url = "https://rmm.example.org"
+    settings.mdm_apns_topic = "com.apple.mgmt.External.test"
+    settings.nanomdm_api_key = "api-key"
+    settings.mdm_webhook_secret = WEBHOOK_SECRET
+    settings.mdm_scep_verify_token = VERIFY_TOKEN
+    return settings
+
+
+@pytest.fixture
+def enqueued(monkeypatch) -> list[tuple[str, dict]]:
+    calls: list[tuple[str, dict]] = []
+
+    async def fake_enqueue(_settings, enrollment_id, plist, **_kw):
+        calls.append((enrollment_id, plistlib.loads(plist)))
+        return {"status": {enrollment_id: {"push_result": "ok"}}}
+
+    monkeypatch.setattr(mdm_router.nanomdm, "enqueue", fake_enqueue)
+    return calls
 
 
 @pytest.fixture
@@ -87,6 +117,7 @@ async def client(settings: Settings):
     agent_router.reset_enroll_limiter_for_tests()
     mdm_router.reset_limiter_for_tests()
     action_runner.reset_for_tests()
+    ios_versions.reset_for_tests()
     app.dependency_overrides[get_settings] = lambda: settings
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c

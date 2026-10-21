@@ -409,6 +409,15 @@ export function IconPhone({ size = 13, style }: IconProps) {
   );
 }
 
+export function IconLock({ size = 13, style }: IconProps) {
+  return (
+    <S size={size} style={style}>
+      <rect x="5" y="10.5" width="14" height="10" rx="2" />
+      <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+    </S>
+  );
+}
+
 /** The right OS mark for a device. */
 export function OsIcon({ os, size = 13, style }: { os: string } & IconProps) {
   if (os === 'windows') return <WindowsLogo size={size} style={style} />;

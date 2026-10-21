@@ -393,7 +393,8 @@
   background: var(--off-soft);
   color: var(--off-tx);
 }
-.status.info {
+.status.info,
+.status.mdm {
   background: var(--accent-soft);
   color: var(--accent-tx);
 }

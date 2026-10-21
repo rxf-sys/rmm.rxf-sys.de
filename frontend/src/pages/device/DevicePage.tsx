@@ -252,7 +252,7 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
         )}
         {tab === 'diagnostics' && <DiagnosticsTab deviceId={deviceId} connected={d.connected} />}
         {tab === 'passwords' && <PasswordsTab deviceId={deviceId} />}
-        {tab === 'mdm' && <MdmTab device={d} isAdmin={isAdmin} />}
+        {tab === 'mdm' && <MdmTab device={d} isAdmin={isAdmin} isOperator={isOperator} />}
       </div>
 
       {editing && isOperator && (
