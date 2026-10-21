@@ -9,6 +9,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from app import (
     accounts,
+    action_runner,
     alerts,
     audit,
     devices,
@@ -16,6 +17,7 @@ from app import (
     metrics,
     patch_scan,
     patches,
+    pending_actions,
     persons,
     releases,
     scripts,
@@ -44,6 +46,8 @@ def ws_client(settings: Settings):
     asyncio.run(scripts.ensure_schema(settings))
     asyncio.run(patches.ensure_schema(settings))
     asyncio.run(persons.ensure_schema(settings))
+    asyncio.run(pending_actions.ensure_schema(settings))
+    action_runner.reset_for_tests()
     manager.reset_for_tests()
     jobs.hub.reset_for_tests()
     releases.reset_for_tests(None, "")

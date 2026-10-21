@@ -81,3 +81,19 @@ def mark_requested(device_id: int, now: int | None = None) -> None:
 def forget(device_id: int) -> None:
     """Drop a deleted device's throttle entry so the dict cannot grow forever."""
     _requested.pop(device_id, None)
+
+
+# How long an install waits for the report of a scan it was asked right
+# before; past this the install goes ahead with what the server knows.
+REPORT_WAIT_S = 10 * 60
+
+
+def awaiting_report(device_id: int, last_scan_at: int, now: int | None = None) -> bool:
+    """A scan was requested a moment ago and its report is not in yet.
+
+    A device back after a week gets its daily scan on the first heartbeat;
+    an install queued for it should run on the fresh list, not on last
+    week's (see app/action_runner.py)."""
+    now = int(time.time()) if now is None else now
+    requested = _requested.get(device_id, 0)
+    return requested > last_scan_at and now - requested < REPORT_WAIT_S

@@ -7,6 +7,7 @@ from hypothesis import settings as hypothesis_settings
 
 from app import (
     accounts,
+    action_runner,
     alerts,
     audit,
     automation,
@@ -17,6 +18,7 @@ from app import (
     mdm,
     metrics,
     patches,
+    pending_actions,
     persons,
     releases,
     scripts,
@@ -71,6 +73,7 @@ async def client(settings: Settings):
     await persons.ensure_schema(settings)
     await credentials.ensure_schema(settings)
     await mdm.ensure_schema(settings)
+    await pending_actions.ensure_schema(settings)
     await audit.clear()
     jobs.hub.reset_for_tests()
     from app.agents_ws import manager as _agent_manager
@@ -83,6 +86,7 @@ async def client(settings: Settings):
     auth_router.reset_rate_limiter_for_tests()
     agent_router.reset_enroll_limiter_for_tests()
     mdm_router.reset_limiter_for_tests()
+    action_runner.reset_for_tests()
     app.dependency_overrides[get_settings] = lambda: settings
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c

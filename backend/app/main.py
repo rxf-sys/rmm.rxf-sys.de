@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import (
     accounts,
+    action_runner,
     alerts,
     audit,
     automation,
@@ -22,12 +23,14 @@ from . import (
     metrics,
     notify,
     patches,
+    pending_actions,
     persons,
     releases,
     scripts,
 )
 from .config import get_settings
 from .routers import accounts_admin as accounts_admin_router
+from .routers import actions as actions_router
 from .routers import agent as agent_router
 from .routers import alerts as alerts_router
 from .routers import audit as audit_router
@@ -78,6 +81,7 @@ async def _cleanup_loop() -> None:
             await accounts.cleanup_expired_sessions()
             await devices.cleanup_expired_enrollment_tokens()
             await metrics.aggregate_and_cleanup(_settings)
+            await action_runner.housekeeping()
             # Floor the sweep above the agent's per-job limit — the agent
             # must always get the chance to report the result itself.
             await jobs.sweep_stale(
@@ -131,6 +135,8 @@ async def lifespan(app: FastAPI):
     await credentials.ensure_schema(_settings)
     # After devices: both MDM tables reference devices(id).
     await mdm.ensure_schema(_settings)
+    # After devices and jobs: references devices(id), joins jobs.
+    await pending_actions.ensure_schema(_settings)
     # Agent release manifest (signed self-update). Best-effort — a missing
     # manifest just disables auto-update.
     releases.load(_settings)
@@ -203,3 +209,4 @@ app.include_router(inventory_router.router)
 app.include_router(fleet_router.router)
 app.include_router(remote_router.router)
 app.include_router(mdm_router.router)
+app.include_router(actions_router.router)
