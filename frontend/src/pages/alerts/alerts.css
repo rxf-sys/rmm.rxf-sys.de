@@ -1,0 +1,257 @@
+/* Alarm-Center (pages/alerts). */
+
+/* ---- Toolbar: tabs and the person filter ---- */
+.al-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+}
+.al-filters {
+  display: flex;
+  min-width: 0;
+}
+.al-person {
+  /* A long name in one option must not widen the page. */
+  width: 220px;
+  min-width: 0;
+  max-width: 100%;
+}
+.al-person.is-set {
+  border-color: var(--accent-line);
+  color: var(--accent-tx);
+}
+
+/* ---- List surface ---- */
+.al-panel {
+  /* clip, not hidden: a hidden overflow would be a scroll container and
+     stop the sticky table header from sticking to the page. */
+  overflow: clip;
+}
+.al-pad {
+  padding: var(--sp-4);
+}
+.al-none {
+  color: var(--tx-disabled);
+}
+
+/* A control that is working keeps its focus but takes no second click. */
+.al [aria-disabled='true'] {
+  cursor: progress;
+  opacity: 0.6;
+}
+.al [aria-disabled='true']:active {
+  transform: none;
+}
+
+/* ---- Shared row content ---- */
+.al-msg {
+  display: block;
+  min-width: 0;
+  color: var(--tx);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.al-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}
+.al-sub b {
+  color: var(--tx-2);
+  font-weight: 650;
+}
+.al-dev-link {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tx);
+  font-weight: 650;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.al-dev-link:hover {
+  text-decoration: underline;
+}
+.al-when {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+/* ---- Table: the shared .dt styles live in components.css; here only the
+   column widths. The message takes what is left. ---- */
+.al-table .al-c-status {
+  width: 124px;
+}
+.al-table .al-c-dev {
+  width: 180px;
+}
+.al-table .al-c-person {
+  width: 150px;
+}
+.al-table .al-c-when {
+  width: 112px;
+}
+.al-table .al-c-act {
+  width: 132px;
+  text-align: right;
+}
+.al-table th.al-c-status,
+.al-table th.al-c-msg,
+.al-table th.al-c-dev,
+.al-table th.al-c-person,
+.al-table th.al-c-when {
+  /* No sort buttons here: the order is the point of the page. The header
+     cell carries the padding a .th-sort would. */
+  height: 38px;
+  padding: 0 12px;
+}
+.al-table td {
+  vertical-align: top;
+}
+/* Line up with the first line of the message. */
+.al-table td.al-c-status {
+  padding-top: 9px;
+}
+.al-table td.al-c-act {
+  padding-top: 6px;
+}
+.al-table td.al-c-dev {
+  padding-top: 11px;
+}
+.al-table td.al-c-dev .al-dev-link {
+  display: block;
+}
+.al-table td.al-c-person {
+  padding-top: 11px;
+  overflow: hidden;
+  color: var(--tx-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.al-table td.al-c-when {
+  padding-top: 11px;
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .al-table tbody tr:hover .al-dev-link {
+    color: var(--accent-tx);
+  }
+}
+
+/* Fewer columns as the table narrows, least important first; the message
+   keeps the room. */
+@container (max-width: 860px) {
+  .al-table .al-c-person {
+    display: none;
+  }
+}
+@container (max-width: 760px) {
+  .al-table .al-c-dev {
+    width: 140px;
+  }
+}
+
+/* ---- Cards (narrow screens) ---- */
+.al-cards {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.al-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+.al-card:first-child {
+  border-top: 0;
+}
+.al-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-2);
+}
+.al-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--sp-2);
+  min-width: 0;
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+}
+.al-card-meta .al-dev-link {
+  /* A tap target of its own, not a link inside a sentence: 24 px high.
+     inline-block keeps the ellipsis working. */
+  display: inline-block;
+  max-width: 100%;
+  line-height: 24px;
+  vertical-align: bottom;
+}
+.al-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--sp-2);
+}
+
+/* ---- Confirmation for "Alle quittieren" ---- */
+.al-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  color: var(--tx-2);
+}
+.al-confirm-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  list-style: none;
+}
+.al-confirm-list li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.al-confirm-list b {
+  color: var(--tx);
+}
+.al-confirm-more {
+  color: var(--tx-3);
+}
+
+@media (max-width: 720px) {
+  .al-filters {
+    flex-basis: 100%;
+    margin: 0 calc(-1 * var(--sp-4));
+    padding: 0 var(--sp-4);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .al-person {
+    flex: 1 1 100%;
+    width: auto;
+  }
+  .al-panel {
+    margin: 0 calc(-1 * var(--sp-4));
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+  /* In thumb reach and wide enough to hit without looking. */
+  .al-card-actions .btn {
+    flex: 1;
+  }
+}

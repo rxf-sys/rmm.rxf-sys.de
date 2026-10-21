@@ -9,6 +9,22 @@ export function formatRelative(ts: number | null): string {
   return new Date(ts * 1000).toLocaleString('de-DE');
 }
 
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** Compact "how long ago" for narrow columns: never longer than a date.
+ *  Past a week the exact day matters more than the distance. */
+export function formatAgo(ts: number | null, now = Date.now() / 1000): string {
+  if (!ts) return 'nie';
+  const delta = Math.max(0, Math.floor(now - ts));
+  if (delta < 90) return 'gerade eben';
+  if (delta < 3600) return `vor ${Math.floor(delta / 60)} min`;
+  if (delta < 86400) return `vor ${Math.floor(delta / 3600)} h`;
+  if (delta < 2 * 86400) return 'gestern';
+  if (delta < 7 * 86400) return `vor ${Math.floor(delta / 86400)} Tagen`;
+  const t = new Date(ts * 1000);
+  return `${pad2(t.getDate())}.${pad2(t.getMonth() + 1)}.${t.getFullYear()}`;
+}
+
 export function formatDateTime(ts: number): string {
   return new Date(ts * 1000).toLocaleString('de-DE');
 }

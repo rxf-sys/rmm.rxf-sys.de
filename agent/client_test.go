@@ -1,6 +1,22 @@
 package main
 
-import "testing"
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
+	"runtime"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
 
 func TestWsEndpoint(t *testing.T) {
 	cases := []struct {
@@ -27,5 +43,508 @@ func TestWsEndpoint(t *testing.T) {
 		if got != c.want {
 			t.Errorf("wsEndpoint(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestDecodeCommand(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want command
+	}{
+		{"ping", `{"type":"ping"}`, command{Kind: cmdPing}},
+		{"ping ignores its payload", `{"type":"ping","payload":"anything"}`, command{Kind: cmdPing}},
+		{"patch scan", `{"type":"patch_scan"}`, command{Kind: cmdPatchScan}},
+		{"get logs", `{"type":"get_logs","id":"7"}`, command{Kind: cmdGetLogs}},
+		{
+			"shell job",
+			`{"type":"job","payload":{"job_id":42,"kind":"shell","command":"uptime","shell":"bash","timeout_s":600}}`,
+			command{Kind: cmdJob, Job: jobSpec{JobID: 42, Kind: "shell", Command: "uptime", Shell: "bash", TimeoutS: 600}},
+		},
+		{
+			"patch install",
+			`{"type":"job","payload":{"job_id":9,"kind":"patch_install","command":"[\"curl\"]","shell":"","patch_ids":["curl"]}}`,
+			command{Kind: cmdJob, Job: jobSpec{JobID: 9, Kind: "patch_install", Command: `["curl"]`, PatchIDs: []string{"curl"}}},
+		},
+		{
+			"update",
+			`{"type":"update","payload":{"version":"0.3.0","url":"/api/agent/download/linux-amd64","sha256":"ab","sig":"cd"}}`,
+			command{Kind: cmdUpdate, Update: updateSpec{Version: "0.3.0", URL: "/api/agent/download/linux-amd64", SHA256: "ab", Sig: "cd"}},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := decodeCommand([]byte(c.in))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(got, c.want) {
+				t.Errorf("got %+v, want %+v", got, c.want)
+			}
+		})
+	}
+}
+
+func TestDecodeCommandRejects(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		unknown bool // a readable message of a type this agent does not know
+	}{
+		{"not JSON", `ping`, false},
+		{"truncated", `{"type":"job","payload":{"job_id":1`, false},
+		{"array instead of object", `[{"type":"ping"}]`, false},
+		{"type is not a string", `{"type":7}`, false},
+		{"job without payload", `{"type":"job"}`, false},
+		{"job payload is a string", `{"type":"job","payload":"rm -rf /"}`, false},
+		{"job id is not a number", `{"type":"job","payload":{"job_id":"1"}}`, false},
+		{"timeout overflows int64", `{"type":"job","payload":{"timeout_s":1e30}}`, false},
+		{"update without payload", `{"type":"update"}`, false},
+		{"update fields of the wrong type", `{"type":"update","payload":{"version":1}}`, false},
+		{"unknown type", `{"type":"reboot_now"}`, true},
+		{"empty type", `{}`, true},
+		{"null", `null`, true},
+		{"type differs in case", `{"type":"PING"}`, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := decodeCommand([]byte(c.in))
+			if err == nil {
+				t.Fatalf("accepted as %+v", got)
+			}
+			if got.Kind != 0 {
+				t.Errorf("a rejected message must not carry a command, got %+v", got)
+			}
+			if errors.Is(err, errUnknownMessage) != c.unknown {
+				t.Errorf("errors.Is(err, errUnknownMessage) = %v, want %v (err: %v)", !c.unknown, c.unknown, err)
+			}
+		})
+	}
+}
+
+// The read limit has to admit the largest job the backend lets through: a
+// 64,000-character script made of characters that JSON escapes to six bytes
+// each. Go's encoder escapes control characters exactly as Starlette does.
+func TestWorstCaseScriptFitsTheReadLimit(t *testing.T) {
+	const backendScriptLimit = 64_000 // max_length in backend/app/routers/jobs.py and scripts.py
+	spec := jobSpec{
+		JobID:    1 << 53,
+		Kind:     "script",
+		Command:  strings.Repeat("\x01", backendScriptLimit),
+		Shell:    "powershell",
+		TimeoutS: int64(maxJobTimeout / time.Second),
+	}
+	payload, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(message{Type: "job", Payload: payload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) < 6*backendScriptLimit {
+		t.Fatalf("encoding is not the worst case any more: %d bytes", len(raw))
+	}
+	if len(raw) > maxServerMessage {
+		t.Fatalf("a legitimate %d-byte job exceeds maxServerMessage (%d)", len(raw), maxServerMessage)
+	}
+	got, err := decodeCommand(raw)
+	if err != nil || got.Job.Command != spec.Command {
+		t.Fatalf("worst-case job did not survive decoding: %v", err)
+	}
+}
+
+func TestDialServerAuthenticatesAndEnforcesTheReadLimit(t *testing.T) {
+	upgrader := websocket.Upgrader{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/agent/ws" || r.Header.Get("Authorization") != "Bearer 7:s3cret" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		c, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer closeQuietly(c)
+		if err := c.WriteMessage(websocket.TextMessage, bytes.Repeat([]byte("a"), maxServerMessage)); err != nil {
+			return
+		}
+		if err := c.WriteMessage(websocket.TextMessage, bytes.Repeat([]byte("a"), maxServerMessage+1)); err != nil {
+			return
+		}
+		// Hold the connection until the agent hangs up.
+		_, _, _ = c.ReadMessage()
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+
+	if _, err := dialServer(ctx, Config{ServerURL: srv.URL, DeviceID: 7, DeviceSecret: "wrong"}); err == nil ||
+		!strings.Contains(err.Error(), "401") {
+		t.Fatalf("bad credentials: want a 401 dial error, got %v", err)
+	}
+
+	conn, err := dialServer(ctx, Config{ServerURL: srv.URL, DeviceID: 7, DeviceSecret: "s3cret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeQuietly(conn)
+	if _, p, err := conn.ReadMessage(); err != nil || len(p) != maxServerMessage {
+		t.Fatalf("message at the limit: got %d bytes, err %v", len(p), err)
+	}
+	if _, _, err := conn.ReadMessage(); !errors.Is(err, websocket.ErrReadLimit) {
+		t.Fatalf("message over the limit: want ErrReadLimit, got %v", err)
+	}
+}
+
+// endlessReader always has another message ready, like a busy server.
+type endlessReader struct{}
+
+func (endlessReader) ReadMessage() (int, []byte, error) {
+	return websocket.TextMessage, []byte(`{"type":"ping"}`), nil
+}
+
+// scriptedReader returns its frames in order, then err forever.
+type scriptedReader struct {
+	frames [][]byte
+	err    error
+}
+
+func (r *scriptedReader) ReadMessage() (int, []byte, error) {
+	if len(r.frames) == 0 {
+		return 0, nil, r.err
+	}
+	f := r.frames[0]
+	r.frames = r.frames[1:]
+	return websocket.TextMessage, f, nil
+}
+
+// waitDone fails the test when the reader goroutine does not finish.
+func waitDone(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("readFrames is still blocked after the serve loop went away")
+	}
+}
+
+func TestReadFramesStopsWhenTheServeLoopIsGone(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	frames := make(chan []byte)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		readFrames(ctx, endlessReader{}, frames, make(chan error, 1))
+	}()
+	<-frames // the loop received one message, then returned for good
+	cancel()
+	waitDone(t, done)
+}
+
+func TestReadFramesDoesNotBlockOnTheErrorAfterCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Unbuffered and never drained: only ctx can release the send.
+		readFrames(ctx, &scriptedReader{err: io.ErrUnexpectedEOF}, make(chan []byte), make(chan error))
+	}()
+	waitDone(t, done)
+}
+
+func TestReadFramesDeliversFramesBeforeTheError(t *testing.T) {
+	r := &scriptedReader{frames: [][]byte{[]byte("one"), []byte("two")}, err: io.ErrUnexpectedEOF}
+	frames := make(chan []byte)
+	readErr := make(chan error, 1)
+	go readFrames(context.Background(), r, frames, readErr)
+	for _, want := range []string{"one", "two"} {
+		if got := string(<-frames); got != want {
+			t.Fatalf("got frame %q, want %q", got, want)
+		}
+	}
+	if err := <-readErr; !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("got %v, want the reader's error", err)
+	}
+}
+
+// nextSent returns the next message the agent queued for the server.
+func nextSent(t *testing.T, s *sender) (string, map[string]any) {
+	t.Helper()
+	select {
+	case m := <-s.outbox:
+		var payload map[string]any
+		if err := json.Unmarshal(m.Payload, &payload); err != nil {
+			t.Fatalf("%s payload: %v", m.Type, err)
+		}
+		return m.Type, payload
+	case <-time.After(2 * time.Second):
+		t.Fatal("nothing was sent")
+		return "", nil
+	}
+}
+
+// dispatchReply runs dispatch and returns the reply it hands back to the
+// serve loop. Replies must not go through the outbox: the loop that would
+// have to drain it is the one waiting for the reply.
+func dispatchReply(t *testing.T, cmd command) (string, map[string]any) {
+	t.Helper()
+	s := newSender()
+	reply, ok := dispatch(context.Background(), Config{}, cmd, s)
+	if !ok {
+		t.Fatalf("no reply to %+v", cmd)
+	}
+	if len(s.outbox) != 0 {
+		t.Fatalf("reply to %+v was queued in the outbox as well", cmd)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(reply.Payload, &payload); err != nil {
+		t.Fatalf("%s payload: %v", reply.Type, err)
+	}
+	return reply.Type, payload
+}
+
+func TestDispatchAnswersPingAndLogRequests(t *testing.T) {
+	if typ, payload := dispatchReply(t, command{Kind: cmdPing}); typ != "pong" || payload["ts"] == nil {
+		t.Errorf("ping: got %s %v", typ, payload)
+	}
+
+	if typ, payload := dispatchReply(t, command{Kind: cmdGetLogs}); typ != "agent_logs" {
+		t.Errorf("get_logs: got %s %v", typ, payload)
+	} else if _, ok := payload["lines"].([]any); !ok {
+		t.Errorf("get_logs: lines must be a list, got %v", payload["lines"])
+	}
+}
+
+// A job reaches runJob through dispatch; an unsupported shell fails before
+// anything is executed, which keeps this test free of side effects.
+func TestDispatchRunsAJobToItsResult(t *testing.T) {
+	s := newSender()
+	if reply, ok := dispatch(context.Background(), Config{}, command{Kind: cmdJob, Job: jobSpec{JobID: 5, Shell: "fish"}}, s); ok {
+		t.Fatalf("a job reports through the outbox, not as a reply, got %s", reply.Type)
+	}
+
+	for _, want := range []string{"job_started", "job_output", "job_result"} {
+		typ, payload := nextSent(t, s)
+		if typ != want {
+			t.Fatalf("got %s, want %s", typ, want)
+		}
+		if payload["job_id"] != float64(5) {
+			t.Errorf("%s: job_id = %v, want 5", typ, payload["job_id"])
+		}
+		if typ == "job_result" && payload["status"] != "failed" {
+			t.Errorf("unsupported shell must fail the job, got %v", payload["status"])
+		}
+	}
+}
+
+// commandType is the wire name of each command kind.
+var commandType = map[commandKind]string{
+	cmdPing:      "ping",
+	cmdJob:       "job",
+	cmdPatchScan: "patch_scan",
+	cmdGetLogs:   "get_logs",
+	cmdUpdate:    "update",
+}
+
+// encodeCommand writes cmd the way the server would send it.
+func encodeCommand(t *testing.T, cmd command) []byte {
+	t.Helper()
+	msg := message{Type: commandType[cmd.Kind]}
+	var err error
+	switch cmd.Kind {
+	case cmdJob:
+		msg.Payload, err = json.Marshal(cmd.Job)
+	case cmdUpdate:
+		msg.Payload, err = json.Marshal(cmd.Update)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+// Invariants: no panic; a rejected message carries no command; an accepted
+// one has a known kind and survives encoding and decoding unchanged.
+func FuzzDecodeCommand(f *testing.F) {
+	f.Add([]byte(`{"type":"ping"}`))
+	f.Add([]byte(`{"type":"patch_scan","id":"1"}`))
+	f.Add([]byte(`{"type":"get_logs","payload":null}`))
+	f.Add([]byte(`{"type":"job","payload":{"job_id":42,"kind":"shell","command":"uptime","shell":"bash","timeout_s":600}}`))
+	f.Add([]byte(`{"type":"job","payload":{"job_id":9,"kind":"patch_install","command":"[\"curl\"]","patch_ids":["curl","libssl3"]}}`))
+	f.Add([]byte(`{"type":"job","payload":{"command":"echo ä 😀 \u0001","patch_ids":[]}}`))
+	f.Add([]byte(`{"type":"update","payload":{"version":"0.3.0","url":"/api/agent/download/linux-amd64","sha256":"ab","sig":"cd"}}`))
+	f.Add([]byte(`{"type":"job","payload":"rm -rf /"}`))
+	f.Add([]byte(`{"type":"job","payload":{"timeout_s":1e30}}`))
+	f.Add([]byte(`{"TYPE":"job","Payload":{"JOB_ID":1},"type":"update"}`))
+	f.Add([]byte("{\"type\":\"job\",\"payload\":{\"command\":\"\xff\xfe\"}}"))
+	f.Add([]byte(`null`))
+	f.Add([]byte(``))
+	f.Fuzz(func(t *testing.T, raw []byte) {
+		cmd, err := decodeCommand(raw)
+		if err != nil {
+			if !reflect.DeepEqual(cmd, command{}) {
+				t.Fatalf("rejected message carries %+v", cmd)
+			}
+			return
+		}
+		if _, ok := commandType[cmd.Kind]; !ok {
+			t.Fatalf("accepted with unknown kind %d", cmd.Kind)
+		}
+		if (cmd.Kind != cmdJob && !reflect.DeepEqual(cmd.Job, jobSpec{})) ||
+			(cmd.Kind != cmdUpdate && !reflect.DeepEqual(cmd.Update, updateSpec{})) {
+			t.Fatalf("payload set for the wrong kind: %+v", cmd)
+		}
+		again, err := decodeCommand(encodeCommand(t, cmd))
+		if err != nil {
+			t.Fatalf("re-encoded %+v no longer decodes: %v", cmd, err)
+		}
+		if !reflect.DeepEqual(again, cmd) {
+			t.Fatalf("round trip: %+v became %+v", cmd, again)
+		}
+	})
+}
+
+// recordingConn stands in for the socket in serve-loop tests. It reports the
+// type of every message written to it, except the job output the tests
+// flood the outbox with, and "close" for the closing handshake.
+type recordingConn struct {
+	written chan string
+}
+
+func newRecordingConn() *recordingConn {
+	return &recordingConn{written: make(chan string, 256)}
+}
+
+func (c *recordingConn) WriteJSON(v any) error {
+	m, ok := v.(message)
+	if !ok {
+		return errors.New("serve wrote something other than a message")
+	}
+	if m.Type != "job_output" {
+		c.written <- m.Type
+	}
+	return nil
+}
+
+func (c *recordingConn) SetWriteDeadline(time.Time) error { return nil }
+
+func (c *recordingConn) WriteControl(messageType int, _ []byte, _ time.Time) error {
+	if messageType == websocket.CloseMessage {
+		c.written <- "close"
+	}
+	return nil
+}
+
+// expectWritten fails the test unless the serve loop writes want next.
+func expectWritten(t *testing.T, c *recordingConn, want string) {
+	t.Helper()
+	select {
+	case got := <-c.written:
+		if got != want {
+			t.Fatalf("serve wrote %q, want %q", got, want)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("serve never wrote %q — the loop is stuck", want)
+	}
+}
+
+// within fails the test when the serve loop does not take v from ch.
+func within[T any](t *testing.T, ch chan<- T, v T, what string) {
+	t.Helper()
+	select {
+	case ch <- v:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("serve no longer takes %s — the loop is stuck", what)
+	}
+}
+
+// The serve loop is the only reader of the outbox. Running jobs can fill it
+// faster than the socket drains it, and whatever the loop produces itself
+// must still go out — otherwise the loop waits on itself, and the agent
+// neither answers nor notices that its connection is gone.
+func TestServeKeepsServingWhileJobsFillTheOutbox(t *testing.T) {
+	cases := []struct {
+		name    string
+		end     func(cancel context.CancelFunc, readErr chan<- error)
+		wantErr error
+	}{
+		{"agent shuts down", func(cancel context.CancelFunc, _ chan<- error) { cancel() }, nil},
+		{"connection drops", func(_ context.CancelFunc, readErr chan<- error) { readErr <- io.ErrUnexpectedEOF }, io.ErrUnexpectedEOF},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			conn := newRecordingConn()
+			s := newSender()
+			frames := make(chan []byte)
+			readErr := make(chan error, 1)
+			heartbeat := make(chan time.Time)
+			inventory := make(chan time.Time)
+			served := make(chan error, 1)
+			go func() {
+				served <- serve(ctx, Config{}, link{
+					conn: conn, out: s, frames: frames, readErr: readErr,
+					heartbeat: heartbeat, inventory: inventory,
+				})
+			}()
+			expectWritten(t, conn, "heartbeat")
+			expectWritten(t, conn, "inventory")
+
+			// Several chatty jobs. Whenever the loop takes a message, one of
+			// the senders still waiting refills the slot at once, so the
+			// outbox stays full for as long as they run.
+			var jobs sync.WaitGroup
+			for range 8 {
+				jobs.Go(func() {
+					for ctx.Err() == nil {
+						s.send(ctx, "job_output", map[string]any{"job_id": 1, "chunk": "x"})
+					}
+				})
+			}
+			for len(s.outbox) < cap(s.outbox) {
+				runtime.Gosched()
+			}
+
+			for range 20 {
+				within(t, frames, []byte(`{"type":"ping"}`), "server messages")
+				expectWritten(t, conn, "pong")
+				within(t, frames, []byte(`{"type":"get_logs"}`), "server messages")
+				expectWritten(t, conn, "agent_logs")
+				within(t, heartbeat, time.Now(), "heartbeat ticks")
+				expectWritten(t, conn, "heartbeat")
+			}
+			within(t, inventory, time.Now(), "inventory ticks")
+			expectWritten(t, conn, "inventory")
+
+			c.end(cancel, readErr)
+			select {
+			case err := <-served:
+				if !errors.Is(err, c.wantErr) {
+					t.Fatalf("serve returned %v, want %v", err, c.wantErr)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("serve did not return")
+			}
+			if c.wantErr == nil {
+				expectWritten(t, conn, "close")
+			}
+
+			// connectAndServe cancels the connection's context once serve
+			// returns; that has to release every job still waiting to send.
+			cancel()
+			jobsDone := make(chan struct{})
+			go func() { jobs.Wait(); close(jobsDone) }()
+			select {
+			case <-jobsDone:
+			case <-time.After(5 * time.Second):
+				t.Fatal("jobs are still blocked on the outbox after the connection ended")
+			}
+		})
 	}
 }

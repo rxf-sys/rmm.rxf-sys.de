@@ -42,7 +42,7 @@ func enroll(serverURL, token, label string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer closeQuietly(resp.Body)
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("server answered %s: %s", resp.Status, strings.TrimSpace(string(raw)))

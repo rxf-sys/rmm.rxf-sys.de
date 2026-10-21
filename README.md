@@ -55,7 +55,7 @@ Details, Datenfluss und Datenmodell: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.
 
 ## Quickstart (lokale Entwicklung)
 
-Voraussetzungen: Python ≥ 3.11, Node ≥ 22 (CI und Image bauen mit 24), Go ≥ 1.26.9.
+Voraussetzungen: Python ≥ 3.11, Node ≥ 22 (CI und Image bauen mit 24), Go ≥ 1.26.10.
 
 ```bash
 # Backend auf http://127.0.0.1:8080
@@ -86,7 +86,7 @@ cd agent && make build && ./rmm-agent version
 ```bash
 cd backend  && ruff check . && mypy app && pytest -v --cov=app --cov-fail-under=70
 cd frontend && npm run lint && npm test && npm run build
-cd agent    && make vet test
+cd agent    && make vet lint && go test -race ./... && make release
 ```
 
 Genau diese Kommandos laufen auch in CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).

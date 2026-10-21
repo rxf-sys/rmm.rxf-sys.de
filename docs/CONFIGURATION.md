@@ -1,9 +1,9 @@
 # Konfiguration
 
-Stand: 07.09.2026. Die Backend-Tabelle ist gegen
+Stand: 21.10.2026. Die Backend-Tabelle ist gegen
 `backend/app/config.py` abgeglichen — Namen, Typen und Defaults stammen aus
-`Settings.model_fields`, nicht aus dem Gedächtnis. Sie enthält alle **32**
-Einstellungen.
+`Settings.model_fields`, nicht aus dem Gedächtnis. Sie enthält alle **42**
+Einstellungen (die acht MDM-Werte im Abschnitt „MDM“ weiter unten).
 
 ## Woher die Werte kommen
 
@@ -11,7 +11,7 @@ Einstellungen.
 |---|---|---|
 | Compose-Umgebung | `infrastructure/.env` (Vorlage: `.env.example`) | Backend-Container, plus `TRUSTED_PROXY_CIDR` für Caddy |
 | Prozess-Umgebung | beliebige Env-Variablen | überschreibt alles, z. B. im lokalen Dev-Setup |
-| Laufzeit-Overrides | Tabelle `app_settings` in der DB | derzeit nur die ntfy-Konfiguration, im Dashboard änderbar |
+| Laufzeit-Overrides | Tabelle `app_settings` in der DB | die ntfy-Konfiguration, im Dashboard änderbar; außerdem der Schlüssel für die Skript-Fingerabdrücke im Audit-Log, den der Server beim ersten Gebrauch selbst erzeugt |
 | Agent | `/etc/rxf-rmm/agent.json` bzw. `%ProgramData%\rxf-rmm\agent.json` | pro Gerät, beim Enrollment geschrieben |
 
 Namen sind **nicht** case-sensitiv (`case_sensitive=False`,
@@ -154,6 +154,27 @@ Angriffsfläche · ⚪ funktional.
 > Solange eine der beiden leer ist, meldet `/api/remote/config` die Funktion
 > als nicht konfiguriert und das Remote-Panel bleibt aus.
 
+### MDM (Backend-Seite)
+
+Das Backend liest wie alles andere aus `infrastructure/.env`. Drei der Werte
+teilt es mit den MDM-Containern; Compose reicht sie unter deren eigenen
+Namen weiter (Tabelle im Abschnitt „MDM“).
+
+| Variable | Zweck | Default | Pflicht | Sec |
+|---|---|---|---|---|
+| `MDM_BASE_URL` | Öffentlicher Ursprung, auf den das Enrollment-Profil zeigt (`/mdm`, `/scep`) und unter dem der Einmal-Link liegt. Bewusst nicht aus Request-Headern abgeleitet: ein Profil mit falscher `ServerURL` würde installiert und bliebe stumm | `https://rmm.rxf-sys.de` | nein | 🟡 |
+| `NANOMDM_URL` | Verwaltungs-API von NanoMDM im `rmm`-Netz | `http://nanomdm:9000` | nein | ⚪ |
+| `NANOMDM_API_KEY` | Derselbe Schlüssel wie beim Container (Basic Auth, User `nanomdm`); damit stellt das Backend Kommandos ein | *(leer)* | **ja für MDM** | 🔴 |
+| `MDM_APNS_TOPIC` | APNs-Topic des Push-Zertifikats (`com.apple.mgmt.External.…`), steht in jedem Profil | *(leer)* | **ja für MDM** | ⚪ |
+| `MDM_WEBHOOK_SECRET` | HMAC-Schlüssel des NanoMDM-Webhooks. Leer: `/api/mdm/webhook` antwortet 503 | *(leer)* | **ja für MDM** | 🔴 |
+| `MDM_SCEP_VERIFY_TOKEN` | Bearer-Token, mit dem der SCEP-CSR-Verifier fragt, ob eine Challenge gilt. Leer: keine neue Registrierung möglich | *(leer)* | **ja für MDM** | 🔴 |
+| `MDM_ENROLLMENT_TTL_HOURS` | Gültigkeit eines Registrierungslinks (1–168) | `24` | nein | 🟡 |
+| `MDM_ORGANIZATION` | Organisation im Profil und im Zertifikats-Subject | `rxf-sys` | nein | ⚪ |
+
+> Fehlt einer der vier Pflichtwerte, legt das Dashboard keinen
+> Registrierungslink an (503) und nennt Admins die fehlenden Namen. Ein
+> bereits ausgegebener Link liefert dann kein Profil mehr.
+
 ## Caddy (Container `web`)
 
 | Variable | Zweck | Default | Pflicht | Sec |
@@ -166,20 +187,33 @@ das Backend nur noch die Container-IP und das Login-Rate-Limit gilt faktisch
 global statt pro Angreifer. Einzutragen ist die IP des cloudflared-Hosts
 (CT 104).
 
-## MDM (Container `nanomdm`, Compose-Profil `mdm`)
+## MDM (Container `nanomdm` und `scep`, Compose-Profil `mdm`)
 
-Nur relevant, sobald das Profil gestartet wird — im Normalbetrieb läuft der
+Nur relevant, sobald das Profil gestartet wird — im Normalbetrieb laufen die
 Container nicht. Einrichtung: [`MDM-SETUP.md`](MDM-SETUP.md).
 
 | Variable | Zweck | Default | Pflicht | Sec |
 |---|---|---|---|---|
 | `NANOMDM_TAG` | Image-Tag von `ghcr.io/micromdm/nanomdm`. Das Projekt veröffentlicht keine Versions-Tags, nur `main` und `sha-<commit>` | `main` | nein, aber ein `sha-`-Tag gehört gepinnt | ⚪ |
 | `NANOMDM_API_KEY` | Passwort für die Verwaltungs-API (`/v1/*`: Push, Kommandos, Zertifikats-Upload), Benutzername ist `nanomdm` | leer | **ja, bevor das Profil startet** | 🔴 |
+| `SCEP_CA_PASS` | Passwort des verschlüsselten `scep-depot/ca.key`, festgelegt bei `scepserver ca -init` | leer | **ja** — ohne startet `scep` nicht | 🔴 |
+| `MDM_WEBHOOK_SECRET` | → nanomdm `NANOMDM_WEBHOOK_HMAC_KEY`; signiert jeden Webhook an `http://backend:8080/api/mdm/webhook` (`NANOMDM_WEBHOOK_URL`, fest im Compose-File) | leer | **ja** | 🔴 |
+| `MDM_SCEP_VERIFY_TOKEN` | → scep `SCEP_VERIFY_TOKEN`; schaltet die Einmal-Challenges ein (`scep-csr-verifier` fragt das Backend) | leer | **ja** — genau eins von beiden, siehe unten | 🔴 |
+| `SCEP_CHALLENGE_PASSWORD` | Statische Challenge, nur noch für das archivierte Test-Profil. Nur `[A-Za-z0-9]` | leer | **nein** — nicht zusammen mit `MDM_SCEP_VERIFY_TOKEN` | 🔴 |
+| `SCEP_CERT_VALID` | Laufzeit der Geräte-Identitätszertifikate in Tagen | `365` | nein | ⚪ |
 
 Leerer `NANOMDM_API_KEY` heißt: jeder, der im Docker-Netz `nanomdm:9000`
 erreicht, kann jedes eingebuchte Telefon kommandieren. Von außen sperrt der
 Caddyfile `/v1/*` und `/migration` zusätzlich mit 404 — das ist die zweite
 Sicherung, nicht die erste.
+
+Ohne jede Challenge-Prüfung signiert `scepserver` jeden CSR, der `/scep`
+erreicht, und jeder im Internet bekäme ein Zertifikat, dem NanoMDM vertraut.
+Der Entrypoint des `scep`-Images startet deshalb nur mit **genau einem** von
+`MDM_SCEP_VERIFY_TOKEN` (Normalbetrieb: eine Challenge pro Registrierung,
+einmal gültig) oder `SCEP_CHALLENGE_PASSWORD` (statisch, nur Test). Beide
+zusammen gehen nicht: `scepserver` verlangte dann vom selben CSR die
+statische und eine vom Backend vergebene Challenge.
 
 ## Agent
 

@@ -1,6 +1,6 @@
 # Architektur
 
-Stand: 07.09.2026. Bezugspunkt ist immer der Code — jede Aussage hier ist mit
+Stand: 21.10.2026. Bezugspunkt ist immer der Code — jede Aussage hier ist mit
 `Datei:Zeile` belegt, damit die Abweichung auffällt, wenn sich etwas ändert.
 
 ## 1. Komponenten
@@ -122,10 +122,42 @@ dieselben Knöpfe aus, aber die Grenze steckt im Server. Aus demselben Grund
 Heartbeat, Plattenbelegung und Patch-Stand, und ein Telefon hat davon nichts
 — es stünde sonst dauerhaft als „offline" im Alarm.
 
-`ownership` (`private` | `company`) beschreibt das Besitzverhältnis. Heute
-Information für die Übersicht; sobald Verwaltungsbefehle dazukommen,
-entscheidet es über deren Umfang — auf einem Privatgerät niemals
-Komplett-Löschen oder erzwungene Updates.
+`ownership` (`private` | `company`) beschreibt das Besitzverhältnis. Es
+bestimmt die Rechte im MDM-Profil (3.4) und künftig den Umfang der
+Verwaltungsbefehle — auf einem Privatgerät niemals Komplett-Löschen oder
+erzwungene Updates.
+
+### 3.4 Apple-Geräte (MDM)
+
+Eine dritte Vertrauenskette, getrennt von den beiden oben. iPhone und iPad
+sprechen nicht mit dem Backend, sondern mit NanoMDM (`/mdm`) und dem
+SCEP-Server (`/scep`), beide im Compose-Profil `mdm`
+([`MDM-SETUP.md`](MDM-SETUP.md)).
+
+```
+Admin ──POST …/mdm/enrollment──▶ Backend: Einmal-Link (nur Hash in der DB)
+Telefon ──GET /api/mdm/enroll/mde_…──▶ Profil mit frischer Einmal-Challenge,
+                                        ServerURL …/mdm?e=<ref>
+Telefon ──SCEP-CSR──▶ scep ──scep-csr-verifier──▶ POST /api/mdm/scep/verify
+                                        (Challenge + CN, genau einmal gültig)
+Telefon ──Authenticate/TokenUpdate──▶ NanoMDM ──Webhook (HMAC)──▶ Backend
+                                        bindet UDID ↔ Gerät über url_params e
+Backend ──PUT /v1/enqueue/<UDID>──▶ NanoMDM ──APNs──▶ Telefon (DeviceInformation)
+```
+
+- Der Link ist das einzige Credential des Telefons; er läuft nach
+  `MDM_ENROLLMENT_TTL_HOURS` ab, gilt für höchstens fünf Abrufe und endet mit
+  dem ausgestellten Zertifikat (`backend/app/mdm.py`).
+- Jeder Abruf erzeugt eine neue Challenge und entwertet die vorige; das
+  Backend speichert nur deren Hash. Ein CSR, dessen CN nicht zur Challenge
+  passt, widerruft die Registrierung.
+- Gebunden wird nur eine Registrierung, deren Zertifikat ausgestellt ist. Der
+  `ref` ist zufällig und steht nur in diesem einen Profil.
+- `AccessRights` ohne Lösch-Bit für alles außer Firmengeräten
+  (`backend/app/mdm_profile.py`): iOS selbst lehnt das Löschen dann ab,
+  zusätzlich zur Server-Grenze.
+- Webhook und Verify-Endpunkt sind Container-zu-Container; Caddy antwortet
+  auf beide von außen mit 404, beide prüfen trotzdem ihr eigenes Geheimnis.
 
 ## 4. WebSocket-Protokoll
 
@@ -216,7 +248,7 @@ Lifespan (`backend/app/main.py:115-126`).
 |---|---|---|
 | `users` | Konten, Rolle, Argon2-Hash, TOTP-Secret, Backup-Codes, `person_id` | `accounts.py:42` |
 | `sessions` | Session-Hash, Präfix, Ablauf; FK auf `users` mit CASCADE | `accounts.py:53` |
-| `app_settings` | Laufzeit-Einstellungen (z. B. ntfy-Override) | `accounts.py:64` |
+| `app_settings` | Laufzeit-Einstellungen (z. B. ntfy-Override) und der zufällige Schlüssel für die Skript-Fingerabdrücke im Audit-Log (`content_hmac`) | `accounts.py:64` |
 | `devices` | Gerät, OS, Agent-Version, Secret-Hash, letzter Heartbeat, `person_id`, Wartungsfenster, letzter Update-Scan, Geräteklasse, Besitzverhältnis, Modell/Seriennummer/IMEI/Notiz (nur ohne Agent) | `devices.py:30` |
 | `enrollment_tokens` | Einmal-Token: Hash, Ablauf, Verbrauchszeitpunkt | `devices.py:46` |
 | `inventory` | Inventar je Gerät und Art (Hardware/Software/Netz) | `devices.py:55` |
@@ -232,6 +264,8 @@ Lifespan (`backend/app/main.py:115-126`).
 | `script_schedules` | Wöchentliche Skript-Läufe | `automation.py:54` |
 | `persons` | Betreute Personen ("Kunden"); Geräte hängen über `person_id` daran | `persons.py:24` |
 | `device_credentials` | Fernet-verschlüsselte Geheimnisse je Gerät | `credentials.py:31` |
+| `mdm_enrollments` | MDM-Registrierungslinks: Link- und Challenge-Hash, `ref`, Rechte, Ablauf, Zeitpunkte von Abruf, Zertifikat und Registrierung | `mdm.py` |
+| `mdm_devices` | Gebundene Apple-Geräte: UDID, Rechte im Profil, letzter Kontakt, Abmeldung, gemeldete Geräteinformationen | `mdm.py` |
 | `schema_meta` | Schema-Version der Datei (nur informativ) | `db.py` |
 
 **Verbindungen**: Alle Module öffnen die Datenbank über

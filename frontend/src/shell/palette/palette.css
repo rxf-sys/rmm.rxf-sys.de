@@ -1,0 +1,224 @@
+/* Befehlspalette (shell/palette). The overlay position and the panel
+   surface come from .palette-wrap / .palette in components.css (no open
+   animation); everything inside the panel lives here. */
+
+/* ---- Search field ---- */
+.pal-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  color: var(--tx-3);
+}
+/* The field has no ring of its own — the row draws the focus line, so focus
+   stays visible without a box inside a box. */
+.pal-search:focus-within {
+  box-shadow: inset 0 -2px 0 var(--focus);
+}
+.pal-input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--tx);
+  font: 600 var(--fs-lg) var(--font);
+}
+.pal-input::placeholder {
+  color: var(--tx-3);
+  font-weight: 500;
+}
+.pal-input:focus-visible {
+  outline: none;
+}
+.pal-close {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 var(--sp-1);
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--tx-2);
+  font: 700 var(--fs-sm) var(--font);
+  cursor: pointer;
+}
+.pal-close:hover {
+  background: var(--hover);
+}
+/* With a keyboard the key says it all; on touch there is no Esc key, so
+   the button says what it does. */
+.pal-close-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---- List ---- */
+.pal-list {
+  max-height: min(440px, 60vh);
+  padding: var(--sp-1) var(--sp-2) var(--sp-2);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* scrollIntoView keeps a row clear of the edge instead of flush with it. */
+  scroll-padding-block: var(--sp-2);
+}
+.pal-list[hidden] {
+  display: none;
+}
+.pal-group-label {
+  padding: var(--sp-3) var(--sp-3) var(--sp-1);
+  color: var(--tx-3);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.pal-opt {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: var(--hit);
+  padding: var(--sp-1) var(--sp-3);
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--tx);
+  font: 600 var(--fs-md) / var(--lh-tight) var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+/* Hover moves the active row, so there is exactly one highlight — never a
+   hovered row and a keyboard row at the same time. */
+.pal-opt[aria-selected='true'] {
+  background: var(--accent-soft);
+}
+/* Quick targets hang under their device, aligned with its name. */
+.pal-opt.is-quick {
+  padding-left: calc(var(--sp-3) + 26px + var(--sp-3));
+  color: var(--tx-2);
+}
+.pal-ico,
+.pal-slot {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+}
+.pal-ico {
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--tx-2);
+}
+.pal-opt[aria-selected='true'] .pal-ico {
+  background: var(--surface);
+  color: var(--accent-tx);
+}
+.pal-ico-quick {
+  width: 22px;
+  height: 22px;
+  background: none;
+}
+.pal-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pal-id {
+  flex: none;
+  color: var(--tx-3);
+  font-weight: 500;
+}
+.pal-tag {
+  flex: none;
+  max-width: 30%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pal-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pal-empty {
+  padding: var(--sp-5) var(--sp-4);
+  color: var(--tx);
+  overflow-wrap: anywhere;
+}
+.pal-empty p {
+  margin: 0;
+}
+.pal-empty p + p {
+  margin-top: var(--sp-1);
+}
+.pal-empty-hint {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}
+
+/* ---- Footer ---- */
+.pal-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
+  border-top: 1px solid var(--line);
+  color: var(--tx-3);
+  font-size: var(--fs-xs);
+}
+.pal-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.pal-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.pal-status {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Touch: no keys to hint at, and Esc becomes a word. */
+@media (hover: none), (pointer: coarse) {
+  .pal-keys,
+  .pal-close kbd {
+    display: none;
+  }
+  .pal-close-text {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+  .pal-close {
+    padding: 0 var(--sp-2);
+    color: var(--accent-tx);
+  }
+  /* Nothing visible left to say: the bar folds away, the live region in
+     it stays for screen readers. */
+  .pal-foot:has(.pal-status:empty),
+  .pal-foot:has(.pal-status.sr-only) {
+    padding: 0;
+    border: 0;
+  }
+}

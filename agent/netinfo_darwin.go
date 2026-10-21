@@ -28,5 +28,5 @@ func defaultGateway() string {
 
 func dnsServers() []string {
 	// macOS keeps a resolv.conf mirror of the active resolver config.
-	return parseResolvConf("/etc/resolv.conf")
+	return readResolvConf("/etc/resolv.conf")
 }
