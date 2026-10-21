@@ -28,6 +28,17 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   URLs im Profil zeigen auf `/mdm`. `CONFIGURATION.md`, `OPERATIONS.md`
   (Backup, Prüfung) und `ROADMAP.md` nachgezogen.
 
+### Sicherheit
+- Go-Toolchain für den Agent von 1.26.9 auf 1.26.10 angehoben
+  (CVE-2026-111943, go.dev/issue/82345). `crypto/x509` vertraut damit einer
+  Reihe kompromittierter Zwischenzertifikate einer CA nicht mehr;
+  `govulncheck` meldete den Pfad über `x509.Certificate.Verify` als
+  erreichbar. `build-agent.sh` nutzt `golang:1.26-alpine` und zieht die
+  Version beim nächsten Build von selbst.
+- `vite` von 8.2.2 auf 8.2.4 angehoben. Das mitgelieferte `launch-editor`
+  hatte drei als hoch eingestufte Lücken (u. a. GHSA-r825-w8mm-5pxw); betrifft
+  nur den Dev-Server, ließ aber `npm audit` in CI scheitern.
+
 ### Behoben
 - **MDM: `NANOMDM_CERT_HEADER` wieder entfernt.** Die Variable war auf
   `Mdm-Signature` gesetzt, in der Annahme, damit den Header zu benennen, über
