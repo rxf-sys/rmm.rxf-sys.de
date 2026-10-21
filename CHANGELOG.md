@@ -8,6 +8,28 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **MDM: Befehle, Sicherheitslage und Apps.** Im Reiter „MDM“: Inventar
+  aktualisieren und Sperren (mit Nachricht und Rückrufnummer), Code entfernen
+  und Löschen (Admins; Löschen nur mit eingetipptem Gerätenamen). Panels für
+  Sicherheit (Gerätecode, Verschlüsselung, Aktivierungssperre, „Wo ist?“,
+  iCloud-Backup, iOS-Stand), Apps mit Suche, Profile und Zertifikate und
+  den Verlauf aller Befehle. Tägliche Inventar-Runde je Telefon. Neue
+  Tabellen `mdm_commands`, `mdm_policies`; sechs neue Endpunkte unter
+  `…/devices/{id}/mdm/…`.
+- **MDM-Befugnisse je Gerät.** Sperren, Code entfernen, Löschen und
+  App-Liste lassen sich pro Telefon abschalten und wieder einschalten; der
+  Server lehnt Abgeschaltetes ab, eine abgeschaltete App-Liste wird gelöscht.
+- **Status „MDM“** statt „Ohne Agent“ für verwaltete Telefone, mit
+  „Profil entfernt“ und „MDM stumm“ (7 Tage ohne Kontakt) als Warnung; die
+  Lagebild-Kachel zeigt Gerätecode und iOS-Stand.
+- **iOS-Abgleich mit Apple:** einmal täglich gegen Apples öffentliche
+  Versionsliste (`MDM_IOS_VERSION_CHECK`), Karte „iPhone und iPad“ auf der
+  Patches-Seite.
+- **Alarmregeln für Telefone:** meldet sich nicht / Profil entfernt, kein
+  Gerätecode, MDM-Zertifikat läuft ab.
+- **Automatische Erneuerung der Geräte-Identitäten** 30 Tage vor Ablauf
+  (`MDM_RENEW_BEFORE_DAYS`), dazu „Zertifikat erneuern“ für Admins. Compose
+  setzt `SCEP_CERT_RENEW=0` für den SCEP-Container.
 - **Vormerken fürs nächste Online-Gehen.** Updates (alle oder nur
   Sicherheit, optional mit Neustart, falls nötig) und Skripte lassen sich für
   ein Gerät vormerken, das gerade offline ist; der nächste Heartbeat führt sie
@@ -28,6 +50,10 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   die Tabelle.
 
 ### Geändert
+- **Jedes neue MDM-Profil trägt alle Rechte**, auch auf Privatgeräten — was
+  davon genutzt werden darf, regeln die MDM-Befugnisse. Ältere Privat-Profile
+  ohne Löschrecht zeigt der Reiter „MDM“ an; nachrüsten geht nur über eine
+  neue Registrierung.
 - **Volle Breite:** Der Inhalt endet nicht mehr bei 1520 px. Zwischen 721 und
   1100 px schrumpft die Seitenleiste auf Icons, statt den Inhalt zu
   quetschen.

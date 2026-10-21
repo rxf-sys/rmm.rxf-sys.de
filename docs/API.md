@@ -2,7 +2,7 @@
 
 Stand: 21.10.2026. Die Tabellen unten sind aus der laufenden Anwendung
 erzeugt (`app.routes` inkl. der tatsächlich registrierten Dependencies), nicht
-von Hand gepflegt. Sie umfassen **77 HTTP-Endpunkte und 3 WebSockets**.
+von Hand gepflegt. Sie umfassen **83 HTTP-Endpunkte und 3 WebSockets**.
 
 Die maschinenlesbare Fassung mit allen Request-/Response-Schemata liefert
 FastAPI selbst:
@@ -92,9 +92,16 @@ der Hash eines Geheimnisses, das nie jemand erfährt, und
 `authenticate_device()` weist die Klasse zusätzlich ab. Der einzige Weg zu
 einem Gerät, das sich anmelden kann, bleibt das Enrollment-Token.
 
-Feld `ownership`: `private` oder `company`. Es entscheidet über die Rechte
-im MDM-Profil (privat ohne Komplett-Löschen, siehe unten) und künftig über
-den Umfang der Verwaltungsbefehle.
+Feld `ownership`: `private` oder `company` — Information für die Übersicht.
+Was per MDM an einem Telefon erlaubt ist, steht nicht daran, sondern in den
+MDM-Befugnissen des Geräts (siehe unten).
+
+Geräte der Klasse `mobile` tragen in Liste und Detail zusätzlich `mdm`:
+`null` ohne MDM-Registrierung, sonst `{enrolled_at, last_seen_at,
+checked_out_at, passcode_present, identity_expires_at, os_version,
+os_status, os_latest}`. `os_status` vergleicht die iOS-Version mit Apples
+Katalog: `current`, `major_behind` (neueste der eigenen Hauptversion),
+`outdated`, `unknown`.
 
 ## Apple MDM (iPhone und iPad)
 
@@ -104,24 +111,42 @@ Einrichtung: [`MDM-SETUP.md`](MDM-SETUP.md).
 
 | Methode | Pfad | Auth | Zweck |
 |---|---|---|---|
-| GET | `/api/devices/{device_id}/mdm` | Session | Stand der Registrierung: `configured`, `missing` (fehlende ENV-Namen, nur für Admins), letzte `enrollment` mit `state` (`waiting`, `downloaded`, `certificate`, `enrolled`, `expired`, `revoked`), `binding` (UDID, Rechte, letzter Kontakt, gemeldete Geräteinformationen) und `needs_reenroll` (als privat registriert, jetzt Firmengerät). Viewer nur für eigene Geräte, sonst 404 |
+| GET | `/api/devices/{device_id}/mdm` | Session | Stand der Registrierung: `configured`, `missing` (fehlende ENV-Namen, nur für Admins), letzte `enrollment` mit `state` (`waiting`, `downloaded`, `certificate`, `enrolled`, `expired`, `revoked`), `binding` (UDID, Rechte, letzter Kontakt, `info`, `security`, `apps`, `profiles`, `certificates` je mit Zeitstempel, `unlock_token` als ja/nein, `identity_expires_at`, `renewal`), `needs_reenroll` (altes Privat-Profil ohne Löschrecht, Löschen nicht abgeschaltet), `permissions`/`denied`, `actions` (je Befehl `null` oder der Grund, warum er nicht geht) und `commands` (die letzten 30). Viewer nur für eigene Geräte, sonst 404 |
+| POST | `/api/devices/{device_id}/mdm/refresh` | Operator | Inventar-Runde: `DeviceInformation`, `SecurityInfo`, `ProfileList`, `CertificateList` und — wenn erlaubt — `InstalledApplicationList`. 202 mit `request_types`. Audit `mdm.refresh_requested` |
+| POST | `/api/devices/{device_id}/mdm/lock` | Operator | `DeviceLock`; Body `{message, phone}` (beides optional, Nummer nur Ziffern, `+ ()/-`). Audit `mdm.device_lock` |
+| POST | `/api/devices/{device_id}/mdm/erase` | Admin | `EraseDevice`; Body `{confirm, preserve_data_plan, disallow_proximity_setup}`, `confirm` muss genau der Gerätename sein (sonst 422). Audit `mdm.device_erase` |
+| POST | `/api/devices/{device_id}/mdm/clear-passcode` | Admin | `ClearPasscode` mit dem gespeicherten Entsperr-Token. Audit `mdm.passcode_cleared` |
+| POST | `/api/devices/{device_id}/mdm/renew` | Admin | Identitätszertifikat jetzt erneuern (sonst automatisch, siehe unten). Audit `mdm.renewal_started` |
+| PUT | `/api/devices/{device_id}/mdm/permissions` | Admin | Body `{denied: [...]}` aus `lock`, `erase`, `clear_passcode`, `apps`. Leere Liste = alles erlaubt. Abgeschaltete App-Liste wird gelöscht. Audit `mdm.permissions_updated` |
 | POST | `/api/devices/{device_id}/mdm/enrollment` | Admin | Neuer Einmal-Link `https://…/api/mdm/enroll/mde_…`. Der Klartext steht **nur** in dieser Antwort; ein offener älterer Link desselben Geräts wird widerrufen. 409 für alles außer iPhone/iPad ohne Agent, 503 solange MDM nicht eingerichtet ist. Audit `mdm.enrollment_created` |
 | DELETE | `/api/devices/{device_id}/mdm/enrollment` | Admin | Offenen Link widerrufen. Audit `mdm.enrollment_revoked` |
 | GET | `/api/mdm/enroll/{token}` | Link | Das Enrollment-Profil (`application/x-apple-aspen-config`) für das Telefon — ohne Login, der Link ist das Credential. Jeder Abruf erzeugt eine neue Einmal-Challenge und macht die vorige ungültig; höchstens 5 Abrufe, danach, nach Ablauf, Widerruf oder ausgestelltem Zertifikat 404. 429 nach 20 Fehlversuchen pro IP in 300 s. Audit `mdm.profile_downloaded` |
 | POST | `/api/mdm/scep/verify` | Bearer `MDM_SCEP_VERIFY_TOKEN` | Nur für `scep-csr-verifier` im `rmm`-Netz, von außen 404 (Caddy). Body `{challenge, cn}`; 200 genau einmal je Challenge, sonst 403 (`unknown`, `cn_mismatch` — dann ist die Registrierung widerrufen). Audit `mdm.scep_rejected` bei Ablehnung |
-| POST | `/api/mdm/webhook` | HMAC `X-Hmac-Signature` | Nur für NanoMDM im `rmm`-Netz, von außen 404 (Caddy). MicroMDM-kompatibles Format; verarbeitet `mdm.Authenticate`, `mdm.TokenUpdate`, `mdm.CheckOut` und `mdm.Connect` des Gerätekanals. Audit `mdm.enrolled`, `mdm.checked_out`, `mdm.command_queued` / `mdm.command_failed` |
+| POST | `/api/mdm/webhook` | HMAC `X-Hmac-Signature` | Nur für NanoMDM im `rmm`-Netz, von außen 404 (Caddy). MicroMDM-kompatibles Format; verarbeitet `mdm.Authenticate`, `mdm.TokenUpdate` (samt Entsperr-Token), `mdm.CheckOut` und `mdm.Connect` (Befehlsergebnisse, über die CommandUUID dem Befehl zugeordnet) des Gerätekanals. Audit `mdm.enrolled`, `mdm.checked_out`, `mdm.command_result` (Sperren, Löschen, Code entfernen, Erneuerung und jeder Fehler), `mdm.renewal_done` / `mdm.renewal_failed` |
 
 **Zuordnung.** Das Profil trägt in `ServerURL` und `CheckInURL` den
 Parameter `?e=<ref>`; NanoMDM reicht ihn als `url_params` an den Webhook
 durch. Gebunden wird nur eine Registrierung, deren Challenge bereits ein
 Zertifikat ergeben hat. Nach dem ersten `TokenUpdate` stellt das Backend
-`DeviceInformation` ein; die Antwort füllt Seriennummer, IMEI und
-OS-Version der Karteikarte (ein getippter Modellname bleibt stehen).
+eine volle Inventar-Runde ein; `DeviceInformation` füllt Seriennummer, IMEI
+und OS-Version der Karteikarte (ein getippter Modellname bleibt stehen).
 
-**Rechte im Profil.** `AccessRights` ist 8191 für Firmengeräte und 8183 für
-alles andere — ohne das Bit „Device erase“, iOS selbst verweigert dann das
-Löschen. Ein späterer Wechsel auf „Firma“ ändert das Profil auf dem Gerät
-nicht; `needs_reenroll` sagt, dass dafür neu zu registrieren ist.
+**Rechte im Profil und Befugnisse.** `AccessRights` ist für jedes neue
+Profil 8191 (alle Rechte). Was davon genutzt werden darf, entscheidet der
+Server je Gerät über `denied` — änderbar ohne neue Registrierung. Ältere
+Privat-Profile tragen 8183 ohne „Device erase“; iOS lässt das Recht bei einem
+Profil-Update nicht nachrüsten, deshalb `needs_reenroll`. Prüfreihenfolge
+für jeden Befehl (`app/mdm_commands.py`): registriert und Profil vorhanden,
+Bit im Profil, nicht abgeschaltet, für „Code entfernen“ ein Entsperr-Token.
+
+**Hintergrund.** Alle `MDM_REFRESH_HOURS` (Standard 24) eine Inventar-Runde
+je Telefon, außer die vorige wartet noch auf das Gerät. `MDM_RENEW_BEFORE_DAYS`
+(Standard 30) vor Ablauf des Identitätszertifikats bekommt das Telefon per
+`InstallProfile` ein neues Profil mit eigener Einmal-Challenge, gleicher
+`ref`, gleichen URLs und Rechten; der SCEP-Prüfer nimmt diese Challenge
+genau einmal. Einmal täglich vergleicht der Server die iOS-Versionen mit
+`gdmf.apple.com` (`MDM_IOS_VERSION_CHECK`). Alarmregeln dazu: `mdm_silent`,
+`mdm_passcode`, `mdm_identity` (siehe Automatisierung).
 
 ## Jobs und Skripte
 
@@ -248,7 +273,7 @@ pflegen.
 |---|---|---|---|
 | GET | `/api/automation` | Session | Patch-Fenster, Regeln und Zeitpläne |
 | PUT | `/api/automation` | Admin | Patch-Fenster konfigurieren: Tag, Stunde, Umfang, Tag-Filter, `catch_up_days` (0–14, Default 3: offline gewesene Geräte holen innerhalb dieser Tage nach; 0 = bis zum nächsten Fenster warten) und `reboot` (Neustart, falls nötig) |
-| POST | `/api/automation/rules` | Admin | Alarmregel anlegen |
+| POST | `/api/automation/rules` | Admin | Alarmregel anlegen. Typen: `offline` (Sekunden), `disk` (%), `patch_age` (Tage) für Geräte mit Agent; `mdm_silent` (Tage ohne MDM-Kontakt oder Profil entfernt, Standard 7), `mdm_passcode` (kein Gerätecode, ohne Schwelle) und `mdm_identity` (Tage vor Zertifikatsablauf, Standard 14) für Telefone unter MDM |
 | PUT | `/api/automation/rules/{rule_id}` | Admin | Alarmregel ändern |
 | DELETE | `/api/automation/rules/{rule_id}` | Admin | Alarmregel löschen |
 | POST | `/api/automation/schedules` | Admin | Skript-Zeitplan anlegen |

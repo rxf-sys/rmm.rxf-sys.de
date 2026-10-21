@@ -429,10 +429,36 @@ hat der Verifier das Backend nicht erreicht — dann
 und `ca.key`: geht `ca.key` verloren, stellt SCEP keine Zertifikate mehr aus,
 und eine neue CA heißt, jedes Gerät neu zu registrieren.
 
-**Gerätezertifikate laufen ab.** Nach `SCEP_CERT_VALID` Tagen (Default 365)
-wird das Identitätszertifikat eines Geräts ungültig, und NanoMDM weist es ab.
-Bis die Erneuerung aus dem Dashboard kommt, heißt das: im Reiter „MDM“ neu
-registrieren und das neue Profil installieren.
+**Gerätezertifikate erneuern sich selbst.** Nach `SCEP_CERT_VALID` Tagen
+(Default 365) wäre das Identitätszertifikat eines Geräts ungültig. Das
+Backend schickt deshalb `MDM_RENEW_BEFORE_DAYS` (Default 30) vorher ein
+frisches Profil per `InstallProfile`; das Telefon holt sich damit beim
+nächsten Kontakt ein neues Zertifikat, am Gerät ist nichts zu tun. Dafür
+setzt das Compose-File `SCEP_CERT_RENEW=0` — sonst lehnte `scepserver` ein
+zweites Zertifikat mit gleichem Namen ab, solange das erste gilt. Im Reiter
+„MDM“ steht „Zertifikat gültig bis“, Admins können mit „Zertifikat
+erneuern“ sofort anstoßen; kommt die Erneuerung nicht durch, meldet die
+Alarmregel „MDM-Zertifikat läuft ab“ (Standard 14 Tage vorher). Erst ein
+abgelaufenes Zertifikat heißt: neu registrieren.
+
+**Befehle und Befugnisse.** Im Reiter „MDM“: Inventar aktualisieren und
+Sperren (Techniker und Admins), Code entfernen, Löschen und Zertifikat
+erneuern (nur Admins). Unter „MDM-Befugnisse“ lässt sich je Gerät
+abschalten, was dort nicht gehen soll — Sperren, Code entfernen, Löschen,
+App-Liste. Das gilt sofort, ändert am Gerät nichts und lässt sich jederzeit
+zurückdrehen. Seit Oktober 2026 trägt jedes neue Profil alle Rechte;
+Geräte, die vorher als privat registriert wurden, haben kein Löschrecht im
+Profil — das geht nur mit einer neuen Registrierung.
+
+**Was ohne Betreuung (Supervision) nicht geht.** Per Profil registrierte
+Geräte sind nicht betreut. Verloren-Modus mit Ortung, Neustart aus der
+Ferne, erzwungene iOS-Updates und stille App-Installationen verlangt Apple
+nur von betreuten Geräten (Apple Business Manager oder Apple Configurator).
+
+**Nach dem Update auf diese Version, einmalig im LXC:**
+`docker compose --profile mdm up -d --build scep` — damit `SCEP_CERT_RENEW=0`
+gilt. Bereits registrierte Geräte bekommen ihre Erneuerung dann rechtzeitig
+von selbst.
 
 **Verlängerung.** Ein Jahr nach Ausstellung. Auf <https://identity.apple.com>
 mit **derselben** Apple-ID anmelden und beim bestehenden Zertifikat „Renew"
@@ -455,5 +481,7 @@ derselbe; das neue `.pem` wie oben hochladen.
 | `scep` beendet sich sofort mit „neither MDM_SCEP_VERIFY_TOKEN nor SCEP_CHALLENGE_PASSWORD" oder „SCEP_CA_PASS is empty" | Absicht: ohne Challenge-Prüfung startet der Server nicht. In `.env` setzen (Teil 4, Schritt 2), dann `docker compose --profile mdm up -d scep` |
 | `scep` meldet „both MDM_SCEP_VERIFY_TOKEN and SCEP_CHALLENGE_PASSWORD are set" | `SCEP_CHALLENGE_PASSWORD` aus `.env` entfernen (Teil 6) |
 | `scep` meldet „ca.key missing or not readable for uid 10001" | `scep-depot` gehört nicht uid 10001: `chown -R 10001:10001 scep-depot` |
+| Erneuerung bleibt bei „läuft seit …“ oder meldet einen Fehler | `scep` läuft ohne `SCEP_CERT_RENEW=0` (SCEP-Log: „DN … already exists"): `docker compose --profile mdm up -d --build scep`, dann im Reiter „MDM“ erneut „Zertifikat erneuern“ |
+| Patch-Seite: iPhones „ohne Abgleich“ | Apples Versionsliste war nicht erreichbar (Backend-Log `ios_versions.fetch_failed`) oder `MDM_IOS_VERSION_CHECK=false`; der Server versucht es stündlich neu |
 | `401` auf `/v1/*` im LXC | `NANOMDM_API_KEY` in `.env` weicht vom laufenden Container ab — Container neu starten |
 | Container startet und beendet sich sofort, „permission denied" auf `/mdm/db` | Das Image läuft nicht als `root`. Besitzer des Verzeichnisses auf die uid des Containers setzen: `docker compose --profile mdm run --rm --entrypoint id nanomdm`, dann `chown -R <uid>:<gid> mdm` |

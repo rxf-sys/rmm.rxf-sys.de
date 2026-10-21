@@ -274,7 +274,9 @@ Lifespan (`backend/app/main.py:115-126`).
 | `persons` | Betreute Personen ("Kunden"); Geräte hängen über `person_id` daran | `persons.py:24` |
 | `device_credentials` | Fernet-verschlüsselte Geheimnisse je Gerät | `credentials.py:31` |
 | `mdm_enrollments` | MDM-Registrierungslinks: Link- und Challenge-Hash, `ref`, Rechte, Ablauf, Zeitpunkte von Abruf, Zertifikat und Registrierung | `mdm.py` |
-| `mdm_devices` | Gebundene Apple-Geräte: UDID, Rechte im Profil, letzter Kontakt, Abmeldung, gemeldete Geräteinformationen | `mdm.py` |
+| `mdm_devices` | Gebundene Apple-Geräte: UDID, Rechte im Profil, letzter Kontakt, Abmeldung; die letzten Antworten auf Geräteinformationen, Sicherheitsstatus, App-, Profil- und Zertifikatsliste; Entsperr-Token (mit dem Tresor-Schlüssel verschlüsselt); Ausstellung, Ablauf und Erneuerung der Identität | `mdm.py` |
+| `mdm_commands` | Jeder MDM-Befehl an ein Telefon mit CommandUUID, Anstoß und Ergebnis (`queued`, `acknowledged`, `error`, `notnow`, `failed`); 90 Tage | `mdm.py` |
+| `mdm_policies` | Je Telefon abgeschaltete Befugnisse (`lock`, `erase`, `clear_passcode`, `apps`) | `mdm.py` |
 | `schema_meta` | Schema-Version der Datei (nur informativ) | `db.py` |
 
 **Verbindungen**: Alle Module öffnen die Datenbank über
