@@ -93,6 +93,7 @@ Alle unter `frontend/src/ui/`, exportiert über `ui/index.ts`.
 | `Menu` | Überlauf-Aktionen nach dem WAI-ARIA-Menümuster |
 | `Popover` | Freier Inhalt am Auslöser (z. B. gespeicherte Ansichten) |
 | `Switch` | Ein/Aus mit `role="switch"` |
+| `QrCode` | QR-Code als reines SVG (`role="img"`, Beschriftung Pflicht); dunkel auf hell in beiden Themes (`--qr-fg`/`--qr-bg`) |
 | `EmptyState`, `ErrorNote`, `Skeleton`, `SkeletonRows` | Leer, Fehler (mit „Erneut versuchen"), Laden — Laden sieht nie aus wie leer |
 | `Modal` (`components/`) | Dialog mit Fokusfalle; rendert per Portal in `<body>` |
 | `ConfirmDialog` / `useConfirm` | Bestätigung; Fokus startet auf „Abbrechen", destruktiv optional mit getipptem Wort |
@@ -102,6 +103,12 @@ Alle unter `frontend/src/ui/`, exportiert über `ui/index.ts`.
 
 ## 6. Muster
 
+- **Breite**: Der Inhalt nimmt die ganze Breite neben der Seitenleiste;
+  Raster füllen sie mit `auto-fit`/`auto-fill`, Fließtext behält sein Maß
+  (`max-width: …ch`). Zwischen 721 und 1100 px schrumpft die Seitenleiste
+  auf Icons (`--rail-w-compact`), darunter übernimmt die Leiste unten. Kein
+  Bildschirm zwischen 390 und 2560 px scrollt seitwärts
+  (`e2e/layout.spec.ts`).
 - **Datentabelle** (`.dt` in `styles/components.css`): echtes `<table>`,
   Kopf klebt unter der Topbar, sortierbare Köpfe als Knöpfe mit
   `aria-sort`, Zeilenklick als Komfort für die Maus — der eigentliche Weg ist

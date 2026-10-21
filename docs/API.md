@@ -2,7 +2,7 @@
 
 Stand: 21.10.2026. Die Tabellen unten sind aus der laufenden Anwendung
 erzeugt (`app.routes` inkl. der tatsächlich registrierten Dependencies), nicht
-von Hand gepflegt. Sie umfassen **74 HTTP-Endpunkte und 3 WebSockets**.
+von Hand gepflegt. Sie umfassen **77 HTTP-Endpunkte und 3 WebSockets**.
 
 Die maschinenlesbare Fassung mit allen Request-/Response-Schemata liefert
 FastAPI selbst:
@@ -156,6 +156,31 @@ Bestandsskripte bekommen `sonstiges` und `danger = false`.
 | POST | `/api/devices/{device_id}/patches/scan` | Operator | Scan anstoßen. 409 ohne offene Agent-Verbindung |
 | POST | `/api/devices/{device_id}/patches/install` | Operator | Installations-Job; ohne Agent-Verbindung ist er sofort fehlgeschlagen. 409 bei bereits laufender Installation, 422 wenn nichts aussteht. Ohne `patch_ids` alles Ausstehende (oder mit `security_only` nur Sicherheitsupdates); mit `patch_ids` höchstens 400 IDs à 128 Zeichen, und jede muss für dieses Gerät ausstehen, sonst 422 |
 
+## Vormerkungen (beim nächsten Online-Gehen)
+
+Aufträge für ein Gerät, das gerade nicht verbunden ist — ausgeführt beim
+nächsten Heartbeat, für ein verbundenes Gerät sofort. Ablauf:
+`backend/app/action_runner.py`.
+
+| Methode | Pfad | Auth | Zweck |
+|---|---|---|---|
+| GET | `/api/devices/{device_id}/actions` | Operator | Offene Vormerkungen zuerst, dann die letzten abgeschlossenen; je mit `state` (`pending`, `dispatched`, `done`, `failed`, `expired`, `cancelled`), `job_id`/`job_status` und `note` |
+| POST | `/api/devices/{device_id}/actions` | Operator | `{kind: "patch_install", security_only?, reboot?}` oder `{kind: "script", script_id}`, optional `expires_hours` (1–2160, Default 336 = zwei Wochen). 201 mit `action`, `created` (false: eine offene gleicher Art wurde erweitert) und `dispatched_job_ids` (Gerät war verbunden). 409 für Geräte ohne Agent, 404/422 für ein unbekanntes oder fremdes Skript. Audit `action.queued` |
+| DELETE | `/api/devices/{device_id}/actions/{action_id}` | Operator | Eine noch wartende Vormerkung zurückziehen; eine schon gesendete ist ein Job und bleibt (409). Audit `action.cancelled` |
+
+- **Updates** installiert das, was der letzte Scan meldet. Wurde beim selben
+  Heartbeat gerade ein Scan angefordert, wartet die Installation bis zu
+  10 Minuten auf dessen Ergebnis, damit nach langer Abwesenheit die frische
+  Liste zählt. Nichts offen: die Vormerkung schließt als erledigt.
+- **`reboot: true`** legt nach erfolgreicher Installation einen Neustart nach,
+  der nur ausgeführt wird, wenn der Heartbeat `reboot_required` meldet (der
+  Befehl aus dem Dashboard: eine Minute Vorwarnung). Bleibt die Antwort
+  15 Minuten „nein“ oder unbekannt, schließt er als erledigt.
+- Jede Ausführung landet als `action.dispatched` im Audit-Log (mit `job_id`,
+  bei Skripten mit `content_hmac`), Abschluss als `action.done` /
+  `action.failed`, Ablauf als `action.expired`.
+- Geräteliste und Detail tragen `open_actions` (offene Vormerkungen).
+
 ## Alarme, Inventar, Audit
 
 | Methode | Pfad | Auth | Zweck |
@@ -222,7 +247,7 @@ pflegen.
 | Methode | Pfad | Auth | Zweck |
 |---|---|---|---|
 | GET | `/api/automation` | Session | Patch-Fenster, Regeln und Zeitpläne |
-| PUT | `/api/automation` | Admin | Patch-Fenster konfigurieren |
+| PUT | `/api/automation` | Admin | Patch-Fenster konfigurieren: Tag, Stunde, Umfang, Tag-Filter, `catch_up_days` (0–14, Default 3: offline gewesene Geräte holen innerhalb dieser Tage nach; 0 = bis zum nächsten Fenster warten) und `reboot` (Neustart, falls nötig) |
 | POST | `/api/automation/rules` | Admin | Alarmregel anlegen |
 | PUT | `/api/automation/rules/{rule_id}` | Admin | Alarmregel ändern |
 | DELETE | `/api/automation/rules/{rule_id}` | Admin | Alarmregel löschen |

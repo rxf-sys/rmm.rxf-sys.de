@@ -66,7 +66,7 @@ der Default `production` und die Doku antwortet lokal mit 404.
 
 ## Fallstricke
 
-- **`ruff` ist auf `>=0.16.6,<0.17` gepinnt und der Regelsatz steht explizit
+- **`ruff` ist auf `>=0.16.6,<0.18` gepinnt und der Regelsatz steht explizit
   in `pyproject.toml`.** Beides gehört zusammen: Ruff hat den impliziten
   Default-Satz zwischen Releases erweitert und damit CI ohne Codeänderung rot
   gemacht. Neue Regeln bewusst aufnehmen.
