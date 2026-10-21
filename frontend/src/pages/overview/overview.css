@@ -25,65 +25,220 @@
   border-radius: 50%;
   background: var(--ok);
 }
-.fleetmap {
+/* ---- Lagebild: one tile per device ---- */
+.fb {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
 }
-.fleetmap-row {
-  display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
-  gap: var(--sp-3);
-  align-items: start;
-}
-.fleetmap-label {
-  justify-self: start;
-  border-radius: var(--r-pill);
-  text-decoration: none;
-}
-.fleetmap-label:hover {
-  text-decoration: none;
-}
-.fleetmap-cells {
+.fb-tools {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-2) var(--sp-3);
+}
+.fb-person {
+  width: auto;
+  min-width: 180px;
+  max-width: 260px;
+}
+.fb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
+  gap: var(--sp-3);
   margin: 0;
-  padding: 3px 0 0;
+  padding: 0;
   list-style: none;
 }
-.fleetmap-cell {
-  display: block;
-  width: var(--cell);
-  height: var(--cell);
-  border-radius: calc(var(--cell) / 4.5);
-  transition: transform var(--dur-1) var(--ease-out);
+.fb-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  transition:
+    border-color var(--dur-1) ease,
+    background-color var(--dur-1) ease;
+}
+/* State as a hairline plus the badge's icon and word — never colour alone. */
+.fb-tile.danger {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+}
+.fb-tile.warn {
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--line));
+}
+.fb-tile.off,
+.fb-tile.noagent {
+  background: var(--surface-2);
+}
+.fb-tile.off {
+  border-style: dashed;
 }
 @media (hover: hover) and (pointer: fine) {
-  .fleetmap-cell:hover {
-    transform: scale(1.25);
+  .fb-tile:hover {
+    border-color: var(--line-strong);
   }
 }
-.fleetmap-cell.ok {
-  background: color-mix(in srgb, var(--ok) 40%, var(--surface));
+.fb-tile:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
-.fleetmap-cell.warn {
+.fb-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.fb-os {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+  color: var(--tx);
+}
+.fb-id {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.fb-name {
+  overflow: hidden;
+  color: var(--tx);
+  font-weight: 800;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fb-name:hover {
+  text-decoration: none;
+}
+.fb-name:focus-visible {
+  outline: none;
+}
+/* The whole tile is the link's hit area. */
+.fb-name::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-lg);
+}
+.fb-sub {
+  overflow: hidden;
+  color: var(--tx-3);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fb-load {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+.fb-load-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+}
+.fb-load-row dt {
+  color: var(--tx-3);
+  font-weight: 700;
+}
+.fb-load-row dd {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+}
+.fb-bar {
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+}
+.fb-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--s1);
+}
+.fb-bar-fill.warn {
   background: var(--warn);
 }
-.fleetmap-cell.danger {
+.fb-bar-fill.crit {
   background: var(--danger);
 }
-.fleetmap-cell.off {
-  border: 1.5px dashed var(--off);
-}
-.fleetmap-cell.noagent {
-  border: 1.5px solid var(--off);
-}
-.fleetmap-rest a {
-  margin-left: var(--sp-1);
-  font-size: var(--fs-sm);
+.fb-load-val {
+  min-width: 38px;
+  color: var(--tx-2);
   font-weight: 700;
+  text-align: right;
+}
+.fb-load-val.warn {
+  color: var(--warn-tx);
+}
+.fb-load-val.crit {
+  color: var(--danger-tx);
+}
+.fb-note {
+  margin: 0;
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}
+.fb-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--sp-2);
+  margin: auto 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-xs);
+}
+.fb-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--tx-2);
+  font-weight: 700;
+}
+.fb-fact.danger {
+  background: var(--danger-soft);
+  color: var(--danger-tx);
+}
+.fb-fact.warn {
+  background: var(--warn-soft);
+  color: var(--warn-tx);
+}
+.fb-fact.ok {
+  background: var(--ok-soft);
+  color: var(--ok-tx);
+}
+.fb-seen {
+  margin-left: auto;
+  color: var(--tx-3);
+  white-space: nowrap;
+}
+.fb-empty {
+  margin: 0;
+  color: var(--tx-3);
+}
+.fb-more {
+  align-self: flex-start;
 }
 
 /* ---- Kennzahlen ---- */
@@ -268,9 +423,15 @@
   }
 }
 @media (max-width: 720px) {
-  .fleetmap-row {
-    grid-template-columns: minmax(0, 1fr);
+  /* Phone: tiles become a compact list — name, state and the facts; the
+     bars stay, one line each. */
+  .fb-tile {
     gap: var(--sp-2);
+    padding: var(--sp-3);
+  }
+  .fb-person {
+    flex: 1;
+    max-width: none;
   }
   .ov-task {
     grid-template-columns: minmax(0, 1fr) auto;
