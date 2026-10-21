@@ -7,6 +7,17 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Behoben
+- **MDM: iPhones lehnten das Profil ab** („Die SCEP-Serverkonfiguration wird
+  nicht unterstützt"). `scepserver ca -init` erzeugt die CA ohne Key Usage
+  *Key Encipherment*; iOS verschlüsselt seinen Antrag nur an ein Zertifikat
+  mit diesem Bit und bricht sonst vor dem ersten Antrag ab.
+  `infrastructure/scep-ca-reissue.sh` stellt das CA-Zertifikat mit demselben
+  Schlüssel, Namen und Key Identifier neu aus (ausgestellte
+  Gerätezertifikate bleiben gültig), sichert die alten Dateien und startet
+  `scep` und `nanomdm` neu. Der `scep`-Container verweigert den Start mit
+  einer CA ohne das Bit (`scep-csr-verifier check-ca`).
+
 ### Hinzugefügt
 - **MDM: iPhone und iPad per QR-Code registrieren.** „Gerät hinzufügen →
   Telefon oder Tablet“ zeigt Admins nach dem Anlegen einen QR-Code mit einem
