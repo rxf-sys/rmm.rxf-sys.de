@@ -18,6 +18,7 @@ from . import (
     db,
     devices,
     jobs,
+    mdm,
     metrics,
     notify,
     patches,
@@ -38,6 +39,7 @@ from .routers import fleet as fleet_router
 from .routers import health as health_router
 from .routers import inventory as inventory_router
 from .routers import jobs as jobs_router
+from .routers import mdm as mdm_router
 from .routers import patches as patches_router
 from .routers import persons as persons_router
 from .routers import remote as remote_router
@@ -127,6 +129,8 @@ async def lifespan(app: FastAPI):
     await automation.ensure_schema(_settings)
     await persons.ensure_schema(_settings)
     await credentials.ensure_schema(_settings)
+    # After devices: both MDM tables reference devices(id).
+    await mdm.ensure_schema(_settings)
     # Agent release manifest (signed self-update). Best-effort — a missing
     # manifest just disables auto-update.
     releases.load(_settings)
@@ -198,3 +202,4 @@ app.include_router(settings_router.router)
 app.include_router(inventory_router.router)
 app.include_router(fleet_router.router)
 app.include_router(remote_router.router)
+app.include_router(mdm_router.router)

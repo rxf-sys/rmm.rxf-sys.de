@@ -26,7 +26,7 @@ func collectSoftware() []softwareItem {
 			continue
 		}
 		subs, err := key.ReadSubKeyNames(-1)
-		key.Close()
+		closeQuietly(key)
 		if err != nil {
 			continue
 		}
@@ -39,7 +39,7 @@ func collectSoftware() []softwareItem {
 			version, _, _ := entry.GetStringValue("DisplayVersion")
 			// SystemComponent=1 marks entries "Apps & Features" hides too.
 			sysComponent, _, _ := entry.GetIntegerValue("SystemComponent")
-			entry.Close()
+			closeQuietly(entry)
 			if nameErr != nil || name == "" || sysComponent == 1 || seen[name+version] {
 				continue
 			}

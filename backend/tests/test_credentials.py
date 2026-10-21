@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import aiosqlite
+import pytest
+from cryptography.fernet import Fernet
 from httpx import AsyncClient
+from structlog.testing import capture_logs
 
-from app import accounts, audit, devices
+from app import accounts, audit, credentials, devices
 from app.config import Settings
 
 
@@ -87,3 +90,20 @@ async def test_credentials_require_admin(admin_client: AsyncClient):
 
 async def test_credentials_unknown_device_404(admin_client: AsyncClient):
     assert (await admin_client.get("/api/devices/999/credentials")).status_code == 404
+
+
+async def test_reveal_with_a_swapped_key_keeps_the_traceback(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    """A replaced credentials.key cannot open the vault. reveal() answers None
+    and the log carries the exception, so the cause is not lost."""
+    device_id = await _make_device()
+    cred, _ = await credentials.upsert_by_label(
+        device_id, label="BitLocker C:", username="", secret="123456", notes="", updated_by="t"
+    )
+    monkeypatch.setattr(credentials, "_fernet", Fernet(Fernet.generate_key()))
+    with capture_logs() as logs:
+        assert await credentials.reveal(int(cred["id"]), device_id) is None
+    [entry] = [e for e in logs if e["event"] == "credentials.decrypt_failed"]
+    assert entry["log_level"] == "error"
+    assert entry["exc_info"] is True

@@ -16,11 +16,13 @@ from app import (
     metrics,
     patch_scan,
     patches,
+    persons,
     releases,
     scripts,
 )
 from app.agents_ws import manager
 from app.config import Settings, get_settings
+from app.fleet_ws import hub as fleet_hub
 from app.main import app
 
 WS_PATH = "/api/agent/ws"
@@ -41,6 +43,7 @@ def ws_client(settings: Settings):
     asyncio.run(jobs.ensure_schema(settings))
     asyncio.run(scripts.ensure_schema(settings))
     asyncio.run(patches.ensure_schema(settings))
+    asyncio.run(persons.ensure_schema(settings))
     manager.reset_for_tests()
     jobs.hub.reset_for_tests()
     releases.reset_for_tests(None, "")
@@ -256,9 +259,14 @@ def test_job_end_to_end_live_stream(ws_client: TestClient, settings: Settings):
     assert final["output"] == "hi\n"
 
 
-def test_outdated_agent_is_offered_an_update(ws_client: TestClient):
+def test_outdated_agent_is_offered_an_update(ws_client: TestClient, settings: Settings):
     """An agent reporting an old version gets an `update` message with the
     signed download pointer."""
+    # A never-scanned device is also due for the daily scan, and that request
+    # goes out first on the same heartbeat. The test only passed when an
+    # earlier test had already marked device 1 as asked in patch_scan's
+    # in-memory map.
+    settings.patch_scan_enabled = False
     releases.reset_for_tests(
         {
             "version": "0.9.0",
@@ -283,6 +291,90 @@ def test_outdated_agent_is_offered_an_update(ws_client: TestClient):
         releases.reset_for_tests(None, "")
 
 
+def test_automatic_update_push_is_audited_once_per_connection(
+    ws_client: TestClient, settings: Settings
+):
+    """The automatic `update` is a command to a device like the operator's
+    push, so it lands in the audit log — with the system actor, because
+    nobody clicked anything, and only for the one offer per connection."""
+    # The daily scan request would ride on the same heartbeat; keep it out.
+    settings.patch_scan_enabled = False
+    releases.reset_for_tests(
+        {
+            "version": "0.9.0",
+            "targets": {
+                "linux-amd64": {"file": "rmm-agent-linux-amd64", "sha256": "aa", "sig": "bb"}
+            },
+        },
+        "/tmp/rel",
+    )
+    try:
+        raw, _ = asyncio.run(devices.create_enrollment_token("t", 1))
+        creds = asyncio.run(
+            devices.enroll_device(token=raw, hostname="old-agent", os="linux", arch="amd64")
+        )
+        with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as ws:
+            ws.send_json({"type": "heartbeat", "payload": {"agent_version": "0.1.0"}})
+            ws.send_json({"type": "heartbeat", "payload": {"agent_version": "0.1.0"}})
+            pushed = _sync(ws)
+        assert [m["type"] for m in pushed] == ["update"]
+
+        events = asyncio.run(audit.query(category="device"))["events"]
+        offers = [e for e in events if e["event"] == "agent.update_offered"]
+        assert len(offers) == 1
+        offer = offers[0]
+        assert offer["actor"] == "automation"
+        assert offer["device_id"] == creds["device_id"]
+        assert offer["category"] == "device"
+        assert offer["detail"]["version"] == "0.9.0"
+        assert offer["detail"]["from_version"] == "0.1.0"
+        assert offer["detail"]["hostname"] == "old-agent"
+    finally:
+        releases.reset_for_tests(None, "")
+
+
+def test_current_agent_gets_no_update_and_no_audit_record(
+    ws_client: TestClient, settings: Settings
+):
+    settings.patch_scan_enabled = False
+    releases.reset_for_tests(
+        {
+            "version": "0.9.0",
+            "targets": {
+                "linux-amd64": {"file": "rmm-agent-linux-amd64", "sha256": "aa", "sig": "bb"}
+            },
+        },
+        "/tmp/rel",
+    )
+    try:
+        raw, _ = asyncio.run(devices.create_enrollment_token("t", 1))
+        creds = asyncio.run(
+            devices.enroll_device(token=raw, hostname="new-agent", os="linux", arch="amd64")
+        )
+        with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as ws:
+            ws.send_json({"type": "heartbeat", "payload": {"agent_version": "0.9.0"}})
+            assert _sync(ws) == []
+        events = asyncio.run(audit.query())["events"]
+        assert not [e for e in events if e["event"] == "agent.update_offered"]
+    finally:
+        releases.reset_for_tests(None, "")
+
+
+@pytest.fixture
+def auth_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin auth on for the session checks of the job and fleet sockets.
+
+    Both sockets, like verify_session, call get_settings() directly, so the
+    conftest override never reaches them; they see the lru_cached Settings
+    built from the process environment when app.main was imported. Setting
+    AUTH_ENABLED afterwards changes nothing, so the cached object itself is
+    patched (as test_agent_setup.py does for app_env). Without this, a local
+    AUTH_ENABLED=false turns these tests into failures that say nothing
+    about the sockets."""
+    monkeypatch.setattr(get_settings(), "auth_enabled", True)
+
+
+@pytest.mark.usefixtures("auth_on")
 def test_job_ws_requires_auth(ws_client: TestClient):
     creds = _enroll("noauth-pc")
     job = asyncio.run(
@@ -293,6 +385,74 @@ def test_job_ws_requires_auth(ws_client: TestClient):
         with pytest.raises(WebSocketDisconnect) as exc:
             ws.receive_json()
         assert exc.value.code == 4401
+
+
+def _login_as(ws_client: TestClient, username: str, role: str, person_id: int | None = None) -> None:
+    asyncio.run(accounts.create_user(username, "ws-passwort-1", role=role, person_id=person_id))
+    r = ws_client.post("/api/auth/login", json={"username": username, "password": "ws-passwort-1"})
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.usefixtures("auth_on")
+def test_job_ws_refuses_a_viewer_with_4403(ws_client: TestClient):
+    creds = _enroll("oma-pc")
+    person = asyncio.run(persons.create_person("Oma"))
+    asyncio.run(devices.update_device(creds["device_id"], person_id=person["id"]))
+    job = asyncio.run(
+        jobs.create_job(creds["device_id"], kind="shell", command="echo x", created_by="boss")
+    )
+    asyncio.run(jobs.finish_job(job["id"], "done", 0))
+
+    # Even the viewer whose device ran the job: output can hold secrets, so
+    # the socket goes by role, not by who may see the device.
+    _login_as(ws_client, "oma", "viewer", person["id"])
+    with ws_client.websocket_connect(f"/api/jobs/{job['id']}/ws") as ws:
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_json()
+        assert exc.value.code == 4403
+
+    # Same job, operator session: the refusal above came from the role.
+    _login_as(ws_client, "technik", "techniker")
+    with ws_client.websocket_connect(f"/api/jobs/{job['id']}/ws") as ws:
+        assert ws.receive_json()["type"] == "snapshot"
+        assert ws.receive_json()["type"] == "done"
+
+
+@pytest.mark.usefixtures("auth_on")
+def test_fleet_ws_requires_a_session(ws_client: TestClient):
+    before = set(fleet_hub._subs)
+    with ws_client.websocket_connect("/api/fleet/ws") as ws:
+        with pytest.raises(WebSocketDisconnect) as exc:
+            ws.receive_json()
+        assert exc.value.code == 4401
+    assert set(fleet_hub._subs) == before
+
+
+def _wait_for_new_fleet_subscriber(before: set) -> None:
+    """The fleet socket is accepted before the session check and the
+    subscription, so websocket_connect returns while the hub does not know it
+    yet; a hint broadcast in that gap would never arrive."""
+    deadline = time.monotonic() + 5
+    while not set(fleet_hub._subs) - before:
+        assert time.monotonic() < deadline, "fleet socket never subscribed"
+        time.sleep(0.01)
+
+
+@pytest.mark.usefixtures("auth_on")
+def test_fleet_ws_sends_hints_without_data(ws_client: TestClient):
+    """Every session gets every hint, whatever it may see. That is only safe
+    while a hint carries nothing: the client re-reads REST, which filters."""
+    # A viewer without a person: no device of the fleet is visible to it.
+    _login_as(ws_client, "zuschauer", "viewer")
+    creds = _enroll("geheim-pc")
+    before = set(fleet_hub._subs)
+    with ws_client.websocket_connect("/api/fleet/ws") as fleet:
+        _wait_for_new_fleet_subscriber(before)
+        with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as agent_ws:
+            _sync(agent_ws)
+            hint = fleet.receive_json()
+    # The whole frame, not just its type: no device id, no hostname.
+    assert hint == {"type": "refresh", "kind": "device_online"}
 
 
 def test_job_ws_finished_job_sends_snapshot_then_done(ws_client: TestClient):
@@ -407,3 +567,101 @@ def test_ws_patch_report_marks_the_device_scanned(ws_client: TestClient, setting
     device = asyncio.run(devices.get_device(device_id, 300))
     assert device is not None
     assert device["last_patch_scan_at"] >= int(time.time()) - 60
+
+
+def test_ws_reports_for_another_devices_job_change_nothing(ws_client: TestClient):
+    """A job id in an agent message is a claim, not a credential: device B
+    reporting on device A's job must leave that job exactly as it was, and
+    the attempt is recorded as a security event — once per job and
+    connection, not once per message."""
+    asyncio.run(audit.clear())
+    owner = _enroll("owner-pc")
+    intruder = _enroll("intruder-pc")
+    job = asyncio.run(
+        jobs.create_job(owner["device_id"], kind="shell", command="whoami", created_by="boss")
+    )
+
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(intruder)) as ws:
+        _sync(ws)
+        ws.send_json({"type": "job_started", "payload": {"job_id": job["id"]}})
+        ws.send_json({"type": "job_output", "payload": {"job_id": job["id"], "chunk": "fake\n"}})
+        ws.send_json(
+            {"type": "job_result", "payload": {"job_id": job["id"], "status": "done", "exit_code": 0}}
+        )
+        # An id that belongs to nobody is refused the same way.
+        ws.send_json({"type": "job_result", "payload": {"job_id": 999_999, "status": "done"}})
+        _sync(ws)
+
+    stored = asyncio.run(jobs.get_job(job["id"]))
+    assert stored is not None
+    assert stored["status"] == "queued"
+    assert stored["started_at"] is None
+    assert stored["finished_at"] is None
+    assert stored["exit_code"] is None
+    assert stored["output"] == ""
+
+    events = asyncio.run(audit.query(security_only=True))["events"]
+    refused = [e for e in events if e["event"] == "agent.job_mismatch"]
+    assert len(refused) == 2
+    by_job = {e["detail"]["job_id"]: e for e in refused}
+    assert by_job[job["id"]]["device_id"] == intruder["device_id"]
+    assert by_job[job["id"]]["detail"]["reason"] == "foreign"
+    assert by_job[job["id"]]["detail"]["owner_device_id"] == owner["device_id"]
+    assert by_job[999_999]["detail"]["reason"] == "unknown"
+    assert all(e["security"] for e in refused)
+
+
+def test_ws_job_dispatched_before_a_reconnect_finishes_on_the_new_socket(
+    ws_client: TestClient,
+):
+    """Ownership comes from the job row, not from what one connection sent:
+    an agent that loses its socket mid-job reports the rest over the next."""
+    _login_admin(ws_client)
+    creds = _enroll("flaky-pc")
+    device_id = creds["device_id"]
+
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as first:
+        _sync(first)
+        r = ws_client.post(
+            f"/api/devices/{device_id}/jobs",
+            json={"kind": "shell", "command": "sleep 5; echo ok", "shell": "bash"},
+        )
+        assert r.status_code == 200
+        job_id = r.json()["job"]["id"]
+        assert first.receive_json()["payload"]["job_id"] == job_id
+        first.send_json({"type": "job_started", "payload": {"job_id": job_id}})
+        first.send_json({"type": "job_output", "payload": {"job_id": job_id, "chunk": "before\n"}})
+        _sync(first)
+
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as second:
+        _sync(second)
+        second.send_json({"type": "job_output", "payload": {"job_id": job_id, "chunk": "after\n"}})
+        second.send_json(
+            {"type": "job_result", "payload": {"job_id": job_id, "status": "done", "exit_code": 0}}
+        )
+        _sync(second)
+
+    final = asyncio.run(jobs.get_job(job_id))
+    assert final["status"] == "done"
+    assert final["exit_code"] == 0
+    assert final["output"] == "before\nafter\n"
+    events = asyncio.run(audit.recent())
+    assert not any(e["event"] == "agent.job_mismatch" for e in events)
+
+
+def test_ws_refusal_audit_is_capped_per_connection(ws_client: TestClient):
+    """An agent cycling through job ids gets each refused, but the audit log
+    records only the first few per connection — the rest go to structlog."""
+    from app.routers.agent import _MAX_JOB_REFUSALS_AUDITED
+
+    asyncio.run(audit.clear())
+    creds = _enroll("noisy-pc")
+    with ws_client.websocket_connect(WS_PATH, headers=_auth_header(creds)) as ws:
+        _sync(ws)
+        for job_id in range(900_000, 900_000 + _MAX_JOB_REFUSALS_AUDITED + 5):
+            ws.send_json({"type": "job_started", "payload": {"job_id": job_id}})
+        _sync(ws)
+
+    events = asyncio.run(audit.query(limit=500))["events"]
+    refused = [e for e in events if e["event"] == "agent.job_mismatch"]
+    assert len(refused) == _MAX_JOB_REFUSALS_AUDITED

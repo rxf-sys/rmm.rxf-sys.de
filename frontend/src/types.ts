@@ -330,3 +330,51 @@ export interface FleetSample {
   /** Wie viele Geräte in dieser Stunde überhaupt gemeldet haben. */
   devices: number;
 }
+
+/** Where an MDM enrollment stands — derived on the server
+ *  (backend/app/mdm.py: enrollment_state). */
+export type MdmEnrollmentState = 'waiting' | 'downloaded' | 'certificate' | 'enrolled' | 'expired' | 'revoked';
+
+export interface MdmEnrollment {
+  id: number;
+  device_id: number;
+  access_rights: number;
+  created_by: string;
+  created_at: number;
+  expires_at: number;
+  downloads: number;
+  downloaded_at: number | null;
+  scep_at: number | null;
+  enrolled_at: number | null;
+  revoked_at: number | null;
+  state: MdmEnrollmentState;
+}
+
+/** A phone bound to its device row via NanoMDM. */
+export interface MdmBinding {
+  udid: string;
+  access_rights: number;
+  enrolled_at: number;
+  last_seen_at: number;
+  checked_out_at: number | null;
+  /** DeviceInformation answer, as the phone sent it. */
+  info: Record<string, string | number | boolean>;
+  info_at: number | null;
+}
+
+export interface DeviceMdm {
+  /** False until every MDM variable is set on the server. */
+  configured: boolean;
+  /** Names of the missing variables — only filled for admins. */
+  missing: string[];
+  enrollment: MdmEnrollment | null;
+  binding: MdmBinding | null;
+  /** Enrolled as private, now marked company: the profile lacks the erase right. */
+  needs_reenroll: boolean;
+}
+
+export interface CreatedMdmEnrollment {
+  /** The one-time link — shown once, never retrievable again. */
+  url: string;
+  enrollment: MdmEnrollment;
+}

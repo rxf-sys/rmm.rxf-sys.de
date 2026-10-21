@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -73,4 +76,37 @@ func runPatchInstall(parent context.Context, s *sender, spec jobSpec) {
 	// Re-scan so installed patches drop off the dashboard's list.
 	report := scanPatches(parent)
 	s.send(parent, "patch_report", map[string]any{"patches": report})
+}
+
+// Patch ids come from the server and end up as apt arguments or spliced into
+// the Windows Update script. The agent passes on only ids of the shape the
+// scan on that OS reports, so neither a broken server nor anything between
+// it and the agent can slip in an option or end a quoted string. The checks
+// live here rather than in the per-OS files so their tests run on every OS.
+var (
+	// A Windows Update UpdateID is a GUID, printed without braces.
+	updateIDPattern = regexp.MustCompile(
+		`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	// A binary package name as Debian policy 5.6.7 defines it, optionally
+	// with the architecture apt appends for a foreign one (libc6:i386).
+	debianPackagePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]+(:[a-z0-9][a-z0-9-]*)?$`)
+)
+
+func isUpdateID(id string) bool { return updateIDPattern.MatchString(id) }
+
+func isDebianPackage(id string) bool { return debianPackagePattern.MatchString(id) }
+
+// powerShellUpdateIDs renders UpdateIDs as the elements of a PowerShell
+// array for installScript. Escaping is no option here: PowerShell ends a
+// single-quoted string not only at U+0027 but also at U+2018 through U+201B.
+// A GUID contains none of them, so an id that is one can be quoted as is.
+func powerShellUpdateIDs(ids []string) (string, error) {
+	quoted := make([]string, len(ids))
+	for i, id := range ids {
+		if !isUpdateID(id) {
+			return "", fmt.Errorf("patch id %q rejected: not a Windows Update UpdateID (GUID)", id)
+		}
+		quoted[i] = "'" + id + "'"
+	}
+	return strings.Join(quoted, ","), nil
 }

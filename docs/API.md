@@ -1,8 +1,8 @@
 # API-Referenz
 
-Stand: 07.09.2026. Die Tabellen unten sind aus der laufenden Anwendung
+Stand: 21.10.2026. Die Tabellen unten sind aus der laufenden Anwendung
 erzeugt (`app.routes` inkl. der tatsächlich registrierten Dependencies), nicht
-von Hand gepflegt. Sie umfassen **68 HTTP-Endpunkte und 3 WebSockets**.
+von Hand gepflegt. Sie umfassen **74 HTTP-Endpunkte und 3 WebSockets**.
 
 Die maschinenlesbare Fassung mit allen Request-/Response-Schemata liefert
 FastAPI selbst:
@@ -67,9 +67,9 @@ Aufklärungsfläche hinter einem öffentlichen Tunnel.
 | GET | `/api/devices/{device_id}/history` | Session | Metrik-Historie (Roh + Stunden-Rollup) |
 | GET | `/api/devices/{device_id}/alerts` | Session | Alarm-Historie des Geräts |
 | POST | `/api/devices` | Operator | Gerät **ohne Agent** anlegen (Telefon/Tablet). 201 mit der neuen Zeile; es entsteht kein Zugang |
-| PATCH | `/api/devices/{device_id}` | Operator | Label, Tags, Person, RustDesk-ID ändern. Bei Geräten ohne Agent zusätzlich Bezeichnung, OS-Version, Modell, Seriennummer, IMEI, Notiz und Besitzverhältnis — bei Geräten mit Agent sind diese Felder 409 |
+| PATCH | `/api/devices/{device_id}` | Operator | Label, Tags, Person, RustDesk-ID ändern. Bei Geräten ohne Agent zusätzlich Bezeichnung, OS-Version, Modell, Seriennummer, IMEI, Notiz und Besitzverhältnis — bei Geräten mit Agent sind diese Felder 409. Die RustDesk-ID ist entweder numerisch (6–12 Ziffern) oder ein eigener Alias (6–16 Zeichen, beginnend mit einem Buchstaben, aus `A–Z`, `a–z`, `0–9`, `_`, `-`), sonst 422; leer löscht sie. Leerzeichen entfernt der Server vor der Prüfung (RustDesk zeigt IDs in Dreiergruppen, `123 456 789`) und speichert die bereinigte ID. Der Audit-Eintrag `devices.updated` nennt die geänderten Felder (`changed`), für Person und RustDesk-ID mit altem und neuem Wert, für Tags die hinzugefügten und entfernten |
 | DELETE | `/api/devices/{device_id}` | Operator | Gerät entfernen; der Agent verliert damit den Zugang |
-| GET | `/api/devices/{device_id}/agent-logs` | Operator | Holt die letzten Log-Zeilen live vom Agent. 409 ohne offene Verbindung, 504 wenn der Agent nicht innerhalb von 5 s antwortet |
+| GET | `/api/devices/{device_id}/agent-logs` | Operator | Holt die letzten Log-Zeilen live vom Agent. 409 ohne offene Verbindung, 504 wenn der Agent nicht innerhalb von 5 s antwortet. Jede gesendete Anfrage landet als `device.agent_logs` im Audit-Log, auch eine unbeantwortete |
 | POST | `/api/devices/{device_id}/wake` | Operator | Wake-on-LAN an alle bekannten MACs. 422, wenn keine MAC bekannt ist |
 | POST | `/api/devices/{device_id}/update-agent` | Operator | Bietet dem Agent sofort das aktuelle Release an. 409, wenn er schon aktuell oder nicht verbunden ist, 502 wenn das Senden scheitert |
 | POST | `/api/devices/{device_id}/maintenance` | Operator | Wartungsfenster setzen; unterdrückt Alarme |
@@ -92,10 +92,36 @@ der Hash eines Geheimnisses, das nie jemand erfährt, und
 `authenticate_device()` weist die Klasse zusätzlich ab. Der einzige Weg zu
 einem Gerät, das sich anmelden kann, bleibt das Enrollment-Token.
 
-Feld `ownership`: `private` oder `company`. Heute Information für die
-Übersicht; sobald Verwaltungsbefehle dazukommen, entscheidet es über deren
-Umfang (privat: Inventar, Sperren, Verloren-Modus, Richtlinien — Firma
-zusätzlich Komplett-Löschen und Zwangs-Updates).
+Feld `ownership`: `private` oder `company`. Es entscheidet über die Rechte
+im MDM-Profil (privat ohne Komplett-Löschen, siehe unten) und künftig über
+den Umfang der Verwaltungsbefehle.
+
+## Apple MDM (iPhone und iPad)
+
+Registrierung eines Geräts der Klasse `mobile` mit `os` `ios` oder `ipados`
+bei NanoMDM. Ablauf und Vertrauensmodell: `backend/app/mdm.py`,
+Einrichtung: [`MDM-SETUP.md`](MDM-SETUP.md).
+
+| Methode | Pfad | Auth | Zweck |
+|---|---|---|---|
+| GET | `/api/devices/{device_id}/mdm` | Session | Stand der Registrierung: `configured`, `missing` (fehlende ENV-Namen, nur für Admins), letzte `enrollment` mit `state` (`waiting`, `downloaded`, `certificate`, `enrolled`, `expired`, `revoked`), `binding` (UDID, Rechte, letzter Kontakt, gemeldete Geräteinformationen) und `needs_reenroll` (als privat registriert, jetzt Firmengerät). Viewer nur für eigene Geräte, sonst 404 |
+| POST | `/api/devices/{device_id}/mdm/enrollment` | Admin | Neuer Einmal-Link `https://…/api/mdm/enroll/mde_…`. Der Klartext steht **nur** in dieser Antwort; ein offener älterer Link desselben Geräts wird widerrufen. 409 für alles außer iPhone/iPad ohne Agent, 503 solange MDM nicht eingerichtet ist. Audit `mdm.enrollment_created` |
+| DELETE | `/api/devices/{device_id}/mdm/enrollment` | Admin | Offenen Link widerrufen. Audit `mdm.enrollment_revoked` |
+| GET | `/api/mdm/enroll/{token}` | Link | Das Enrollment-Profil (`application/x-apple-aspen-config`) für das Telefon — ohne Login, der Link ist das Credential. Jeder Abruf erzeugt eine neue Einmal-Challenge und macht die vorige ungültig; höchstens 5 Abrufe, danach, nach Ablauf, Widerruf oder ausgestelltem Zertifikat 404. 429 nach 20 Fehlversuchen pro IP in 300 s. Audit `mdm.profile_downloaded` |
+| POST | `/api/mdm/scep/verify` | Bearer `MDM_SCEP_VERIFY_TOKEN` | Nur für `scep-csr-verifier` im `rmm`-Netz, von außen 404 (Caddy). Body `{challenge, cn}`; 200 genau einmal je Challenge, sonst 403 (`unknown`, `cn_mismatch` — dann ist die Registrierung widerrufen). Audit `mdm.scep_rejected` bei Ablehnung |
+| POST | `/api/mdm/webhook` | HMAC `X-Hmac-Signature` | Nur für NanoMDM im `rmm`-Netz, von außen 404 (Caddy). MicroMDM-kompatibles Format; verarbeitet `mdm.Authenticate`, `mdm.TokenUpdate`, `mdm.CheckOut` und `mdm.Connect` des Gerätekanals. Audit `mdm.enrolled`, `mdm.checked_out`, `mdm.command_queued` / `mdm.command_failed` |
+
+**Zuordnung.** Das Profil trägt in `ServerURL` und `CheckInURL` den
+Parameter `?e=<ref>`; NanoMDM reicht ihn als `url_params` an den Webhook
+durch. Gebunden wird nur eine Registrierung, deren Challenge bereits ein
+Zertifikat ergeben hat. Nach dem ersten `TokenUpdate` stellt das Backend
+`DeviceInformation` ein; die Antwort füllt Seriennummer, IMEI und
+OS-Version der Karteikarte (ein getippter Modellname bleibt stehen).
+
+**Rechte im Profil.** `AccessRights` ist 8191 für Firmengeräte und 8183 für
+alles andere — ohne das Bit „Device erase“, iOS selbst verweigert dann das
+Löschen. Ein späterer Wechsel auf „Firma“ ändert das Profil auf dem Gerät
+nicht; `needs_reenroll` sagt, dass dafür neu zu registrieren ist.
 
 ## Jobs und Skripte
 
@@ -128,17 +154,32 @@ Bestandsskripte bekommen `sonstiges` und `danger = false`.
 | GET | `/api/patches/summary` | Session | Flottenweite Übersicht, für Viewer gefiltert |
 | GET | `/api/devices/{device_id}/patches` | Session | Ausstehende Patches eines Geräts, dazu `last_scan_at` |
 | POST | `/api/devices/{device_id}/patches/scan` | Operator | Scan anstoßen. 409 ohne offene Agent-Verbindung |
-| POST | `/api/devices/{device_id}/patches/install` | Operator | Installations-Job. 409 ohne Verbindung oder bei bereits laufender Installation, 422 wenn nichts aussteht |
+| POST | `/api/devices/{device_id}/patches/install` | Operator | Installations-Job; ohne Agent-Verbindung ist er sofort fehlgeschlagen. 409 bei bereits laufender Installation, 422 wenn nichts aussteht. Ohne `patch_ids` alles Ausstehende (oder mit `security_only` nur Sicherheitsupdates); mit `patch_ids` höchstens 400 IDs à 128 Zeichen, und jede muss für dieses Gerät ausstehen, sonst 422 |
 
 ## Alarme, Inventar, Audit
 
 | Methode | Pfad | Auth | Zweck |
 |---|---|---|---|
-| GET | `/api/alerts` | Session | Offene und geschlossene Alarme, Viewer-gefiltert |
+| GET | `/api/alerts` | Session | Offene und geschlossene Alarme, Viewer-gefiltert — siehe unten |
 | POST | `/api/alerts/{alert_id}/ack` | Session | Alarm quittieren; Scope wird vorher geprüft |
 | GET | `/api/inventory/search` | Session | Flottenweite Softwaresuche (`?q=`) |
 | GET | `/api/audit` | Admin | Audit-Log, gefiltert und seitenweise — siehe unten |
 | GET | `/api/audit/meta` | Admin | Bekannte Kategorien und alle je aufgetretenen Akteure, für die Filter-Auswahl |
+
+### `GET /api/alerts`
+
+Liefert **alle** nicht behobenen Alarme (offen und quittiert, neueste zuerst)
+und danach die zuletzt behobenen, sortiert nach `resolved_at`. Für
+Betrachter-Konten filtert die Datenbankabfrage selbst auf die Geräte der
+verknüpften Person, bevor begrenzt wird.
+
+| Parameter | Typ | Zweck |
+|---|---|---|
+| `limit` | 1–200, Default 50 | Höchstzahl der **behobenen** Alarme; offene und quittierte zählen nicht mit |
+
+Antwort: `{"alerts": [...], "resolved_limit": 50, "resolved_truncated": true}` —
+`resolved_truncated` heißt, dass es ältere behobene Alarme gibt, die nicht
+mitgeliefert wurden.
 
 ### `GET /api/audit`
 
@@ -166,8 +207,9 @@ und `detail` zwei serverseitig berechnete Felder:
   dem Präfix vor dem Punkt im Ereignisnamen.
 - `security` — `true` für Anmeldungen (`auth.*`), Kontoänderungen
   (`account.*`), Passwortzugriffe (`credential.*`) sowie
-  `devices.token_created`, `devices.token_deleted`, `devices.deleted` und
-  `remote.session_opened`. Job-Ausführungen stehen bewusst **nicht** drin: sie
+  `devices.token_created`, `devices.token_deleted`, `devices.deleted`,
+  `remote.session_opened` und `agent.job_mismatch` (ein Agent meldet sich zu
+  einem Job, der nicht seinem Gerät gehört). Job-Ausführungen stehen bewusst **nicht** drin: sie
   sind Alltag und würden den Filter zuschütten — dafür gibt es die Kategorie
   `job`.
 
@@ -200,8 +242,8 @@ pflegen.
 | DELETE | `/api/auth/sessions/{token_prefix}` | Session | Eine eigene Session beenden |
 | POST | `/api/auth/sessions/revoke-others` | Session | Alle anderen eigenen Sessions beenden |
 | GET | `/api/accounts` | Admin | Konten auflisten |
-| POST | `/api/accounts` | Admin | Konto anlegen |
-| PATCH | `/api/accounts/{user_id}` | Admin | Rolle, Passwort, Sperre, 2FA-Reset. Selbstaussperrung und "letzter Admin" sind blockiert |
+| POST | `/api/accounts` | Admin | Konto anlegen; optional `person_id` verknüpft es mit einer Person (Betrachter sehen nur deren Geräte) |
+| PATCH | `/api/accounts/{user_id}` | Admin | Rolle, Passwort, Sperre, 2FA-Reset, Person (`person_id`, `0` löst sie). Selbstaussperrung und "letzter Admin" sind blockiert |
 | DELETE | `/api/accounts/{user_id}` | Admin | Konto löschen (gleiche Sperren) |
 | GET | `/api/persons` | Session | Betreute Personen |
 | POST | `/api/persons` | Admin | Person anlegen; legt optional ein Viewer-Konto mit an |
@@ -218,7 +260,7 @@ pflegen.
 | Methode | Pfad | Auth | Zweck |
 |---|---|---|---|
 | GET | `/api/remote/config` | Session | Relay-Host und Public Key, oder "nicht konfiguriert" |
-| GET | `/api/remote/devices/{device_id}/session` | Operator | `rustdesk://`-Deep-Link für das Gerät. 409, wenn Remote-Desktop nicht konfiguriert ist oder keine RustDesk-ID vorliegt |
+| GET | `/api/remote/devices/{device_id}/session` | Operator | `rustdesk://`-Deep-Link für das Gerät. 409, wenn Remote-Desktop nicht konfiguriert ist, keine RustDesk-ID vorliegt oder die gespeicherte ID auch ohne Leerzeichen nicht dem Format oben entspricht; die Meldung nennt dann `PATCH /api/devices/{id}` mit `rustdesk_id` zum Neueintragen oder Leeren |
 | GET | `/api/settings/ntfy` | Admin | ntfy-Konfiguration (Token maskiert) |
 | PUT | `/api/settings/ntfy` | Admin | ntfy zur Laufzeit umkonfigurieren |
 | POST | `/api/settings/ntfy/test` | Admin | Testnachricht senden |
@@ -245,7 +287,7 @@ ist, wird der alte mit `1000` abgelöst.
 
 | `type` | Payload | Wirkung |
 |---|---|---|
-| `heartbeat` | `cpu_pct`, `mem_pct`, `disks[]`, `agent_version`, Netz/Temperatur/Akku/Benutzer | Aktualisiert das Gerät, schreibt ein Metrik-Sample. Beim ersten Heartbeat einer Verbindung bietet der Server ggf. ein Update an |
+| `heartbeat` | `cpu_pct`, `mem_pct`, `disks[]`, `agent_version`, `rustdesk_id`, Netz/Temperatur/Akku/Benutzer | Aktualisiert das Gerät, schreibt ein Metrik-Sample. Eine `rustdesk_id` wird wie bei `PATCH /api/devices/{id}` ohne Leerzeichen geprüft und gespeichert; entspricht sie nicht dem Format, wird sie verworfen und die gespeicherte bleibt. Beim ersten Heartbeat einer Verbindung bietet der Server ggf. ein Update an |
 | `inventory` | `kind` + Nutzdaten | Speichert Hardware-, Software- oder Netzinventar |
 | `job_started` | `job_id` | Status → `running` |
 | `job_output` | `job_id`, `chunk` | Chunk läuft durch die Geheimnis-Extraktion, dann in DB und Live-Socket |
@@ -257,6 +299,14 @@ ist, wird der alte mit `1000` abgelöst.
 
 Unbekannte Typen werden geloggt und ignoriert.
 
+`job_started`, `job_output` und `job_result` wirken nur auf Jobs des eigenen
+Geräts — maßgeblich ist die `device_id` der Job-Zeile, deshalb kann ein Agent
+einen Job auch nach einem Reconnect über den neuen Socket abschließen. Eine
+Meldung zu einem fremden oder unbekannten `job_id` verwirft der Server, ohne
+Job, Ausgabe oder Passwort-Tresor anzufassen, und schreibt
+`agent.job_mismatch` ins Audit-Log (einmal pro Job und Verbindung, höchstens
+20 pro Verbindung; geloggt wird jede).
+
 ### Server → Agent
 
 | `type` | Payload | Wann |
@@ -264,8 +314,13 @@ Unbekannte Typen werden geloggt und ignoriert.
 | `job` | `job_id`, `kind`, `command`, `shell`, optional `patch_ids`, `timeout_s` | Beim Anlegen eines Jobs |
 | `patch_scan` | — | `POST /api/devices/{id}/patches/scan` und einmal täglich beim Heartbeat (siehe `PATCH_SCAN_HOUR`) |
 | `get_logs` | — | `GET /api/devices/{id}/agent-logs` |
-| `update` | `version`, `url`, `sha256`, `sig` | Einmal pro Verbindung beim ersten Heartbeat, oder auf Anforderung |
+| `update` | `version`, `url`, `sha256`, `sig` | Einmal pro Verbindung beim ersten Heartbeat (Audit `agent.update_offered`, Akteur `automation`), oder auf Anforderung (`device.agent_update`) |
 | `pong` | — | Antwort auf `ping` |
+
+`patch_ids` nimmt der Agent nur in der Form an, die sein eigener Scan meldet:
+unter Windows die UpdateID (GUID), unter Linux einen Debian-Paketnamen,
+optional mit Architektur (`libc6:i386`). Eine andere ID lässt den Job
+fehlschlagen, ohne dass etwas installiert wird; die Ausgabe nennt die ID.
 
 ## `/api/jobs/{job_id}/ws` — Server → Browser
 

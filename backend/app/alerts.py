@@ -128,11 +128,12 @@ async def ack(alert_id: int, username: str) -> dict[str, Any] | None:
     first acker wins the byline. Returns the row, or None for unknown/
     resolved alerts (acking history makes no sense)."""
     async with _connect() as db:
-        await db.execute(
+        cur = await db.execute(
             "UPDATE alerts SET acked_at = ?, acked_by = ?"
             " WHERE id = ? AND resolved_at IS NULL AND acked_at IS NULL",
             (int(time.time()), username, alert_id),
         )
+        acked_now = cur.rowcount == 1
         await db.commit()
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -141,7 +142,11 @@ async def ack(alert_id: int, username: str) -> dict[str, Any] | None:
             row = await cur.fetchone()
     if row is None:
         return None
-    await audit_record("alert.acked", user=username, device_id=int(row["device_id"]))
+    # Only the acknowledgement that took effect is audited. A repeat (a
+    # colleague whose list was a poll behind) changes nothing, and an entry
+    # under that name would contradict the byline the alert keeps.
+    if acked_now:
+        await audit_record("alert.acked", user=username, device_id=int(row["device_id"]))
     return _row_to_dict(row)
 
 
@@ -196,13 +201,15 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
         if rule is not None and rule["enabled"]:
             after_s = rule["threshold"] or settings.offline_alert_after_s
             last_seen = d.get("last_seen_at")
-            # Never-seen devices (enrolled, agent not started yet) don't page.
-            is_offline = last_seen is not None and (now - last_seen) > after_s
             key = (d["id"], "offline")
-            if is_offline and key not in open_alerts:
-                minutes = int((now - last_seen) / 60)
-                await _fire(d["id"], "offline", f"{name} ist offline (seit ~{minutes} min)")
-            elif not is_offline and d["online"] and key in open_alerts:
+            # Never-seen devices (enrolled, agent not started yet) don't page.
+            # The None check sits in the condition itself rather than in a
+            # flag, so the type checker sees last_seen is set in this branch.
+            if last_seen is not None and (now - last_seen) > after_s:
+                if key not in open_alerts:
+                    minutes = int((now - last_seen) / 60)
+                    await _fire(d["id"], "offline", f"{name} ist offline (seit ~{minutes} min)")
+            elif d["online"] and key in open_alerts:
                 await _resolve(open_alerts[key]["id"])
                 await notify(
                     "RMM: wieder online", f"{name} ist wieder erreichbar", "white_check_mark", ""
@@ -235,13 +242,15 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
             age_days = rule["threshold"] or settings.patch_alert_age_days
             oldest = await patches.oldest_pending_security(d["id"])
             key = (d["id"], "patch_age")
-            overdue = oldest is not None and (now - oldest) > age_days * 86400
-            if overdue and key not in open_alerts:
-                days = int((now - oldest) / 86400)
-                await _fire(
-                    d["id"], "patch_age", f"{name}: Sicherheitsupdates seit {days} Tagen offen"
-                )
-            elif not overdue and key in open_alerts:
+            # Same shape as the offline rule: the None check in the condition
+            # narrows `oldest` for the message below.
+            if oldest is not None and (now - oldest) > age_days * 86400:
+                if key not in open_alerts:
+                    days = int((now - oldest) / 86400)
+                    await _fire(
+                        d["id"], "patch_age", f"{name}: Sicherheitsupdates seit {days} Tagen offen"
+                    )
+            elif key in open_alerts:
                 await _resolve(open_alerts[key]["id"])
                 await notify(
                     "RMM: Updates installiert",
@@ -258,10 +267,11 @@ async def evaluate(settings: Settings, notify: Notifier) -> None:
         ) as cur:
             unsent = await cur.fetchall()
     tag_by_rule = {"offline": "red_circle", "disk": "floppy_disk", "patch_age": "package"}
-    for row in unsent:
-        tags = tag_by_rule.get(row["rule"], "warning")
-        if await notify("RMM: Alarm", str(row["message"]), tags, "high"):
-            await _mark_notified(int(row["id"]))
+    # Not `row`: that name already holds the _open_alerts() dicts above.
+    for pending in unsent:
+        tags = tag_by_rule.get(pending["rule"], "warning")
+        if await notify("RMM: Alarm", str(pending["message"]), tags, "high"):
+            await _mark_notified(int(pending["id"]))
 
 
 def _row_to_dict(r: aiosqlite.Row) -> dict[str, Any]:
@@ -288,6 +298,45 @@ async def list_recent(limit: int = 50) -> list[dict[str, Any]]:
         ) as cur:
             rows = await cur.fetchall()
     return [_row_to_dict(r) for r in rows]
+
+
+# A NULL person matches every device, so one fixed query serves both the
+# full fleet and a viewer's scope.
+_UNRESOLVED_SQL = (
+    "SELECT * FROM alerts WHERE resolved_at IS NULL"
+    " AND (? IS NULL OR device_id IN (SELECT id FROM devices WHERE person_id = ?))"
+    " ORDER BY fired_at DESC, id DESC"
+)
+_RESOLVED_SQL = (
+    "SELECT * FROM alerts WHERE resolved_at IS NOT NULL"
+    " AND (? IS NULL OR device_id IN (SELECT id FROM devices WHERE person_id = ?))"
+    " ORDER BY resolved_at DESC, id DESC LIMIT ?"
+)
+
+
+async def list_for_dashboard(
+    resolved_limit: int, person_id: int | None = None
+) -> tuple[list[dict[str, Any]], bool]:
+    """What the Alarm-Center shows: every unresolved alert (open and
+    acknowledged), newest first, then the ``resolved_limit`` most recently
+    resolved ones. Returns the rows and whether older resolved ones exist.
+
+    Unresolved alerts are never cut: each one is something to act on, and a
+    window that drops some made them impossible to see or acknowledge. Only
+    the history is bounded, and it is picked by when an alert cleared, not
+    when it fired. ``person_id`` narrows both parts to that person's devices
+    (viewer scope) in SQL, so the bound counts only rows the caller may see.
+    """
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(_UNRESOLVED_SQL, (person_id, person_id)) as cur:
+            unresolved = await cur.fetchall()
+        # One row past the bound tells whether the history was cut.
+        async with db.execute(_RESOLVED_SQL, (person_id, person_id, resolved_limit + 1)) as cur:
+            resolved = list(await cur.fetchall())
+    truncated = len(resolved) > resolved_limit
+    rows = [*unresolved, *resolved[:resolved_limit]]
+    return [_row_to_dict(r) for r in rows], truncated
 
 
 async def for_device(device_id: int, limit: int = 30) -> list[dict[str, Any]]:

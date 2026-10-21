@@ -2,7 +2,7 @@
 
 ## Setup in unter 15 Minuten
 
-Voraussetzungen: Python ≥ 3.11, Node ≥ 22 (CI und Image bauen mit 24), Go ≥ 1.25.14, Git.
+Voraussetzungen: Python ≥ 3.11, Node ≥ 22 (CI und Image bauen mit 24), Go ≥ 1.26.10, Git.
 
 ```bash
 git clone https://github.com/rxf-sys/rmm.rxf-sys.de.git
@@ -41,10 +41,13 @@ sudo ./rmm-agent run          # im Vordergrund, ohne Dienstinstallation
 Ein PR ist fertig, wenn diese Blöcke grün sind — es sind exakt die CI-Gates:
 
 ```bash
-cd backend  && ruff check . && pytest -v --cov=app --cov-fail-under=70
+cd backend  && ruff check . && mypy app && pytest -v --cov=app --cov-fail-under=70
 cd frontend && npm run lint && npm test && npm run build
-cd agent    && make vet test
+cd agent    && make vet lint && go test -race ./... && make release
 ```
+
+`make vet` und `make lint` prüfen Linux, Windows und macOS; `make lint`
+braucht golangci-lint v2 (CI nutzt 2.14.0), `-race` einen C-Compiler.
 
 Dazu laufen in CI die Dependency-Audits (`pip-audit`, `npm audit`,
 `govulncheck`) als eigener Job. Lokal:
@@ -105,8 +108,8 @@ Dinge, die hier schon einmal Zeit gekostet haben:
   geändert hätte. Neue Regeln bewusst aufnehmen, nicht per Zufall erben.
 - **`sqlite3.Row.__contains__` testet Werte, nicht Spaltennamen.** Für
   „Spalte vorhanden?" ist `"col" in row.keys()` korrekt. Ruffs SIM118-Autofix
-  will das umschreiben und liegt hier falsch — deshalb stehen an vier Stellen
-  begründete `# noqa: SIM118`.
+  will das umschreiben und liegt hier falsch — deshalb stehen an sechs Stellen
+  (`devices.py`, `persons.py`) begründete `# noqa: SIM118`.
 - **Der Coverage-Lauf ignoriert `app/main.py`** (`pyproject.toml`), weil der
   ASGI-Einstiegspunkt ohne Lifespan nicht sinnvoll unittestbar ist. Neue
   Logik gehört deshalb nicht nach `main.py`.

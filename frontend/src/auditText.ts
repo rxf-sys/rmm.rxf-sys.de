@@ -97,6 +97,14 @@ export function describeAudit(e: AuditEvent, names: AuditNames = {}): string {
     // --- Geräte ---
     case 'agent.enrolled':
       return `Gerät enrollt: ${str(d.hostname) ?? ''}${d.os ? ` (${d.os})` : ''}`;
+    case 'agent.job_mismatch': {
+      // Das meldende Gerät steht in device_id; der Job gehört (falls es ihn
+      // gibt) einem anderen — deshalb die Job-Nummer statt eines Namens.
+      const id = num(d.job_id);
+      const job = id === undefined ? 'Job' : `Job #${id}`;
+      const which = d.reason === 'unknown' ? 'unbekanntem' : 'fremdem';
+      return `Meldung von ${device()} zu ${which} ${job} abgewiesen`;
+    }
     case 'devices.token_created':
       return `Enrollment-Token erzeugt${d.label ? ` (${d.label})` : ''}`;
     case 'devices.token_deleted':
@@ -113,6 +121,15 @@ export function describeAudit(e: AuditEvent, names: AuditNames = {}): string {
         : `Wartungsfenster für ${device()} beendet`;
     case 'device.agent_update':
       return `Agent-Update auf ${device()} angestoßen`;
+    case 'agent.update_offered': {
+      // Kein Klick dahinter: der Server bietet das Update beim ersten
+      // Heartbeat einer Verbindung von selbst an (Akteur "automation").
+      const to = str(d.version);
+      const from = str(d.from_version);
+      return `Agent-Update${to ? ` auf ${to}` : ''} automatisch an ${device()} angeboten${from ? ` (bisher ${from})` : ''}`;
+    }
+    case 'device.agent_logs':
+      return `Agent-Logs von ${device()} abgerufen`;
 
     // --- Jobs und Skripte ---
     case 'job.created':
@@ -121,8 +138,12 @@ export function describeAudit(e: AuditEvent, names: AuditNames = {}): string {
         : `Befehl auf ${device()}: ${str(d.command) ?? ''}`;
     case 'script.created':
       return `Skript angelegt: ${script()}`;
-    case 'script.updated':
-      return `Skript „${script()}“ geändert`;
+    case 'script.updated': {
+      // Ältere Einträge zu diesem Skript tragen noch den alten Namen; ohne
+      // ihn hier wäre die Verbindung zwischen beiden nicht zu sehen.
+      const from = str(d.script_from);
+      return `Skript „${script()}“ geändert${from ? `, umbenannt von „${from}“` : ''}`;
+    }
     case 'script.deleted':
       return `Skript „${script()}“ gelöscht`;
     case 'script.scheduled_run':
@@ -186,26 +207,22 @@ export function describeAudit(e: AuditEvent, names: AuditNames = {}): string {
   }
 }
 
-/** German name and badge tone per category. The classification itself is
- *  server-side (`app/audit.py`); this only decides how it looks.
- *
- *  The tones reuse the six badge classes the rest of the app already has
- *  rather than inventing a hue per category: those are defined for both
- *  themes and already contrast-checked, and twelve bespoke colours would say
- *  less than the grouping does. */
-export const AUDIT_CATEGORY: Record<string, { label: string; tone: string }> = {
-  auth: { label: 'Anmeldung', tone: 'badge-violet' },
-  account: { label: 'Konten', tone: 'badge-violet' },
-  credential: { label: 'Passwörter', tone: 'badge-danger' },
-  remote: { label: 'Fernzugriff', tone: 'badge-danger' },
-  device: { label: 'Geräte', tone: 'badge-accent' },
-  job: { label: 'Jobs', tone: 'badge-accent' },
-  script: { label: 'Skripte', tone: 'badge-accent' },
-  patch: { label: 'Patches', tone: 'badge-warn' },
-  alert: { label: 'Alarme', tone: 'badge-warn' },
-  person: { label: 'Personen', tone: 'badge-ok' },
-  config: { label: 'Konfiguration', tone: 'badge-off' },
-  other: { label: 'Sonstiges', tone: 'badge-off' },
+/** German name per category. The classification itself is server-side
+ *  (`app/audit.py`). Categories carry no colour: twelve hues would say less
+ *  than the label does. */
+export const AUDIT_CATEGORY: Record<string, { label: string }> = {
+  auth: { label: 'Anmeldung' },
+  account: { label: 'Konten' },
+  credential: { label: 'Passwörter' },
+  remote: { label: 'Fernzugriff' },
+  device: { label: 'Geräte' },
+  job: { label: 'Jobs' },
+  script: { label: 'Skripte' },
+  patch: { label: 'Patches' },
+  alert: { label: 'Alarme' },
+  person: { label: 'Personen' },
+  config: { label: 'Konfiguration' },
+  other: { label: 'Sonstiges' },
 };
 
 export function auditCategoryLabel(category: string): string {

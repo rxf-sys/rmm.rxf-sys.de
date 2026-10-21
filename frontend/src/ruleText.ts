@@ -69,7 +69,7 @@ export function ruleShort(type: RuleType, threshold: number | null): string {
   }
 }
 
-export function scopeLabel(rule: AlertRule, persons: Person[]): string {
+export function scopeLabel(rule: Pick<AlertRule, 'scope_kind' | 'scope_value'>, persons: Person[]): string {
   if (rule.scope_kind === 'tag') return `Tag: ${rule.scope_value}`;
   if (rule.scope_kind === 'person') {
     const p = persons.find((x) => String(x.id) === rule.scope_value);
