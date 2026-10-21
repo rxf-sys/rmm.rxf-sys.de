@@ -10,9 +10,9 @@
 
 ## Wie geprüft
 
-- [ ] `cd backend && ruff check . && pytest -v --cov=app --cov-fail-under=70`
+- [ ] `cd backend && ruff check . && mypy app && pytest -v --cov=app --cov-fail-under=70`
 - [ ] `cd frontend && npm run build`
-- [ ] `cd agent && make vet test`
+- [ ] `cd agent && make vet lint && go test -race ./...`
 - [ ] Manuell geprüft: <!-- was genau, oder "entfällt" -->
 
 ## Auswirkungen

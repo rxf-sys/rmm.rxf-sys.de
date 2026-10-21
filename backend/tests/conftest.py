@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from hypothesis import settings as hypothesis_settings
 
 from app import (
     accounts,
@@ -13,6 +14,7 @@ from app import (
     devices,
     job_secrets,
     jobs,
+    mdm,
     metrics,
     patches,
     persons,
@@ -23,6 +25,17 @@ from app.config import Settings, get_settings
 from app.main import app
 from app.routers import agent as agent_router
 from app.routers import auth as auth_router
+from app.routers import mdm as mdm_router
+
+# Property tests: a fixed number of examples keeps the suite's runtime
+# predictable. Built on whatever profile is active, so under CI Hypothesis's
+# own "ci" profile (derandomized, no example database) stays in effect. No
+# deadline: the functions under test are pure, and a slow first example on a
+# busy machine says nothing about them.
+hypothesis_settings.register_profile(
+    "rmm", hypothesis_settings(), max_examples=200, deadline=None
+)
+hypothesis_settings.load_profile("rmm")
 
 
 @pytest.fixture
@@ -57,6 +70,7 @@ async def client(settings: Settings):
     await automation.ensure_schema(settings)
     await persons.ensure_schema(settings)
     await credentials.ensure_schema(settings)
+    await mdm.ensure_schema(settings)
     await audit.clear()
     jobs.hub.reset_for_tests()
     from app.agents_ws import manager as _agent_manager
@@ -68,6 +82,7 @@ async def client(settings: Settings):
     job_secrets.reset_for_tests()
     auth_router.reset_rate_limiter_for_tests()
     agent_router.reset_enroll_limiter_for_tests()
+    mdm_router.reset_limiter_for_tests()
     app.dependency_overrides[get_settings] = lambda: settings
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c

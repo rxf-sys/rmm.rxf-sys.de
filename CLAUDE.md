@@ -8,7 +8,8 @@ RustDesk).
 Alle acht ursprünglichen Phasen sind abgeschlossen. Maßgeblich sind:
 `docs/ARCHITECTURE.md` (Architektur, Datenmodell), `docs/API.md`
 (Endpunkte, WS-Protokoll), `docs/CONFIGURATION.md` (alle ENV-Variablen),
-`docs/OPERATIONS.md` (Betrieb), `docs/ROADMAP.md` (was offen ist). Der
+`docs/OPERATIONS.md` (Betrieb), `docs/ROADMAP.md` (was offen ist),
+`DESIGN.md` (Design-System: Tokens, Bausteine, Muster, Sprache). Der
 ursprüngliche Phasenplan liegt archiviert unter `docs/_archiv/RMM-PLAN.md`.
 
 ## Architektur-Grundsätze
@@ -38,13 +39,13 @@ ursprüngliche Phasenplan liegt archiviert unter `docs/_archiv/RMM-PLAN.md`.
 
 ```bash
 # Backend
-cd backend && ruff check . && pytest -v --cov=app --cov-fail-under=70
+cd backend && ruff check . && mypy app && pytest -v --cov=app --cov-fail-under=70
 
 # Frontend (tsc -b strict + vite build ist das CI-Gate)
 cd frontend && npm run build
 
 # Agent
-cd agent && make vet test && make release   # CGO off, 5 Targets
+cd agent && make vet lint && go test -race ./... && make release   # vet/lint je OS, Release: CGO off, 5 Targets
 ```
 
 ## Lokale Entwicklung
@@ -71,8 +72,8 @@ der Default `production` und die Doku antwortet lokal mit 404.
   gemacht. Neue Regeln bewusst aufnehmen.
 - **`sqlite3.Row.__contains__` prüft Werte, nicht Spaltennamen.** Für
   „Spalte vorhanden?" ist `"col" in row.keys()` richtig; Ruffs
-  SIM118-Autofix liegt hier falsch. Deshalb vier begründete
-  `# noqa: SIM118` in `devices.py` und `persons.py`.
+  SIM118-Autofix liegt hier falsch. Deshalb sechs begründete
+  `# noqa: SIM118`: fünf in `devices.py`, eins in `persons.py`.
 - **`app/main.py` ist von der Coverage ausgenommen** — neue Logik gehört
   deshalb nicht dorthin.
 - **Tests fahren den Lifespan nicht.** `tests/conftest.py` ruft alle
@@ -83,6 +84,22 @@ der Default `production` und die Doku antwortet lokal mit 404.
 - **Der Fleet-WebSocket überträgt keine Nutzdaten**, nur
   `{"type":"refresh"}`. Das hält die Autorisierung vollständig in der
   REST-Schicht; bitte keine Daten durchschieben.
+- **Frontend: Seiten liegen unter `frontend/src/pages/<bereich>/`** mit
+  eigenem `<bereich>.css` und Klassenpräfix; Bausteine kommen aus `src/ui/`.
+  Neue Seiten folgen `DESIGN.md` — Status nie nur als Farbe, keine
+  Farbwerte außerhalb von `tokens.css`, kein Inline-`style` außer für
+  berechnete Werte.
+- **`Date.now()` im Render bricht das Lint-Gate** (react-hooks purity).
+  Die aktuelle Zeit kommt aus `useNow()`.
+- **Freitextfelder nicht direkt an die URL binden.** React Router 7 setzt
+  Suchparameter in einer Transition; ein davon gesteuertes Eingabefeld
+  verliert beim schnellen Tippen Zeichen. Eigener State, in die URL nur
+  schreiben (`pages/devices/DevicesPage.tsx`).
+- **`Modal` rendert per Portal in `<body>`** — sonst positioniert sich ein
+  Dialog aus einem fixierten oder transformierten Element (Bulk-Leiste)
+  relativ zu diesem.
+- **jsdom hat kein Layout**: `scrollIntoView` ist in `src/test/setup.ts`
+  ergänzt; Tests, die Maße brauchen, gehören in Playwright.
 - **Lokal gebaute Agents (`make build`) haben keinen eingebrannten Public
   Key** und lehnen deshalb jedes Update ab. Das ist kein Fehler.
 - **`make sign` scheitert absichtlich hart**, wenn nicht beide Schlüssel

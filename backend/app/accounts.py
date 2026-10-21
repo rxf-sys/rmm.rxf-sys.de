@@ -24,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import time
+from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from pathlib import Path
 from typing import Any
@@ -601,6 +602,32 @@ async def set_app_setting(key: str, value: str) -> None:
         await db.commit()
 
 
+async def app_setting_or_init(key: str, initial: Callable[[], str]) -> str:
+    """The stored value, storing ``initial()`` first if there is none.
+
+    For values generated once per installation. Two first calls racing each
+    other still agree: the INSERT leaves the row that got there first, and
+    both read that one back."""
+    if not _db_path:
+        # get_app_setting answers None without a database; here that would
+        # mean a fresh value on every call, so fail instead.
+        raise RuntimeError("accounts.ensure_schema has not run")
+    existing = await get_app_setting(key)
+    if existing is not None:
+        return existing
+    async with _connect() as db:
+        await db.execute(
+            "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING",
+            (key, initial()),
+        )
+        await db.commit()
+        async with db.execute("SELECT value FROM app_settings WHERE key = ?", (key,)) as cur:
+            row = await cur.fetchone()
+    if row is None:
+        raise RuntimeError(f"app setting {key!r} vanished between insert and read")
+    return str(row[0])
+
+
 # ---------------------------------------------------------------------------
 # Bootstrap
 # ---------------------------------------------------------------------------
@@ -630,7 +657,7 @@ async def bootstrap_admin(settings: Settings) -> None:
     except AccountError as e:
         # Starting without an admin is bad, but starting with a two-character
         # admin password on a remote-command tool is worse. Refuse and say so.
-        log.error(
+        log.exception(
             "accounts.bootstrap_rejected",
             error=str(e),
             hint="fix BOOTSTRAP_ADMIN_PASSWORD and restart; no admin was created",

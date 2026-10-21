@@ -69,6 +69,17 @@ describe('useJobStream', () => {
     expect(MockWebSocket.instances).toHaveLength(1);
   });
 
+  it('gives up when the server refuses the socket for good', async () => {
+    // A viewer opening a running patch job gets 4403; retrying every 15 s
+    // for the whole run would change nothing.
+    renderHook(() => useJobStream(13));
+    act(() => MockWebSocket.last!.drop(4403));
+    await act(async () => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
   it('reports the disconnect so the UI can show it', () => {
     const { result } = renderHook(() => useJobStream(3));
     act(() => {

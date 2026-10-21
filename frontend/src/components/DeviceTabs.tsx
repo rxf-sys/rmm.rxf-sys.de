@@ -13,6 +13,8 @@ interface Props<T extends string> {
   value: T;
   onChange: (id: T) => void;
   label: string;
+  /** Id of the tabpanel the tabs control; each tab gets `${panelId}-tab-${id}`. */
+  panelId?: string;
 }
 
 /**
@@ -24,7 +26,7 @@ interface Props<T extends string> {
  * etwas liegt, das Aufmerksamkeit braucht. Tastaturmodell wie bei der
  * Filterleiste: Tab springt in die Gruppe, Pfeiltasten wechseln.
  */
-export function DeviceTabs<T extends string>({ tabs, value, onChange, label }: Props<T>) {
+export function DeviceTabs<T extends string>({ tabs, value, onChange, label, panelId }: Props<T>) {
   const ref = useRef<HTMLDivElement>(null);
 
   const move = (from: number, delta: number) => {
@@ -69,6 +71,8 @@ export function DeviceTabs<T extends string>({ tabs, value, onChange, label }: P
             key={t.id}
             type="button"
             role="tab"
+            id={panelId ? `${panelId}-tab-${t.id}` : undefined}
+            aria-controls={panelId && active ? panelId : undefined}
             aria-selected={active}
             className={active ? 'tab active' : 'tab'}
             tabIndex={active ? 0 : -1}

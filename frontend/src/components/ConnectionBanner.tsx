@@ -1,4 +1,5 @@
 import { formatRelative } from '../format';
+import { IconStatusOff } from '../icons';
 
 interface Props {
   /** Fehlermeldung der letzten Abfrage, oder null, solange alles läuft. */
@@ -23,14 +24,14 @@ export function ConnectionBanner({ error, loadedAt, onRetry }: Props) {
   if (error === null) return null;
   return (
     <div className="conn-banner" role="status">
-      <span className="conn-dot" />
+      <IconStatusOff size={16} />
       <span className="conn-text">
         <b>Keine Verbindung zum Server.</b>{' '}
         {loadedAt === null
           ? 'Es konnten noch keine Daten geladen werden.'
           : `Angezeigt wird der Stand von ${formatRelative(loadedAt)}.`}
       </span>
-      <span className="conn-detail mono">{error}</span>
+      <span className="conn-detail">{error}</span>
       <button className="btn btn-sm" onClick={onRetry}>
         Erneut versuchen
       </button>

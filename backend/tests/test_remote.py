@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 
@@ -82,3 +83,156 @@ async def test_manual_rustdesk_id_via_patch(admin_client: AsyncClient):
     r = await admin_client.patch(f"/api/devices/{dev}", json={"rustdesk_id": "555000555"})
     assert r.status_code == 200
     assert r.json()["device"]["rustdesk_id"] == "555000555"
+
+
+# --- RustDesk ID format ------------------------------------------------------
+
+_VALID_IDS = ["123456", "123456789", "123456789012", "mama-laptop", "Buero_PC_01", "abcdef"]
+_INVALID_IDS = [
+    "12345",  # too short for either form
+    "abcde",
+    "abcdefghijklmnopq",  # 17 characters
+    "12345678901234567",  # 17 digits
+    # Generated IDs have at most 12 digits; a longer run of digits must not
+    # pass as a custom ID, and a custom ID starts with a letter.
+    "1234567890123",
+    "--1234",
+    "_abcdef",
+    "123456\n",  # fullmatch, not match: no trailing newline
+    "123 456 789",  # the strict check; callers clean whitespace first (below)
+    "123456789?x=1",
+    "123456789/../x",
+    "123456789@evil.example",
+    "ümlaut-pc",
+    "id;rm -rf",
+]
+
+
+@pytest.mark.parametrize("rid", _VALID_IDS)
+def test_valid_rustdesk_ids(rid: str):
+    assert devices.valid_rustdesk_id(rid)
+
+
+@pytest.mark.parametrize("rid", _INVALID_IDS)
+def test_invalid_rustdesk_ids(rid: str):
+    assert not devices.valid_rustdesk_id(rid)
+
+
+async def test_heartbeat_drops_an_invalid_id_and_keeps_the_stored_one(client: AsyncClient):
+    dev = await _make_device()
+    await devices.record_heartbeat(dev, {"cpu_pct": 1, "rustdesk_id": "987654321"})
+    await devices.record_heartbeat(dev, {"cpu_pct": 1, "rustdesk_id": "987654321 --x"})
+    d = await devices.get_device(dev, offline_after_s=999)
+    assert d["rustdesk_id"] == "987654321"
+
+
+async def test_heartbeat_never_stores_an_invalid_first_id(client: AsyncClient):
+    dev = await _make_device()
+    await devices.record_heartbeat(dev, {"cpu_pct": 1, "rustdesk_id": "x" * 40})
+    d = await devices.get_device(dev, offline_after_s=999)
+    assert d["rustdesk_id"] == ""
+
+
+@pytest.mark.parametrize("rid", ["12345", "123456789?x=1", "ümlaut-pc", "1234567890123"])
+async def test_patch_rejects_an_invalid_id(admin_client: AsyncClient, rid: str):
+    dev = await _make_device()
+    await devices.update_device(dev, rustdesk_id="555000555")
+    r = await admin_client.patch(f"/api/devices/{dev}", json={"rustdesk_id": rid})
+    assert r.status_code == 422
+    # The dashboard shows the message as-is, so it states the rule in full.
+    assert r.json()["detail"][0]["msg"] == (
+        "Keine gültige RustDesk-ID: 6–12 Ziffern oder 6–16 Zeichen, beginnend mit"
+        " einem Buchstaben, aus A–Z, 0–9, _ und -"
+    )
+    d = await devices.get_device(dev, offline_after_s=999)
+    assert d["rustdesk_id"] == "555000555"
+
+
+async def test_patch_trims_a_valid_id_and_empty_clears_it(admin_client: AsyncClient):
+    dev = await _make_device()
+    r = await admin_client.patch(f"/api/devices/{dev}", json={"rustdesk_id": " 555000555 "})
+    assert r.status_code == 200
+    assert r.json()["device"]["rustdesk_id"] == "555000555"
+    r = await admin_client.patch(f"/api/devices/{dev}", json={"rustdesk_id": ""})
+    assert r.status_code == 200
+    assert r.json()["device"]["rustdesk_id"] == ""
+
+
+# RustDesk shows a generated ID in groups of three ("123 456 789"), so that is
+# what gets copied. Whitespace is never part of an ID; it is removed wherever
+# an ID enters or is used, and only the cleaned value is checked and stored.
+
+
+async def test_patch_accepts_an_id_in_rustdesk_groups(admin_client: AsyncClient):
+    dev = await _make_device()
+    r = await admin_client.patch(f"/api/devices/{dev}", json={"rustdesk_id": "123 456 789"})
+    assert r.status_code == 200, r.text
+    assert r.json()["device"]["rustdesk_id"] == "123456789"
+    # Tabs and no-break spaces from a copied table cell go the same way.
+    r = await admin_client.patch(
+        f"/api/devices/{dev}", json={"rustdesk_id": " 987\u00a0654\t321 "}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["device"]["rustdesk_id"] == "987654321"
+    # Blank after cleaning still clears, as an empty string does.
+    r = await admin_client.patch(f"/api/devices/{dev}", json={"rustdesk_id": " \t "})
+    assert r.status_code == 200, r.text
+    assert r.json()["device"]["rustdesk_id"] == ""
+
+
+async def test_patch_still_rejects_what_is_invalid_without_spaces(admin_client: AsyncClient):
+    dev = await _make_device()
+    r = await admin_client.patch(f"/api/devices/{dev}", json={"rustdesk_id": "123 456 789 0123"})
+    assert r.status_code == 422
+
+
+async def test_heartbeat_stores_an_id_in_groups_without_the_spaces(client: AsyncClient):
+    dev = await _make_device()
+    await devices.record_heartbeat(dev, {"cpu_pct": 1, "rustdesk_id": "123 456 789"})
+    d = await devices.get_device(dev, offline_after_s=999)
+    assert d["rustdesk_id"] == "123456789"
+
+
+async def test_session_cleans_a_stored_id_with_spaces(rd_settings: AsyncClient):
+    """A row stored before the check may hold the grouped form; the link is
+    built from the cleaned ID instead of refusing a perfectly good one."""
+    dev = await _make_device()
+    await devices.update_device(dev, rustdesk_id="123 456 789")
+    r = await rd_settings.get(f"/api/remote/devices/{dev}/session")
+    assert r.status_code == 200, r.text
+    assert r.json() == {"rustdesk_id": "123456789", "deep_link": "rustdesk://123456789"}
+
+
+async def test_session_refuses_a_stored_invalid_id(rd_settings: AsyncClient):
+    """A row written before IDs were checked never becomes a deep link."""
+    from app import audit
+
+    dev = await _make_device()
+    await devices.update_device(dev, rustdesk_id="123456789?x=1")
+    await audit.clear()
+    r = await rd_settings.get(f"/api/remote/devices/{dev}/session")
+    assert r.status_code == 409
+    assert "ungültig" in r.json()["detail"]
+    assert "deep_link" not in r.json()
+    assert [e["event"] for e in await audit.recent()] == []
+
+
+async def test_session_refusal_says_how_to_fix_the_stored_id(rd_settings: AsyncClient):
+    """A refused stored ID needs a way out that works without the dashboard's
+    form: "bitte am Gerät neu eintragen" left an API client stuck. The
+    message names the call that fixes it, and that call does."""
+    dev = await _make_device()
+    await devices.update_device(dev, rustdesk_id="123456789?x=1")
+    r = await rd_settings.get(f"/api/remote/devices/{dev}/session")
+    assert r.status_code == 409
+    detail = r.json()["detail"]
+    assert f"PATCH /api/devices/{dev}" in detail and "rustdesk_id" in detail
+
+    # Clearing it works ...
+    r = await rd_settings.patch(f"/api/devices/{dev}", json={"rustdesk_id": ""})
+    assert r.status_code == 200 and r.json()["device"]["rustdesk_id"] == ""
+    # ... and re-entering it makes the session work again.
+    r = await rd_settings.patch(f"/api/devices/{dev}", json={"rustdesk_id": "123 456 789"})
+    assert r.status_code == 200
+    r = await rd_settings.get(f"/api/remote/devices/{dev}/session")
+    assert r.status_code == 200 and r.json()["deep_link"] == "rustdesk://123456789"

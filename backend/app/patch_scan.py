@@ -14,7 +14,8 @@ its slot at 09:00 and scans on the first heartbeat after it returns.
 from __future__ import annotations
 
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from datetime import time as wall_time
 
 # One request per device per hour, at most. The completion stamp only moves
 # when the agent reports back, so without this an agent that never answers
@@ -33,19 +34,33 @@ def slot_minute(device_id: int) -> int:
     return device_id % 60
 
 
+def _local_instant(day: date, hour: int, minute: int) -> int:
+    """Epoch seconds of ``hour:minute`` on ``day`` in server local time — the
+    zone a naive datetime's ``timestamp()`` reads it in, which is the point.
+
+    On the day the clocks go forward that wall time may not exist (02:30 on
+    29.03.2026 in Berlin). Python then applies the offset from before the
+    switch (PEP 495, fold=0), so the slot lands at 03:30 on the new clock. In
+    the hour that repeats in autumn the same rule picks the first pass."""
+    return int(datetime.combine(day, wall_time(hour, minute)).timestamp())
+
+
 def last_slot(now: int, hour: int, minute: int) -> int:
     """The most recent scheduled instant at or before ``now``, in server local
     time (set TZ in the container, see docs/CONFIGURATION.md).
 
     Date arithmetic rather than ``now - 86400``: across a DST switch the
-    subtraction would move the slot by an hour."""
-    local = datetime.fromtimestamp(now)
-    slot = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if slot > local:
-        slot = (local - timedelta(days=1)).replace(
-            hour=hour, minute=minute, second=0, microsecond=0
-        )
-    return int(slot.timestamp())
+    subtraction would move the slot by an hour. The candidates are compared as
+    instants, not as wall-clock times: a skipped 02:30 resolves to 03:30, which
+    is still ahead of a heartbeat at 03:10 even though 02:30 < 03:10 on the
+    clock — and a slot in the future makes a device that just scanned look
+    stale again."""
+    day = datetime.fromtimestamp(now, UTC).astimezone().date()
+    # Each step back moves the candidate by about a day, so this ends after one
+    # step, or two in a zone that skipped a whole calendar day (Samoa, 2011).
+    while (slot := _local_instant(day, hour, minute)) > now:
+        day -= timedelta(days=1)
+    return slot
 
 
 def is_due(device_id: int, last_scan_at: int, hour: int, now: int | None = None) -> bool:

@@ -5,7 +5,7 @@ import time
 import aiosqlite
 from httpx import AsyncClient
 
-from app import alerts, devices, releases
+from app import alerts, audit, devices, releases
 from app.agents_ws import manager
 from app.config import Settings
 
@@ -161,3 +161,60 @@ async def test_delete_device_removes_its_alerts(client: AsyncClient, admin_clien
     r = await admin_client.delete(f"/api/devices/{device_id}")
     assert r.status_code == 200
     assert await alerts.for_device(device_id) == []
+
+
+# --- Agent logs (get_logs) ---------------------------------------------------
+
+
+class _AnsweringWs(_FakeWs):
+    """An agent that answers ``get_logs`` the way the real one does: by an
+    ``agent_logs`` reply that the receive loop hands to the manager."""
+
+    def __init__(self, device_id: int, lines: list[str]) -> None:
+        super().__init__()
+        self.device_id = device_id
+        self.lines = lines
+
+    async def send_json(self, message: dict) -> None:
+        await super().send_json(message)
+        if message == {"type": "get_logs"}:
+            manager.resolve_logs(self.device_id, self.lines)
+
+
+async def test_agent_logs_request_is_audited_with_the_operator(admin_client: AsyncClient):
+    device_id = await _enroll("logs-pc")
+    ws = _AnsweringWs(device_id, ["agent started", "heartbeat ok"])
+    manager.register(device_id, ws)  # type: ignore[arg-type]
+    try:
+        r = await admin_client.get(f"/api/devices/{device_id}/agent-logs")
+    finally:
+        manager.reset_for_tests()
+    assert r.status_code == 200
+    assert r.json() == {"lines": ["agent started", "heartbeat ok"]}
+    assert ws.sent == [{"type": "get_logs"}]
+
+    events = (await audit.query(device_id=device_id))["events"]
+    logs = [e for e in events if e["event"] == "device.agent_logs"]
+    assert len(logs) == 1
+    assert logs[0]["actor"] == "boss"
+    assert logs[0]["category"] == "device"
+    assert logs[0]["detail"]["hostname"] == "logs-pc"
+
+
+async def test_agent_logs_request_is_audited_even_without_an_answer(client: AsyncClient):
+    """The command reached the agent; a silent agent must not erase that."""
+    device_id = await _enroll("silent-pc")
+    manager.register(device_id, _FakeWs())  # type: ignore[arg-type]
+    try:
+        assert await manager.request_logs(device_id, actor="techie", timeout=0.01) is None
+    finally:
+        manager.reset_for_tests()
+    events = (await audit.query(device_id=device_id))["events"]
+    assert [(e["event"], e["actor"]) for e in events] == [("device.agent_logs", "techie")]
+
+
+async def test_agent_logs_not_audited_when_nothing_was_sent(client: AsyncClient):
+    """No socket, no command — and no record claiming one."""
+    device_id = await _enroll("offline-pc")
+    assert await manager.request_logs(device_id, actor="techie") is None
+    assert (await audit.query(device_id=device_id))["events"] == []
