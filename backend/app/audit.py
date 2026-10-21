@@ -50,6 +50,7 @@ _CATEGORY_BY_PREFIX: dict[str, str] = {
     "agent": "device",
     "device": "device",
     "devices": "device",
+    "mdm": "device",
     "job": "job",
     "patch": "patch",
     "remote": "remote",
@@ -77,6 +78,11 @@ _SECURITY_EVENTS = (
     "devices.deleted",
     "remote.session_opened",
     "agent.job_mismatch",
+    # Ein MDM-Link verteilt Geräteverwaltung; eine abgewiesene SCEP-Anfrage
+    # heißt, jemand hat eine Challenge, die nicht zu seinem Profil passt.
+    "mdm.enrollment_created",
+    "mdm.enrollment_revoked",
+    "mdm.scep_rejected",
 )
 
 

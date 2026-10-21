@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# ARCHIVIERT (21.10.2026): ersetzt durch die Registrierung aus dem Dashboard
+# (docs/MDM-SETUP.md, Teil 6). Funktioniert nur mit der statischen
+# SCEP_CHALLENGE_PASSWORD, und die Pfade (.env, mdm/push.pem) sind relativ
+# zum Skript — aus _archiv/ heraus läuft es nicht ohne Anpassung. Aufbewahrt
+# als Referenz für das Profilformat.
 # mdm-test-profile.sh — writes an unsigned enrollment profile (.mobileconfig)
 # to enroll a first test device against NanoMDM + scep.
 #

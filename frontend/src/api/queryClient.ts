@@ -42,6 +42,7 @@ export const qk = {
   deviceAlerts: (id: number) => ['device', id, 'alerts'] as const,
   deviceHistory: (id: number, hours: number) => ['device', id, 'history', hours] as const,
   deviceAudit: (id: number) => ['device', id, 'audit'] as const,
+  deviceMdm: (id: number) => ['device', id, 'mdm'] as const,
   scripts: ['scripts'] as const,
   // GET /api/accounts, read by the admin page and the persons page. One key,
   // so an account change on either page shows on the other: the persons page
