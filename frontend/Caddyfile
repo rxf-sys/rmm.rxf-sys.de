@@ -39,6 +39,11 @@
 	handle /checkin* {
 		reverse_proxy nanomdm:9000
 	}
+	# SCEP: devices fetch their identity certificate here during enrollment.
+	# scepserver only signs CSRs carrying the challenge password.
+	handle /scep* {
+		reverse_proxy scep:8080
+	}
 
 	handle {
 		@assets path /assets/*
