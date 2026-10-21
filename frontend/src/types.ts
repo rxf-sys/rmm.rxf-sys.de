@@ -69,6 +69,9 @@ export interface Device {
   notes: string;
   /** Wann zuletzt jemand von Hand nachgesehen hat; null bei Geräten mit Agent. */
   checked_at: number | null;
+  /** Actions queued for the next time online; only list and detail views
+   *  carry it. */
+  open_actions?: number;
 }
 
 export type DeviceClass = 'agent' | 'mobile';
@@ -169,6 +172,11 @@ export interface PatchWindow {
   security_only: boolean;
   /** Empty tag = every device. */
   tag: string;
+  /** Offline during the window: install on return within this many days
+   *  (0 = wait for the next window). */
+  catch_up_days: number;
+  /** Restart afterwards if the system requires it. */
+  reboot: boolean;
 }
 
 export interface ScriptSchedule {
@@ -377,4 +385,36 @@ export interface CreatedMdmEnrollment {
   /** The one-time link — shown once, never retrievable again. */
   url: string;
   enrollment: MdmEnrollment;
+}
+
+/** Something queued for a device's next time online (backend/app/pending_actions.py). */
+export type PendingActionKind = 'patch_install' | 'script' | 'reboot';
+export type PendingActionState = 'pending' | 'dispatched' | 'done' | 'failed' | 'expired' | 'cancelled';
+
+export interface PendingAction {
+  id: number;
+  device_id: number;
+  kind: PendingActionKind;
+  security_only: boolean;
+  script_id: number | null;
+  reboot: boolean;
+  /** manual = an operator; patch_window = the weekly window's catch-up;
+   *  follow_up = the reboot after an install. */
+  source: 'manual' | 'patch_window' | 'follow_up';
+  created_by: string;
+  created_at: number;
+  expires_at: number | null;
+  state: PendingActionState;
+  job_id: number | null;
+  job_status: string | null;
+  updated_at: number;
+  note: string;
+}
+
+export interface QueueActionRequest {
+  kind: 'patch_install' | 'script';
+  security_only?: boolean;
+  script_id?: number;
+  reboot?: boolean;
+  expires_hours?: number;
 }

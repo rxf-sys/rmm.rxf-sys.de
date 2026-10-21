@@ -14,6 +14,15 @@ import { EmptyState, ErrorNote, Menu, PageHeader, Panel, Skeleton, StatusBadge, 
 import { notify } from '../../ui/toast';
 import { RuleDialog, ScheduleDialog, type RuleDraft, type ScheduleDraft } from './AutomationDialogs';
 
+/** How long a device that was offline during the window may catch up. */
+const CATCH_UP_OPTIONS: { days: number; label: string }[] = [
+  { days: 0, label: 'warten aufs nächste Fenster' },
+  { days: 1, label: 'holen es innerhalb eines Tages nach' },
+  { days: 3, label: 'holen es innerhalb von 3 Tagen nach' },
+  { days: 7, label: 'holen es innerhalb einer Woche nach' },
+  { days: 14, label: 'holen es innerhalb von 2 Wochen nach' },
+];
+
 interface Props {
   devices: Device[];
   persons: Person[];
@@ -224,12 +233,37 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
                   <option value="security">nur Sicherheitsupdates</option>
                   <option value="all">alle Updates</option>
                 </select>{' '}
-                auf verbundenen Geräten{' '}
+                auf Geräten{' '}
                 <select className="au-inline" value={pw.tag} disabled={!isAdmin} aria-label="Geräte" onChange={(e) => void saveWindow({ tag: e.target.value })}>
                   <option value="">ohne Einschränkung</option>
                   {tags.map((t) => (
                     <option key={t} value={t}>
                       mit dem Tag „{t}"
+                    </option>
+                  ))}
+                </select>
+                ,{' '}
+                <select
+                  className="au-inline"
+                  value={pw.reboot ? 'reboot' : 'none'}
+                  disabled={!isAdmin}
+                  aria-label="Neustart"
+                  onChange={(e) => void saveWindow({ reboot: e.target.value === 'reboot' })}
+                >
+                  <option value="none">ohne Neustart</option>
+                  <option value="reboot">mit Neustart, falls nötig</option>
+                </select>
+                . Geräte, die dann offline sind,{' '}
+                <select
+                  className="au-inline"
+                  value={pw.catch_up_days}
+                  disabled={!isAdmin}
+                  aria-label="Nachholen"
+                  onChange={(e) => void saveWindow({ catch_up_days: Number(e.target.value) })}
+                >
+                  {CATCH_UP_OPTIONS.map((o) => (
+                    <option key={o.days} value={o.days}>
+                      {o.label}
                     </option>
                   ))}
                 </select>

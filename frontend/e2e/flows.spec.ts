@@ -135,3 +135,22 @@ test('the enrollment dialog stays inside the screen', async ({ page }, info) => 
   expect(box.x + box.width).toBeLessThanOrEqual(width);
   await expect(dialog.getByRole('button', { name: 'Schließen' })).toBeInViewport();
 });
+
+test('updates queued for an offline device wait for it and show up on the patches page', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/devices/2?tab=patches');
+  const panel = page.getByRole('region', { name: 'Beim nächsten Online-Gehen' });
+  await panel.getByRole('checkbox', { name: 'nur Sicherheitsupdates' }).check();
+  await panel.getByRole('button', { name: 'Vormerken' }).click();
+  const queued = panel.getByRole('list', { name: 'Vorgemerkte Aktionen' });
+  await expect(queued.getByText('Sicherheitsupdates installieren')).toBeVisible();
+  await expect(queued.getByText('Wartet auf das Gerät')).toBeVisible();
+
+  await page.goto('/patches');
+  await expect(page.getByText('vorgemerkt').first()).toBeVisible();
+
+  // Withdrawn again, so the seeded fleet stays as other tests expect it.
+  await page.goto('/devices/2?tab=patches');
+  await page.getByRole('button', { name: 'Zurückziehen' }).click();
+  await expect(page.getByRole('list', { name: 'Vorgemerkte Aktionen' }).getByText('Zurückgezogen')).toBeVisible();
+});

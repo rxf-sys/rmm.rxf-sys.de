@@ -231,3 +231,21 @@ describe('describeAudit', () => {
     }
   });
 });
+
+describe('describeAudit: queued actions', () => {
+  const d = (name: string, detail: Record<string, unknown>) =>
+    describeAudit(event({ event: name, device_id: 4, detail: { hostname: 'laptop', ...detail } }));
+
+  it('says what was queued, started and how it ended', () => {
+    expect(d('action.queued', { kind: 'patch_install', security_only: true })).toBe('Sicherheitsupdates auf laptop vorgemerkt');
+    expect(d('action.queued', { kind: 'patch_install', source: 'patch_window' })).toBe(
+      'Updates auf laptop vorgemerkt (Patch-Fenster, nachgeholt)',
+    );
+    expect(d('action.dispatched', { kind: 'patch_install', count: 3 })).toBe('Updates auf laptop gestartet (3)');
+    expect(d('action.dispatched', { kind: 'script', script: 'Uptime' })).toBe('Skript „Uptime“ auf laptop gestartet');
+    expect(d('action.dispatched', { kind: 'reboot' })).toBe('Neustart auf laptop gestartet');
+    expect(d('action.done', { note: 'Kein Neustart nötig' })).toBe('Vormerkung auf laptop erledigt: Kein Neustart nötig');
+    expect(d('action.expired', {})).toBe('Vormerkung auf laptop abgelaufen — das Gerät war nicht online');
+    expect(d('action.cancelled', {})).toBe('Vormerkung auf laptop zurückgezogen');
+  });
+});

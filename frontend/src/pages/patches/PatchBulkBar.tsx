@@ -1,5 +1,5 @@
 import type { Ref } from 'react';
-import { IconChevronDown, IconRestart, IconShield, IconX } from '../../icons';
+import { IconChevronDown, IconClock, IconRestart, IconShield, IconX } from '../../icons';
 import { Menu, type MenuEntry } from '../../ui';
 
 const fmt = new Intl.NumberFormat('de-DE');
@@ -13,6 +13,8 @@ interface Props {
   busy: boolean;
   onScan: () => void;
   onInstall: () => void;
+  /** Install on each device's next time online. */
+  onQueue: () => void;
   onClear: () => void;
   /** Where the page puts the focus when the control that had it goes away. */
   ref?: Ref<HTMLElement>;
@@ -28,7 +30,7 @@ interface Props {
  * security updates, which a poll can switch while it has the focus; its
  * reason stays reachable as the button's description.
  */
-export function PatchBulkBar({ count, hidden, withSecurity, busy, onScan, onInstall, onClear, ref }: Props) {
+export function PatchBulkBar({ count, hidden, withSecurity, busy, onScan, onInstall, onQueue, onClear, ref }: Props) {
   const noSecurity = withSecurity === 0;
   const installHint = noSecurity ? 'Kein ausgewähltes Gerät hat offene Sicherheitsupdates' : undefined;
   const actions: MenuEntry[] = [
@@ -40,6 +42,7 @@ export function PatchBulkBar({ count, hidden, withSecurity, busy, onScan, onInst
       disabled: noSecurity,
       onSelect: onInstall,
     },
+    { label: 'Beim nächsten Online installieren …', icon: <IconClock size={14} />, onSelect: onQueue },
   ];
 
   return (
@@ -70,6 +73,16 @@ export function PatchBulkBar({ count, hidden, withSecurity, busy, onScan, onInst
         >
           <IconShield size={14} /> Sicherheitsupdates installieren
           {!noSecurity && <span className="bulkbar-n num">{fmt.format(withSecurity)}</span>}
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          aria-disabled={busy || undefined}
+          onClick={() => {
+            if (!busy) onQueue();
+          }}
+        >
+          <IconClock size={14} /> Beim nächsten Online installieren
         </button>
       </div>
       <div className="bulkbar-menu">

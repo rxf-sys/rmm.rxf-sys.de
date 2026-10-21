@@ -230,6 +230,17 @@ function ScanButton({ d, busy, onScan }: { d: Device; busy: boolean; onScan: (d:
  * installing on a selection. Every scan and installation goes through the
  * per-device endpoint, so it is checked and audited once per device.
  */
+/** Something waits for this device's next time online (an install, a
+ *  script, a reboot) — said in the row so nobody queues it twice. */
+function Queued({ d }: { d: Device }) {
+  if (!d.open_actions) return null;
+  return (
+    <span className="pt-queued" title="Vorgemerkt fürs nächste Online-Gehen — Details im Reiter Updates des Geräts">
+      <IconClock size={12} /> vorgemerkt
+    </span>
+  );
+}
+
 export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOperator }: Props) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -456,6 +467,47 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
     trackJobs(started, 'Update-Installation');
     refreshFleet(plan.targets);
     reportFailures('Installation', res, n);
+  }
+
+  /** Install on each device's next time online — the way to reach the ones
+   *  that are offline right now. Connected devices start at once. */
+  async function queueUpdates(list: Device[]) {
+    const plan = partition(list, [{ test: (d) => (pendingOf(d, patchSummary) ?? 0) > 0, reason: 'ohne offene Updates' }]);
+    if (plan.targets.length === 0) {
+      notify.warning('Auf keinem ausgewählten Gerät ist etwas offen', skippedText(plan.skipped));
+      return;
+    }
+    const n = plan.targets.length;
+    const offline = plan.targets.filter((d) => !reachable(d)).length;
+    const ok = await ask({
+      title: n === 1 ? `Updates auf ${deviceLabel(plan.targets[0]!, dups)} vormerken?` : `Updates auf ${fmt.format(n)} Geräten vormerken?`,
+      body: (
+        <>
+          <DeviceNames devices={plan.targets} dups={dups} />
+          <p>
+            Alle offenen Updates werden installiert, sobald sich das jeweilige Gerät meldet
+            {offline < n ? ' — verbundene Geräte beginnen sofort' : ''}. Die Vormerkung gilt zwei Wochen; im Reiter Updates des
+            Geräts lässt sie sich zurückziehen.
+          </p>
+          {plan.skipped.length > 0 && <p className="muted">Übersprungen: {skippedText(plan.skipped)}.</p>}
+        </>
+      ),
+      confirmLabel: n === 1 ? 'Vormerken' : `Auf ${fmt.format(n)} Geräten vormerken`,
+    });
+    if (!ok) return;
+    setBusy(true);
+    const res = await runBulk(plan.targets, async (d) => {
+      await api.queueAction(d.id, { kind: 'patch_install' });
+    });
+    setBusy(false);
+    refreshFleet(plan.targets);
+    if (res.ok.length > 0) {
+      notify.success(
+        res.ok.length === 1 ? `Updates auf ${res.ok[0]!.hostname} vorgemerkt` : `Updates auf ${onDevices(res.ok.length)} vorgemerkt`,
+        offline > 0 ? 'Offline-Geräte installieren beim nächsten Online-Gehen.' : undefined,
+      );
+    }
+    reportFailures('Vormerkung', res, n);
   }
 
   const scannable = shown.filter(reachable);
@@ -701,6 +753,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
               busy={busy}
               onScan={() => void scan(selectedDevices)}
               onInstall={() => void installSecurity(selectedDevices)}
+              onQueue={() => void queueUpdates(selectedDevices)}
               onClear={() => setSelected(new Set())}
             />
           )}
@@ -755,7 +808,10 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
                           </Link>
                           <Connection d={d} now={now} />
                         </div>
-                        <span className="pt-sub">{d.os_version || osLabel(d.os)}</span>
+                        <span className="pt-sub">
+                              {d.os_version || osLabel(d.os)}
+                              <Queued d={d} />
+                            </span>
                         <dl className="pt-card-facts">
                           <div>
                             <dt>Ausstehend</dt>
@@ -828,7 +884,10 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
                                 {d.hostname}
                               </Link>
                             </span>
-                            <span className="pt-sub">{d.os_version || osLabel(d.os)}</span>
+                            <span className="pt-sub">
+                              {d.os_version || osLabel(d.os)}
+                              <Queued d={d} />
+                            </span>
                           </td>
                           <td className="pt-c-person" title={owner || undefined}>
                             {owner || <Unknown word="ohne Person" />}

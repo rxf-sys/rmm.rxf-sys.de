@@ -609,3 +609,14 @@
     border-radius: 0;
   }
 }
+
+/* "vorgemerkt": something waits for the device's next time online. */
+.pt-queued {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: var(--sp-2);
+  color: var(--info-tx);
+  font-weight: 700;
+  white-space: nowrap;
+}

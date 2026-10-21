@@ -11,6 +11,8 @@ import type {
   Device,
   DeviceDetail,
   DeviceMdm,
+  PendingAction,
+  QueueActionRequest,
   EnrollToken,
   FleetSample,
   InventoryMatch,
@@ -363,6 +365,14 @@ export const api = {
   createEnrollToken: (body: { label?: string; ttl_hours?: number }) =>
     post<CreatedEnrollToken>('/api/devices/enroll-tokens', body),
   deleteEnrollToken: (id: number) => del<{ ok: boolean }>(`/api/devices/enroll-tokens/${id}`),
+
+  // Actions for the next time a device is online
+  deviceActions: (deviceId: number, signal?: AbortSignal) =>
+    get<{ actions: PendingAction[] }>(`/api/devices/${deviceId}/actions`, signal),
+  queueAction: (deviceId: number, body: QueueActionRequest) =>
+    post<{ action: PendingAction; created: boolean; dispatched_job_ids: number[] }>(`/api/devices/${deviceId}/actions`, body),
+  cancelAction: (deviceId: number, actionId: number) =>
+    del<{ ok: boolean }>(`/api/devices/${deviceId}/actions/${actionId}`),
 
   // Apple MDM (iPhone/iPad without agent)
   deviceMdm: (deviceId: number, signal?: AbortSignal) => get<DeviceMdm>(`/api/devices/${deviceId}/mdm`, signal),

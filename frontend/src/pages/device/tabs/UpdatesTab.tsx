@@ -9,6 +9,7 @@ import type { Severity } from '../../../types';
 import { EmptyState, ErrorNote, Panel, SkeletonRows, StatusBadge, type StatusKind } from '../../../ui';
 import { notify } from '../../../ui/toast';
 import { JobConsole } from '../JobConsole';
+import { QueuedActions } from '../QueuedActions';
 
 /** Order of urgency — also the order of the summary. */
 const SEV_RANK: Severity[] = ['critical', 'important', 'moderate', 'low', 'other'];
@@ -28,7 +29,17 @@ const SEV_KIND: Record<Severity, StatusKind> = {
 };
 
 /** Pending updates of one device, most urgent first, and their installation. */
-export function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: number; connected: boolean; isOperator: boolean }) {
+export function UpdatesTab({
+  deviceId,
+  connected,
+  os,
+  isOperator,
+}: {
+  deviceId: number;
+  connected: boolean;
+  os: string;
+  isOperator: boolean;
+}) {
   const qc = useQueryClient();
   const { ask, dialog: confirmDialog } = useConfirm();
   const [busy, setBusy] = useState(false);
@@ -113,7 +124,12 @@ export function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: numb
           )
         }
       >
-        {!connected && isOperator && <p className="dv-pad dv-note">Gerät nicht verbunden — prüfen und installieren geht erst wieder, wenn es sich meldet.</p>}
+        {!connected && isOperator && (
+          <p className="dv-pad dv-note">
+            Gerät nicht verbunden — prüfen und sofort installieren geht erst wieder, wenn es sich meldet. Die Installation lässt sich
+            unten fürs nächste Online-Gehen vormerken.
+          </p>
+        )}
         {q.error ? (
           <div className="dv-pad">
             <ErrorNote error={q.error} onRetry={reload} />
@@ -170,6 +186,7 @@ export function UpdatesTab({ deviceId, connected, isOperator }: { deviceId: numb
           </>
         )}
       </Panel>
+      {isOperator && <QueuedActions device={{ id: deviceId, os, connected }} mode="updates" />}
       {installingJob !== null && !isOperator && (
         // The job output socket is operator-only; viewers get the fact, not
         // a console that can never connect.

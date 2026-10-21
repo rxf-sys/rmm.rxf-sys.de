@@ -17,6 +17,7 @@ import { notify, trackJob } from '../../ui/toast';
 import { DeviceHeader } from './DeviceHeader';
 import { TAB_IDS, visibleTabs, type TabId } from './deviceTabs';
 import { EditDeviceDialog } from './EditDeviceDialog';
+import { QueuedActions } from './QueuedActions';
 import { ActivityTab } from './tabs/ActivityTab';
 import { DiagnosticsTab } from './tabs/DiagnosticsTab';
 import { HistoryTab } from './tabs/HistoryTab';
@@ -245,8 +246,10 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
         {tab === 'history' && <HistoryTab deviceId={deviceId} />}
         {tab === 'inventory' && <InventoryTab detail={detail} />}
         {tab === 'remote' && <RemoteTab device={d} isOperator={isOperator} onSession={() => void openSession()} />}
-        {tab === 'patches' && <UpdatesTab deviceId={deviceId} connected={d.connected} isOperator={isOperator} />}
-        {tab === 'jobs' && <ActivityTab deviceId={deviceId} isAdmin={isAdmin} />}
+        {tab === 'patches' && <UpdatesTab deviceId={deviceId} connected={d.connected} os={d.os} isOperator={isOperator} />}
+        {tab === 'jobs' && (
+          <ActivityTab deviceId={deviceId} isAdmin={isAdmin} queue={<QueuedActions device={d} mode="all" />} />
+        )}
         {tab === 'diagnostics' && <DiagnosticsTab deviceId={deviceId} connected={d.connected} />}
         {tab === 'passwords' && <PasswordsTab deviceId={deviceId} />}
         {tab === 'mdm' && <MdmTab device={d} isAdmin={isAdmin} />}
