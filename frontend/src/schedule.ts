@@ -40,3 +40,6 @@ export function whenLabel(ts: number): string {
   const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   return `am ${day}, ${date}, um ${time}`;
 }
+
+/** Weekday names, Monday first — index 0 is what the API calls weekday 0. */
+export const WEEKDAY_NAMES = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];

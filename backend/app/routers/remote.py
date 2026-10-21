@@ -68,10 +68,27 @@ async def remote_session(
     device = await devices.get_device(device_id, settings.offline_after_s)
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Gerät nicht gefunden")
-    rid = device.get("rustdesk_id") or ""
+    # Rows written before IDs were validated can still hold anything. The
+    # grouped form ("123 456 789") is cleaned here as everywhere else, but
+    # not written back: a GET has no business changing the device, and the
+    # next heartbeat or edit stores the clean form anyway.
+    rid = devices.clean_rustdesk_id(device.get("rustdesk_id") or "")
     if not rid:
         raise HTTPException(
             status_code=409, detail="Für dieses Gerät ist keine RustDesk-ID hinterlegt"
+        )
+    # The link goes to a protocol handler on the operator's machine, so an
+    # invalid value never becomes one. Such a row is not rewritten (no data
+    # migrations), so the message names the call that fixes it. The
+    # dashboard does not ask for a session with such an ID: its remote tab
+    # checks the same format and offers the stored value for correction.
+    if not devices.valid_rustdesk_id(rid):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Die hinterlegte RustDesk-ID ist ungültig. Neu eintragen oder leeren:"
+                f" PATCH /api/devices/{device_id} mit rustdesk_id"
+            ),
         )
     await audit_record("remote.session_opened", user=user["username"], device_id=device_id)
     # The operator's local RustDesk client handles the rustdesk:// scheme.

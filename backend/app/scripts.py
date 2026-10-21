@@ -8,6 +8,9 @@ history of jobs that already ran the old version.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import secrets
 import time
 from contextlib import AbstractAsyncContextManager
 from pathlib import Path
@@ -16,6 +19,7 @@ from typing import Any
 import aiosqlite
 import structlog
 
+from . import accounts
 from .config import Settings
 from .db import connect as db_connect
 
@@ -82,6 +86,29 @@ async def ensure_schema(settings: Settings) -> None:
 def _connect() -> AbstractAsyncContextManager[aiosqlite.Connection]:
     """Shared connection helper — see app/db.py."""
     return db_connect(_db_path)
+
+
+# app_settings key of the random per-installation key behind content_hmac.
+# Nothing reads app_settings wholesale, and no endpoint returns this key.
+_AUDIT_HMAC_KEY = "audit_script_hmac_key"
+
+
+async def content_hmac(content: str) -> str:
+    """Fingerprint of a script body for the audit log.
+
+    The library is editable, so "script X ran" alone does not say which
+    version ran. The same value on job.created and on the script.created or
+    script.updated row that produced the body ties the two together, without
+    copying a body that may hold credentials into the log.
+
+    Keyed, not a bare SHA-256: script bodies follow known templates, so a
+    short secret in one could be found by hashing guesses until one matches
+    the log, and the log keeps the value long after the secret was edited
+    out of the script. The key is random, made on first use and stored in
+    the database, so backups keep old and new rows comparable; anyone who
+    can read it can read the scripts table as well."""
+    key = await accounts.app_setting_or_init(_AUDIT_HMAC_KEY, lambda: secrets.token_hex(32))
+    return hmac.new(bytes.fromhex(key), content.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def _validate(name: str, shell: str, os: str, content: str, category: str) -> None:

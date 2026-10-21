@@ -192,6 +192,167 @@ export const IconCopy = (p: IconProps) => (
   </S>
 );
 
+// --- Status (always paired with a word; the shape alone must differ) -------
+
+export const IconStatusOk = (p: IconProps) => (
+  <S {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+  </S>
+);
+export const IconStatusWarn = (p: IconProps) => (
+  <S {...p}>
+    <path d="M10.3 3.9 2.4 17.6A2 2 0 0 0 4.1 20.6h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+    <path d="M12 9v4M12 17h.01" />
+  </S>
+);
+export const IconStatusDanger = (p: IconProps) => (
+  <S {...p}>
+    <path d="M7.9 2.5h8.2l5.4 5.4v8.2l-5.4 5.4H7.9l-5.4-5.4V7.9Z" />
+    <path d="M12 8v4.5M12 16h.01" />
+  </S>
+);
+export const IconStatusOff = (p: IconProps) => (
+  <S {...p}>
+    <circle cx="12" cy="12" r="9" strokeDasharray="3.2 2.6" />
+    <path d="M9 9l6 6M15 9l-6 6" />
+  </S>
+);
+export const IconInfo = (p: IconProps) => (
+  <S {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5M12 8h.01" />
+  </S>
+);
+
+// --- Actions and navigation ------------------------------------------------
+
+export const IconChevronLeft = (p: IconProps) => (
+  <S {...p}>
+    <path d="m15 18-6-6 6-6" />
+  </S>
+);
+export const IconChevronRight = (p: IconProps) => (
+  <S {...p}>
+    <path d="m9 18 6-6-6-6" />
+  </S>
+);
+export const IconChevronDown = (p: IconProps) => (
+  <S {...p}>
+    <path d="m6 9 6 6 6-6" />
+  </S>
+);
+export const IconChevronUp = (p: IconProps) => (
+  <S {...p}>
+    <path d="m18 15-6-6-6 6" />
+  </S>
+);
+export const IconSort = (p: IconProps) => (
+  <S {...p}>
+    <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />
+  </S>
+);
+export const IconMore = (p: IconProps) => (
+  <S {...p}>
+    <circle cx="5" cy="12" r="1" />
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="19" cy="12" r="1" />
+  </S>
+);
+export const IconRestart = (p: IconProps) => (
+  <S {...p}>
+    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+    <path d="M3 3v5h5" />
+  </S>
+);
+export const IconPlay = (p: IconProps) => (
+  <S {...p}>
+    <path d="M7 4.5v15l12-7.5Z" />
+  </S>
+);
+export const IconPlus = (p: IconProps) => (
+  <S {...p}>
+    <path d="M12 5v14M5 12h14" />
+  </S>
+);
+export const IconX = (p: IconProps) => (
+  <S {...p}>
+    <path d="M18 6 6 18M6 6l12 12" />
+  </S>
+);
+export const IconCheck = (p: IconProps) => (
+  <S {...p}>
+    <path d="m5 12.5 4.5 4.5L19 7.5" />
+  </S>
+);
+export const IconFilter = (p: IconProps) => (
+  <S {...p}>
+    <path d="M3 5h18l-7 8.5V19l-4 2v-7.5Z" />
+  </S>
+);
+export const IconBookmark = (p: IconProps) => (
+  <S {...p}>
+    <path d="M6 3.5h12v17l-6-4-6 4Z" />
+  </S>
+);
+export const IconExternal = (p: IconProps) => (
+  <S {...p}>
+    <path d="M14 4h6v6M20 4l-9 9" />
+    <path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
+  </S>
+);
+export const IconPackage = (p: IconProps) => (
+  <S {...p}>
+    <path d="M21 8 12 3 3 8v8l9 5 9-5Z" />
+    <path d="M3 8l9 5 9-5M12 13v8M7.5 5.5l9 5" />
+  </S>
+);
+export const IconHistory = (p: IconProps) => (
+  <S {...p}>
+    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+    <path d="M3 3v5h5M12 7v5l3 2" />
+  </S>
+);
+export const IconKeyboard = (p: IconProps) => (
+  <S {...p}>
+    <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
+    <path d="M6.5 9.5h.01M10 9.5h.01M13.5 9.5h.01M17 9.5h.01M7 14.5h10" />
+  </S>
+);
+export const IconTag = (p: IconProps) => (
+  <S {...p}>
+    <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z" />
+    <path d="M7.5 7.5h.01" />
+  </S>
+);
+export const IconLaptop = (p: IconProps) => (
+  <S {...p}>
+    <rect x="4" y="4.5" width="16" height="11" rx="1.5" />
+    <path d="M2 19.5h20" />
+  </S>
+);
+export const IconArrowRight = (p: IconProps) => (
+  <S {...p}>
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </S>
+);
+export const IconUpgrade = (p: IconProps) => (
+  <S {...p}>
+    <path d="M12 19V5M6 11l6-6 6 6" />
+  </S>
+);
+export const IconEye = (p: IconProps) => (
+  <S {...p}>
+    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />
+    <circle cx="12" cy="12" r="3" />
+  </S>
+);
+export const IconWake = (p: IconProps) => (
+  <S {...p}>
+    <path d="M13 2 4 14h7l-1 8 9-12h-7Z" />
+  </S>
+);
+
 // Brand-Artwork lebt in public/favicon.svg (Vulpexa-Fuchs) — Sidebar/Login
 // binden es als <img> ein, damit Tab-Icon und App-Logo identisch sind.
 
@@ -221,10 +382,10 @@ export function LinuxLogo({ size = 13, style }: IconProps) {
         fill="currentColor"
         d="M12 2c-2.6 0-4.2 1.9-4.2 4.6 0 1.5-.5 2.7-1.2 4-.8 1.4-1.8 3-1.8 5 0 1.3.4 2.4 1.1 3.3-.3.3-.5.8-.5 1.3 0 1 .9 1.8 2.1 1.8h9c1.2 0 2.1-.8 2.1-1.8 0-.5-.2-1-.5-1.3.7-.9 1.1-2 1.1-3.3 0-2-1-3.6-1.8-5-.7-1.3-1.2-2.5-1.2-4C16.2 3.9 14.6 2 12 2z"
       />
-      <ellipse cx="12" cy="14.5" rx="3.4" ry="4.2" fill="var(--panel, #fff)" opacity="0.85" />
-      <circle cx="10.4" cy="6.6" r="0.9" fill="var(--panel, #fff)" />
-      <circle cx="13.6" cy="6.6" r="0.9" fill="var(--panel, #fff)" />
-      <path fill="#e8a33d" d="M10.6 8.4h2.8L12 10.2z" />
+      <ellipse cx="12" cy="14.5" rx="3.4" ry="4.2" fill="var(--surface)" opacity="0.85" />
+      <circle cx="10.4" cy="6.6" r="0.9" fill="var(--surface)" />
+      <circle cx="13.6" cy="6.6" r="0.9" fill="var(--surface)" />
+      <path fill="var(--warn)" d="M10.6 8.4h2.8L12 10.2z" />
     </svg>
   );
 }

@@ -1,0 +1,378 @@
+/* Dokumentation (pages/docs). */
+
+.dc-layout {
+  display: grid;
+  grid-template-columns: 14rem minmax(0, 1fr);
+  gap: var(--sp-8);
+  align-items: start;
+}
+
+/* ---- Contents: sticky column on wide screens ---- */
+.dc-toc {
+  position: sticky;
+  top: calc(var(--topbar-h) + var(--sp-5));
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-height: calc(100vh - var(--topbar-h) - 2 * var(--sp-5));
+  overflow-y: auto;
+}
+.dc-toc-label {
+  padding: 0 var(--sp-3);
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.dc-toc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* The list sets display, which would otherwise beat the hidden attribute. */
+.dc-toc-list[hidden] {
+  display: none;
+}
+.dc-toc-link {
+  display: flex;
+  align-items: center;
+  min-height: var(--hit);
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-md);
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  text-decoration: none;
+  transition:
+    background-color var(--dur-1) ease,
+    color var(--dur-1) ease;
+}
+.dc-toc-link:hover {
+  color: var(--tx);
+  text-decoration: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dc-toc-link:hover {
+    background: var(--hover);
+  }
+}
+.dc-toc-link[aria-current='location'] {
+  background: var(--accent-soft);
+  color: var(--accent-tx);
+  font-weight: 700;
+}
+
+/* ---- Contents: bar with a drop-down list on narrow screens ---- */
+.dc-toc-bar {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 1;
+  padding: var(--sp-2) 0;
+  background: var(--bg);
+}
+.dc-toc-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-align: left;
+}
+.dc-toc-toggle-label {
+  flex: none;
+  color: var(--tx);
+}
+.dc-toc-current {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding-left: var(--sp-2);
+  border-left: 1px solid var(--line);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dc-toc-chevron {
+  display: grid;
+  flex: none;
+  color: var(--tx-3);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.dc-toc-chevron.is-open {
+  transform: rotate(180deg);
+}
+.dc-toc-drop {
+  position: absolute;
+  top: calc(100% - var(--sp-1));
+  right: 0;
+  left: 0;
+  max-height: calc(100vh - var(--topbar-h) - var(--hit) - var(--sp-12));
+  padding: var(--sp-1);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  transform-origin: top center;
+  animation: v-pop var(--dur-2) var(--ease-out);
+}
+
+/* ---- Article ---- */
+.dc-article {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-width: 0;
+  max-width: 58rem;
+}
+/* A jump from the contents lands under the top bar, not behind it. */
+.dc-anchor {
+  scroll-margin-top: calc(var(--topbar-h) + var(--sp-5));
+}
+.dc-section .panel-head {
+  padding: var(--sp-6) var(--sp-6) var(--sp-1);
+}
+.dc-section .panel-title {
+  font-size: var(--fs-xl);
+  letter-spacing: -0.01em;
+}
+.dc-section .panel-body {
+  padding: 0 var(--sp-6) var(--sp-6);
+}
+.dc-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  line-height: 1.6;
+}
+/* Prose keeps a measure of about 70 characters; commands may run wider. */
+.dc-body p,
+.dc-list,
+.dc-note,
+.dc-live,
+.dc-h3 {
+  max-width: 70ch;
+}
+.dc-lead {
+  color: var(--tx-2);
+}
+/* Links inside running text are underlined: colour alone does not tell
+   them apart from the words around them. */
+.dc-body a {
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-decoration-thickness: 1px;
+}
+.dc-body a:hover {
+  text-decoration-color: currentColor;
+}
+.dc-h3 {
+  font-size: var(--fs-md);
+  font-weight: 800;
+  line-height: var(--lh-tight);
+}
+.dc-body > .dc-h3 {
+  margin-top: var(--sp-2);
+}
+.dc-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding-left: var(--sp-5);
+}
+.dc-list li::marker {
+  color: var(--tx-3);
+}
+
+/* Inline code: commands, paths, variables — mono only where it is code. */
+.dc code {
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+.dc-note code {
+  background: var(--surface-3);
+}
+
+/* ---- Steps ---- */
+.dc-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dc-step {
+  display: flex;
+  gap: var(--sp-3);
+}
+.dc-step-n {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+  font-weight: 800;
+}
+.dc-step-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding-top: 4px;
+}
+
+/* ---- Known errors ---- */
+.dc-faq-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--line);
+}
+.dc-faq-item:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.dc-faq-item:last-child {
+  padding-bottom: 0;
+}
+
+/* ---- Notes: neutral, a hairline and a quiet fill ---- */
+.dc-note {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  font-size: var(--fs-sm);
+}
+.dc-note-ico {
+  display: grid;
+  flex: none;
+  padding-top: 3px;
+  color: var(--tx-3);
+}
+.dc-note-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.dc-note-title {
+  color: var(--tx);
+  font-weight: 800;
+}
+
+/* ---- Commands (console style, dark in both themes) ---- */
+.dc-code {
+  border-radius: var(--r-md);
+}
+.dc-code-head {
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3);
+}
+.dc-code-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--console-tx-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dc-code-body {
+  margin: 0;
+  padding: var(--sp-3);
+  color: var(--console-tx);
+  font: 400 var(--fs-sm) / 1.6 var(--mono);
+  tab-size: 4;
+}
+.dc .dc-code code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+/* Wrapped lines hang under the first, so a wrap never reads as a new line. */
+.dc-line {
+  display: block;
+  padding-left: 2ch;
+  text-indent: -2ch;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dc-comment {
+  color: var(--console-tx-2);
+}
+
+/* ---- Small pieces ---- */
+.dc-path-sep {
+  margin: 0 3px;
+  color: var(--tx-3);
+}
+.dc-inline-ico {
+  color: var(--accent-tx);
+}
+.dc-live {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.dc-live-title {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+
+/* ---- Narrow: one column, contents in the bar (COMPACT_QUERY) ---- */
+@media (max-width: 1100px) {
+  .dc-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-2);
+  }
+  .dc-anchor {
+    scroll-margin-top: calc(var(--topbar-h) + var(--hit) + var(--sp-8));
+  }
+}
+@media (max-width: 720px) {
+  .dc-section .panel-head {
+    padding: var(--sp-4) var(--sp-4) var(--sp-1);
+  }
+  .dc-section .panel-title {
+    font-size: var(--fs-lg);
+  }
+  .dc-section .panel-body {
+    padding: 0 var(--sp-4) var(--sp-4);
+  }
+  .dc-step {
+    gap: var(--sp-2);
+  }
+  .dc-note {
+    padding: var(--sp-3);
+  }
+}

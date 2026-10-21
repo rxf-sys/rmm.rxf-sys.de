@@ -133,3 +133,43 @@ async def test_admin_can_link_account_to_person(admin_client: AsyncClient):
     assert (
         await admin_client.patch(f"/api/accounts/{extra['id']}", json={"person_id": 9999})
     ).status_code == 422
+
+
+async def test_admin_creates_viewer_linked_to_person(admin_client: AsyncClient):
+    """A viewer made in the admin panel is born with its person — one request,
+    so a failed second step cannot leave an account that sees nothing."""
+    from app import audit
+
+    person = (await _person_with_login(admin_client, "Onkel"))["person"]
+    r = await admin_client.post(
+        "/api/accounts",
+        json={
+            "username": "onkel.zwei",
+            "password": "onkel-pw-123",
+            "role": "viewer",
+            "person_id": person["id"],
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["account"]["person_id"] == person["id"]
+    created = next(e for e in await audit.recent() if e["event"] == "account.created")
+    assert created["detail"]["person_id"] == person["id"]
+
+    # Unknown person → 422, and no account is left behind.
+    r = await admin_client.post(
+        "/api/accounts",
+        json={"username": "geist", "password": "geist-pw-123", "person_id": 9999},
+    )
+    assert r.status_code == 422
+    names = [a["username"] for a in (await admin_client.get("/api/accounts")).json()["accounts"]]
+    assert "geist" not in names
+
+
+async def test_person_link_change_is_audited(admin_client: AsyncClient):
+    from app import accounts, audit
+
+    person = (await _person_with_login(admin_client, "Cousine"))["person"]
+    extra = await accounts.create_user("cousine2", "cousine-pw-1", role="viewer")
+    await admin_client.patch(f"/api/accounts/{extra['id']}", json={"person_id": person["id"]})
+    updated = next(e for e in await audit.recent() if e["event"] == "account.updated")
+    assert updated["detail"]["person_id"] == person["id"]

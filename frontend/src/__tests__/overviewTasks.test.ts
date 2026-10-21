@@ -136,4 +136,21 @@ describe('verdict', () => {
   it('says so when there is no fleet at all', () => {
     expect(verdict([], []).text).toBe('Noch kein Gerät angebunden.');
   });
+
+  it('says how much room is left instead of repeating a single hostname', () => {
+    const gib = 1024 ** 3;
+    const tasks = buildTasks({
+      devices: [
+        device({
+          id: 9,
+          hostname: 'srv-backup-offsite-hetzner-fsn1-dc14-storagebox-replica-0001',
+          heartbeat: { disks: [{ mount: '/', used_pct: 88, used_b: 450 * gib, total_b: 512 * gib }] },
+        }),
+      ],
+      patchSummary: {},
+      now: NOW,
+    });
+    const disk = tasks.find((t) => t.tag === 'platte');
+    expect(disk?.why).toBe('Noch 62 GB frei auf /. Ab 90 % wird es kritisch.');
+  });
 });

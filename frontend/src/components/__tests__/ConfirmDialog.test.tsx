@@ -78,4 +78,23 @@ describe('ConfirmDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Abbrechen' }));
     expect(onCancel).toHaveBeenCalled();
   });
+
+  it('starts on "Abbrechen" so a stray Enter never confirms', async () => {
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    render(
+      <ConfirmDialog
+        title="Gerät löschen"
+        body="Entfernt das Gerät und seine Historie."
+        confirmLabel="Löschen"
+        danger
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Abbrechen' })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onCancel).toHaveBeenCalled();
+  });
 });
