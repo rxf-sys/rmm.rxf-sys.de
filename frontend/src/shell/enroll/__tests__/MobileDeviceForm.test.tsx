@@ -6,9 +6,11 @@ import { ApiError } from '../../../api/client';
 import type { NewDevice, Person } from '../../../types';
 import { MobileDeviceForm } from '../MobileDeviceForm';
 
-const { personsMock, createDeviceMock } = vi.hoisted(() => ({
+const { personsMock, createDeviceMock, deviceMdmMock, createMdmMock } = vi.hoisted(() => ({
   personsMock: vi.fn<() => Promise<{ persons: Person[] }>>(),
   createDeviceMock: vi.fn<(body: NewDevice) => Promise<unknown>>(),
+  deviceMdmMock: vi.fn<(id: number) => Promise<unknown>>(),
+  createMdmMock: vi.fn<(id: number) => Promise<unknown>>(),
 }));
 vi.mock('../../../api/client', async () => {
   const actual = await vi.importActual<typeof import('../../../api/client')>('../../../api/client');
@@ -17,20 +19,22 @@ vi.mock('../../../api/client', async () => {
     api: {
       persons: () => personsMock(),
       createDevice: (body: NewDevice) => createDeviceMock(body),
+      deviceMdm: (id: number) => deviceMdmMock(id),
+      createMdmEnrollment: (id: number) => createMdmMock(id),
     },
   };
 });
 
 const lisa: Person = { id: 3, name: 'Lisa', email: '', phone: '', notes: '', created_at: 0, device_count: 1 };
 
-function show() {
+function show(isAdmin = false) {
   const user = userEvent.setup();
   const onCreated = vi.fn<(hostname: string) => void>();
   const onCancel = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <MobileDeviceForm onCreated={onCreated} onCancel={onCancel} />
+      <MobileDeviceForm onCreated={onCreated} onCancel={onCancel} isAdmin={isAdmin} />
     </QueryClientProvider>,
   );
   return { user, onCreated, onCancel };
@@ -146,5 +150,48 @@ describe('MobileDeviceForm', () => {
     const { user, onCancel } = show();
     await user.click(screen.getByRole('button', { name: 'Abbrechen' }));
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  describe('with MDM', () => {
+    const enrollment = {
+      id: 1, device_id: 9, access_rights: 8183, created_by: 'boss', created_at: 0, expires_at: 1_790_000_000,
+      downloads: 0, downloaded_at: null, scep_at: null, enrolled_at: null, revoked_at: null, state: 'waiting',
+    };
+    beforeEach(() => {
+      createDeviceMock.mockResolvedValue({ device: { id: 9 } });
+      deviceMdmMock.mockResolvedValue({ configured: true, missing: [], enrollment, binding: null, needs_reenroll: false });
+      createMdmMock.mockResolvedValue({ url: 'https://rmm.example.org/api/mdm/enroll/mde_x', enrollment });
+    });
+
+    it('goes straight to the QR code for an iPhone when an admin records it', async () => {
+      const { user } = show(true);
+      await user.type(screen.getByLabelText('Bezeichnung'), 'iPhone Lisa');
+      expect(screen.getByRole('checkbox', { name: /per MDM registrieren/ })).toBeChecked();
+      await user.click(screen.getByRole('button', { name: 'Gerät anlegen' }));
+      expect(await screen.findByRole('img', { name: 'QR-Code: Registrierungslink für iPhone Lisa' })).toBeInTheDocument();
+      expect(createMdmMock).toHaveBeenCalledWith(9);
+      await user.click(screen.getByRole('button', { name: 'Weiteres Gerät erfassen' }));
+      expect(screen.getByLabelText('Bezeichnung')).toHaveValue('');
+    });
+
+    it('stays an index card when the admin opts out', async () => {
+      const { user } = show(true);
+      await user.type(screen.getByLabelText('Bezeichnung'), 'iPhone Lisa');
+      await user.click(screen.getByRole('checkbox', { name: /per MDM registrieren/ }));
+      await user.click(screen.getByRole('button', { name: 'Gerät anlegen' }));
+      expect(await screen.findByText(/„iPhone Lisa“ angelegt/)).toBeInTheDocument();
+      expect(createMdmMock).not.toHaveBeenCalled();
+    });
+
+    it('does not offer MDM to a techniker', async () => {
+      show(false);
+      expect(screen.queryByRole('checkbox', { name: /per MDM registrieren/ })).not.toBeInTheDocument();
+    });
+
+    it('does not offer MDM for Android', async () => {
+      const { user } = show(true);
+      await user.selectOptions(screen.getByLabelText('Gerätetyp'), 'android');
+      expect(screen.queryByRole('checkbox', { name: /per MDM registrieren/ })).not.toBeInTheDocument();
+    });
   });
 });

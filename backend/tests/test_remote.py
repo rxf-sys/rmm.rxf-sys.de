@@ -218,9 +218,9 @@ async def test_session_refuses_a_stored_invalid_id(rd_settings: AsyncClient):
 
 
 async def test_session_refusal_says_how_to_fix_the_stored_id(rd_settings: AsyncClient):
-    """The dashboard on main has no field for an ID that is already stored,
-    so "bitte am Gerät neu eintragen" left the operator stuck. The message
-    names the call that fixes it, and that call does."""
+    """A refused stored ID needs a way out that works without the dashboard's
+    form: "bitte am Gerät neu eintragen" left an API client stuck. The
+    message names the call that fixes it, and that call does."""
     dev = await _make_device()
     await devices.update_device(dev, rustdesk_id="123456789?x=1")
     r = await rd_settings.get(f"/api/remote/devices/{dev}/session")
@@ -228,7 +228,7 @@ async def test_session_refusal_says_how_to_fix_the_stored_id(rd_settings: AsyncC
     detail = r.json()["detail"]
     assert f"PATCH /api/devices/{dev}" in detail and "rustdesk_id" in detail
 
-    # Clearing it brings back the dashboard's "ID setzen" form ...
+    # Clearing it works ...
     r = await rd_settings.patch(f"/api/devices/{dev}", json={"rustdesk_id": ""})
     assert r.status_code == 200 and r.json()["device"]["rustdesk_id"] == ""
     # ... and re-entering it makes the session work again.

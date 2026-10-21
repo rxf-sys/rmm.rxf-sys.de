@@ -7,6 +7,9 @@ infrastructure/.agent-sign.env
 # NanoMDM-Zustand. Der Push-Schlüssel ist unersetzbar — geht er verloren,
 # ist auch das Zertifikat von Apple wertlos. Siehe docs/MDM-SETUP.md.
 infrastructure/mdm/
+# SCEP-Depot: privater CA-Schlüssel (ca.key) und alle ausgestellten
+# Gerätezertifikate. Bewusst getrennt von infrastructure/mdm/.
+infrastructure/scep-depot/
 mdmcert.download.*
 *push.key
 *push.pem

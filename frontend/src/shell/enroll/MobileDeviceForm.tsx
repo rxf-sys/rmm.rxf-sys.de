@@ -7,12 +7,15 @@ import type { NewDevice } from '../../types';
 import { ErrorNote } from '../../ui';
 import { notify } from '../../ui/toast';
 import { DEVICE_LIMITS, MOBILE_OS_OPTIONS, PERSON_PICKER_KEY, enrollErrorText } from './enrollText';
+import { MdmEnrollLink } from './MdmEnrollLink';
 
 interface Props {
   /** After each device. The form stays open, so several devices can be
    *  recorded one after the other. */
   onCreated: (hostname: string) => void;
   onCancel: () => void;
+  /** Creating MDM enrollment links is admin-only on the server. */
+  isAdmin?: boolean;
 }
 
 /**
@@ -22,7 +25,7 @@ interface Props {
  * credentials are created, nothing reports back on its own. Everything here
  * is maintained by hand, and the date next to it says how old that is.
  */
-export function MobileDeviceForm({ onCreated, onCancel }: Props) {
+export function MobileDeviceForm({ onCreated, onCancel, isAdmin = false }: Props) {
   const qc = useQueryClient();
   const id = useId();
   const [hostname, setHostname] = useState('');
@@ -38,6 +41,9 @@ export function MobileDeviceForm({ onCreated, onCancel }: Props) {
   const [missingName, setMissingName] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [withMdm, setWithMdm] = useState(true);
+  const [enrollFor, setEnrollFor] = useState<{ id: number; name: string } | null>(null);
+  const canMdm = isAdmin && (os === 'ios' || os === 'ipados');
   const nameRef = useRef<HTMLInputElement>(null);
 
   const persons = useQuery({
@@ -61,7 +67,7 @@ export function MobileDeviceForm({ onCreated, onCancel }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await api.createDevice({
+      const res = await api.createDevice({
         hostname: name,
         os,
         os_version: osVersion.trim(),
@@ -76,6 +82,7 @@ export function MobileDeviceForm({ onCreated, onCancel }: Props) {
       onCreated(name);
       notify.success(`„${name}“ angelegt`);
       setDone(name);
+      if (canMdm && withMdm) setEnrollFor({ id: res.device.id, name });
       // Type, ownership and person usually repeat for the next device of the
       // same household; the individual details do not.
       setHostname('');
@@ -92,11 +99,39 @@ export function MobileDeviceForm({ onCreated, onCancel }: Props) {
     }
   };
 
+  if (enrollFor) {
+    return (
+      <div className="form-stack">
+        <p className="en-lead">
+          „{enrollFor.name}“ ist angelegt. Mit dem QR-Code meldet sich das Gerät selbst an; Modell, Version und
+          Seriennummer kommen danach vom Gerät.
+        </p>
+        <MdmEnrollLink deviceId={enrollFor.id} deviceName={enrollFor.name} autoCreate />
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              setEnrollFor(null);
+              setDone(null);
+            }}
+          >
+            Weiteres Gerät erfassen
+          </button>
+          <button type="button" className="btn btn-primary" onClick={onCancel}>
+            Fertig
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <form className="form-stack" onSubmit={(e) => void submit(e)} noValidate>
       <p className="en-lead">
-        Für Telefone und Tablets. Es entsteht kein Zugang — das Gerät meldet sich nicht von selbst, die Angaben werden hier
-        gepflegt.
+        {canMdm && withMdm
+          ? 'Für iPhone und iPad. Nach dem Anlegen erscheint ein QR-Code; damit meldet sich das Gerät selbst an. Modell, Version und Seriennummer liefert es danach mit — die Felder unten sind optional.'
+          : 'Für Telefone und Tablets. Es entsteht kein Zugang — das Gerät meldet sich nicht von selbst, die Angaben werden hier gepflegt.'}
       </p>
 
       <div className="field">
@@ -246,6 +281,13 @@ export function MobileDeviceForm({ onCreated, onCancel }: Props) {
           placeholder="z. B. Displayschaden, Vertrag läuft bis 05/2027"
         />
       </div>
+
+      {canMdm && (
+        <label className="choice">
+          <input type="checkbox" checked={withMdm} onChange={(e) => setWithMdm(e.target.checked)} />
+          Danach per MDM registrieren (QR-Code fürs Gerät)
+        </label>
+      )}
 
       {error && <ErrorNote error={error} />}
       {done && !error && (

@@ -1526,3 +1526,19 @@ kbd,
 .bulk-names-more > .bulk-names {
   margin-top: var(--sp-1);
 }
+
+/* ---------- QR code ---------- */
+
+.qr {
+  display: block;
+  flex: none;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--r-md);
+}
+.qr-bg {
+  fill: var(--qr-bg);
+}
+.qr-fg {
+  fill: var(--qr-fg);
+}

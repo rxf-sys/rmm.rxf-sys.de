@@ -6,9 +6,11 @@ import type {
   AuditPage,
   AutomationConfig,
   CreatedEnrollToken,
+  CreatedMdmEnrollment,
   Credential,
   Device,
   DeviceDetail,
+  DeviceMdm,
   EnrollToken,
   FleetSample,
   InventoryMatch,
@@ -200,6 +202,10 @@ function validationIssue(raw: unknown): string {
       const msg = typeof i.msg === 'string' ? i.msg.replace(/^(Value error|Assertion failed), /, '') : '';
       return msg ? `${field}: ${msg}` : `${field} ist ungültig`;
     }
+    case 'rustdesk_id':
+      // The server's own error type (routers/devices.py): its message is a
+      // whole German sentence that names the field and the accepted format.
+      return typeof i.msg === 'string' && i.msg ? i.msg : `${field} ist ungültig`;
     default:
       return `${field} ist ungültig`;
   }
@@ -222,17 +228,7 @@ export function apiErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {
     let parsed: unknown;
     try {
-      const parsed = JSON.parse(e.body) as { detail?: unknown };
-      if (typeof parsed.detail === 'string' && parsed.detail) return parsed.detail;
-      // A failed request-body check (422) carries a list of
-      // {loc, msg, …} instead of one sentence. Handing that list on would
-      // put objects where callers render text.
-      if (Array.isArray(parsed.detail)) {
-        const msgs = parsed.detail
-          .map((d: unknown) => (d && typeof d === 'object' && 'msg' in d ? String(d.msg) : ''))
-          .filter(Boolean);
-        if (msgs.length) return msgs.join(' · ');
-      }
+      parsed = JSON.parse(e.body);
     } catch {
       // Not JSON (a proxy's plain-text answer): the body is the message.
       return e.body || `Fehler ${e.status}`;
@@ -367,6 +363,12 @@ export const api = {
   createEnrollToken: (body: { label?: string; ttl_hours?: number }) =>
     post<CreatedEnrollToken>('/api/devices/enroll-tokens', body),
   deleteEnrollToken: (id: number) => del<{ ok: boolean }>(`/api/devices/enroll-tokens/${id}`),
+
+  // Apple MDM (iPhone/iPad without agent)
+  deviceMdm: (deviceId: number, signal?: AbortSignal) => get<DeviceMdm>(`/api/devices/${deviceId}/mdm`, signal),
+  createMdmEnrollment: (deviceId: number) =>
+    post<CreatedMdmEnrollment>(`/api/devices/${deviceId}/mdm/enrollment`, {}),
+  revokeMdmEnrollment: (deviceId: number) => del<{ revoked: number }>(`/api/devices/${deviceId}/mdm/enrollment`),
 
   // Jobs
   deviceJobs: (deviceId: number, signal?: AbortSignal) =>

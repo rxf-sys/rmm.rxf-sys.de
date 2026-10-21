@@ -195,6 +195,10 @@ MATRIX: tuple[Endpoint, ...] = (
     ),
     Endpoint("POST", "/api/devices/{device_id}/credentials/{cred_id}/reveal", ADMIN, 200),
     Endpoint("DELETE", "/api/devices/{device_id}/credentials/{cred_id}", ADMIN, 200),
+    # --- MDM enrollment links (admin) ---
+    # 409: the world's device is an agent, not an iPhone — the handler ran.
+    Endpoint("POST", "/api/devices/{device_id}/mdm/enrollment", ADMIN, 409, _const({})),
+    Endpoint("DELETE", "/api/devices/{device_id}/mdm/enrollment", ADMIN, 200),
     # --- Accounts and settings (admin) ---
     Endpoint(
         "POST",
@@ -234,6 +238,11 @@ _EXCLUDED: dict[tuple[str, str], str] = {
     # Agent-facing: authenticated by a one-time enrollment token, never by a
     # dashboard session (test_enrollment.py).
     ("POST", "/api/agent/enroll"): "agent enrollment",
+    # Container-to-container on the rmm network, each with its own secret
+    # (bearer token / body HMAC) and blocked by Caddy from outside
+    # (test_mdm.py).
+    ("POST", "/api/mdm/scep/verify"): "scep verifier, bearer token",
+    ("POST", "/api/mdm/webhook"): "NanoMDM webhook, HMAC signature",
 }
 
 # WebSocket routes and where their authentication is tested. Listed so a new
