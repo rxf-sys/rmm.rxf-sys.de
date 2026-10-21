@@ -207,13 +207,24 @@ describe('Kennzahlen', () => {
   });
 
   it('nennt den Stand je System nur für vorhandene Systeme', () => {
-    expect(categoryStats(list, ps)).toEqual([
-      { id: 'win_pc', total: 1, current: 0 },
-      { id: 'win_server', total: 1, current: 0 },
-      { id: 'mac', total: 1, current: 1 },
-      { id: 'linux', total: 2, current: 1 },
+    const groups = categoryStats(list, ps, NOW);
+    expect(groups.map((g) => [g.id, g.total, g.current])).toEqual([
+      ['win_pc', 1, 0],
+      ['win_server', 1, 0],
+      ['mac', 1, 1],
+      ['linux', 2, 1],
     ]);
-    expect(categoryStats([device({ os: 'linux' })], {})).toEqual([{ id: 'linux', total: 1, current: 1 }]);
+    expect(categoryStats([device({ os: 'linux' })], {}, NOW).map((g) => [g.id, g.total, g.current])).toEqual([['linux', 1, 1]]);
+  });
+
+  it('zählt je System wie die Kennzahlen darüber', () => {
+    const groups = categoryStats(list, ps, NOW);
+    const sum = (k: 'pending' | 'security' | 'securityDevices' | 'stale') => groups.reduce((n, g) => n + g[k], 0);
+    const all = patchStats(list, ps, NOW);
+    expect(sum('pending')).toBe(all.pending);
+    expect(sum('security')).toBe(all.security);
+    expect(sum('securityDevices')).toBe(all.securityDevices);
+    expect(sum('stale')).toBe(all.stale);
   });
 
   it('rundet nie auf 100 % auf', () => {

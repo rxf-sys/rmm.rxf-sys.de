@@ -33,13 +33,14 @@ import {
 } from '../../icons';
 import { PAGE_PATH, devicePath } from '../../routes';
 import type { Device, Job, PatchSummary, Person } from '../../types';
-import { EmptyState, ErrorNote, Meter, PageHeader, Panel, Skeleton, SkeletonRows, StatusBadge } from '../../ui';
+import { EmptyState, ErrorNote, PageHeader, Panel, Skeleton, SkeletonRows, StatusBadge } from '../../ui';
 import { notify, trackJobs } from '../../ui/toast';
 import { deviceLabel, duplicateHostnames } from '../../deviceLabel';
 import { names, partition, reachable, runBulk, skippedText, type BulkOutcome } from '../devices/bulk';
 import { DeviceNames } from '../devices/DeviceNames';
 import { useFleetLoad } from './fleetLoading';
 import { PatchBulkBar } from './PatchBulkBar';
+import { SystemCards } from './SystemCards';
 import {
   FORBIDDEN_TEXT,
   OS_CATEGORIES,
@@ -47,7 +48,6 @@ import {
   STATE_FILTERS,
   STATE_LABEL,
   categoryStats,
-  currentLevel,
   currentPct,
   emptyText,
   formatSort,
@@ -284,7 +284,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
   );
 
   const stats = useMemo(() => patchStats(devices, patchSummary, now), [devices, patchSummary, now]);
-  const groups = useMemo(() => categoryStats(devices, patchSummary), [devices, patchSummary]);
+  const groups = useMemo(() => categoryStats(devices, patchSummary, now), [devices, patchSummary, now]);
 
   // Person, connection and search narrow the set both filter bars count
   // over; each bar's numbers also respect the other bar.
@@ -619,23 +619,9 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
               meta={loading ? undefined : `${fmt.format(stats.current)} von ${fmt.format(stats.devices)} vollständig aktuell · ${allPct} %`}
             >
               {loading ? (
-                <Skeleton h={52} />
+                <Skeleton h={120} />
               ) : (
-                <div className="pt-sys">
-                  {groups.map((g) => {
-                    const pct = currentPct(g.current, g.total);
-                    return (
-                      <Meter
-                        key={g.id}
-                        label={OS_CATEGORY_LABEL[g.id]}
-                        value={pct}
-                        level={currentLevel(pct)}
-                        detail={`${fmt.format(g.current)} von ${fmt.format(g.total)}`}
-                        title={`${OS_CATEGORY_LABEL[g.id]}: ${fmt.format(g.current)} von ${fmt.format(g.total)} Geräten vollständig aktuell`}
-                      />
-                    );
-                  })}
-                </div>
+                <SystemCards groups={groups} active={os} onSelect={(f) => setParam({ os: f === 'alle' ? null : f })} />
               )}
             </Panel>
           </div>

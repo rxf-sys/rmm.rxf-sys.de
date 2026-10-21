@@ -283,13 +283,34 @@ export interface CategoryStat {
   id: OsCategory;
   total: number;
   current: number;
+  /** Open updates across the group, and how many of them are security. */
+  pending: number;
+  security: number;
+  /** Devices with at least one security update open. */
+  securityDevices: number;
+  /** No scan in 24 hours, never-scanned included. */
+  stale: number;
 }
 
-/** Current devices per system group, for the groups the fleet has. */
-export function categoryStats(devices: Device[], ps: PatchSummary): CategoryStat[] {
+/** The summary per system group, for the groups the fleet has. Same
+ *  counting as `patchStats`, so a card and the figures above never
+ *  disagree. */
+export function categoryStats(devices: Device[], ps: PatchSummary, now: number): CategoryStat[] {
   return OS_CATEGORIES.map((id) => {
-    const inGroup = devices.filter((d) => categoryOf(d) === id);
-    return { id, total: inGroup.length, current: inGroup.filter((d) => isCurrent(d, ps)).length };
+    const s = patchStats(
+      devices.filter((d) => categoryOf(d) === id),
+      ps,
+      now,
+    );
+    return {
+      id,
+      total: s.devices,
+      current: s.current,
+      pending: s.pending,
+      security: s.security,
+      securityDevices: s.securityDevices,
+      stale: s.stale,
+    };
   }).filter((c) => c.total > 0);
 }
 
