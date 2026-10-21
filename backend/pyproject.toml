@@ -24,11 +24,11 @@ dev = [
     "ruff>=0.16.6,<0.18",
     # Exact pin for the same reason as ruff: a type checker's findings change
     # between releases, and the gate should only move when this line does.
-    "mypy==2.3.1",
+    "mypy==2.4.0",
     # Property tests (tests/*: max_examples is set in conftest.py). Exact pin:
     # new releases change how examples are generated, and with them which
     # inputs a CI run happens to try.
-    "hypothesis==6.168.1",
+    "hypothesis==6.170.1",
 ]
 
 [build-system]
