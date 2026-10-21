@@ -7,6 +7,14 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Sicherheit
+- Go-Toolchain für den Agent von 1.26.9 auf 1.26.10 angehoben
+  (CVE-2026-111943, go.dev/issue/82345). `crypto/x509` vertraut damit einer
+  Reihe kompromittierter Zwischenzertifikate einer CA nicht mehr;
+  `govulncheck` meldete den Pfad über `x509.Certificate.Verify` als
+  erreichbar. `build-agent.sh` nutzt `golang:1.26-alpine` und zieht die
+  Version beim nächsten Build von selbst.
+
 ### Behoben
 - **MDM: `NANOMDM_CERT_HEADER` wieder entfernt.** Die Variable war auf
   `Mdm-Signature` gesetzt, in der Annahme, damit den Header zu benennen, über
