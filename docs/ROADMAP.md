@@ -10,6 +10,8 @@ Diese Punkte standen dort noch unter „nach v1 geparkt" und sind fertig:
 
 - `viewer`-Rolle mit Beschränkung auf die Geräte der eigenen Person
 - Wake-on-LAN aus dem Dashboard
+- Vormerken fürs nächste Online-Gehen (Updates, Skripte, Neustart falls
+  nötig) und ein Patch-Fenster, das offline gewesene Geräte nachholen
 
 Ebenfalls hinzugekommen, ohne im Plan zu stehen: TOTP mit Backup-Codes,
 der Fernet-verschlüsselte Passwort-Tresor pro Gerät samt
