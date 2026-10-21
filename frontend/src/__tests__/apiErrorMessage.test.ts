@@ -17,6 +17,10 @@ async function errorOf(p: Promise<unknown>): Promise<unknown> {
   throw new Error('expected the request to fail');
 }
 
+// As raised by routers/devices.py for a malformed RustDesk ID.
+const RUSTDESK_HINT =
+  'Keine gültige RustDesk-ID: 6–12 Ziffern oder 6–16 Zeichen, beginnend mit einem Buchstaben, aus A–Z, 0–9, _ und -';
+
 describe('apiErrorMessage', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -36,14 +40,15 @@ describe('apiErrorMessage', () => {
           {
             type: 'rustdesk_id',
             loc: ['body', 'rustdesk_id'],
-            msg: 'Keine gültige RustDesk-ID',
+            msg: RUSTDESK_HINT,
             input: '12',
           },
         ],
       }),
     );
     const e = await errorOf(api.updateDevice(1, { rustdesk_id: '12' }));
-    expect(apiErrorMessage(e)).toBe('Keine gültige RustDesk-ID');
+    // The server's sentence names the accepted format; it must survive.
+    expect(apiErrorMessage(e)).toBe(`Ungültige Eingabe: ${RUSTDESK_HINT}.`);
   });
 
   it('falls back to the raw body when it is not JSON', async () => {

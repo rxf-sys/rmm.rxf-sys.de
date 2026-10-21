@@ -7,7 +7,75 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Hinzugefügt
+- **MDM: iPhone und iPad per QR-Code registrieren.** „Gerät hinzufügen →
+  Telefon oder Tablet“ zeigt Admins nach dem Anlegen einen QR-Code mit einem
+  Einmal-Link (24 h, höchstens fünf Abrufe, ein neuer widerruft den alten);
+  bestehende Geräte bekommen den Reiter „MDM“. Jedes Profil trägt eine
+  eigene SCEP-Challenge, die genau einmal gilt: `scep-csr-verifier`
+  (`infrastructure/scep/verifier/`, nur Standardbibliothek) fragt dafür
+  `POST /api/mdm/scep/verify`. Der NanoMDM-Webhook (HMAC-signiert) ordnet das
+  Telefon über `?e=<ref>` in der `ServerURL` seiner Karteikarte zu; danach
+  stellt das Backend `DeviceInformation` ein, die Antwort füllt
+  Seriennummer, IMEI und iOS-Version. Privatgeräte bekommen ein Profil ohne
+  Löschrecht (`AccessRights` 8183). Neue Tabellen `mdm_enrollments`,
+  `mdm_devices`; Audit-Ereignisse `mdm.*`. Neue Frontend-Abhängigkeit
+  `qrcode` 1.5.4 (SVG ohne Canvas oder Data-URL).
+- **MDM: SCEP-Server als Compose-Service `scep`** (Profil `mdm`, startet
+  nicht mit einem normalen Deploy). `micromdm/scep` hat kein
+  Container-Image; `infrastructure/scep/` baut das gepinnte Release v2.3.0
+  und läuft als uid 10001. Das Depot mit dem CA-Schlüssel liegt in
+  `infrastructure/scep-depot/`, getrennt von `infrastructure/mdm/`, damit
+  NanoMDM `ca.key` nicht lesen kann. Der Entrypoint verweigert den Start ohne
+  `SCEP_CHALLENGE_PASSWORD` — ohne Challenge würde `scepserver` jeden CSR
+  signieren. Caddy leitet `/scep*` an den Container.
+- **MDM: `infrastructure/mdm-test-profile.sh`** schreibt ein unsigniertes
+  Enrollment-Profil für ein erstes Testgerät (SCEP-Payload, `ServerURL` und
+  `CheckInURL` auf `/mdm`, `SignMessage = true`, APNs-Topic aus
+  `mdm/push.pem`).
+
+### Geändert
+- **SCEP: Einmal-Challenges statt statischer.** Der Entrypoint startet mit
+  genau einem von `MDM_SCEP_VERIFY_TOKEN` und `SCEP_CHALLENGE_PASSWORD`;
+  die statische Challenge bleibt nur für das nach
+  `infrastructure/_archiv/` verschobene Test-Profil. Umstellung am LXC:
+  `docs/MDM-SETUP.md`, Teil 6.
+- **Caddy:** `/checkin` wird nicht mehr an NanoMDM geleitet (ohne Wirkung,
+  NanoMDM bedient alles auf `/mdm`); `/api/mdm/webhook` und
+  `/api/mdm/scep/*` antworten von außen mit 404.
+- **`docs/MDM-SETUP.md`:** Teil 4 beschreibt jetzt CA, `.env` und Start des
+  SCEP-Servers statt eines offenen Punkts; Teil 6 das Test-Profil. Neu
+  festgehalten: `/checkin` gibt es bei NanoMDM nur mit `-checkin`, beide
+  URLs im Profil zeigen auf `/mdm`. `CONFIGURATION.md`, `OPERATIONS.md`
+  (Backup, Prüfung) und `ROADMAP.md` nachgezogen.
+
+### Sicherheit
+- Go-Toolchain für den Agent von 1.26.9 auf 1.26.10 angehoben
+  (CVE-2026-111943, go.dev/issue/82345). `crypto/x509` vertraut damit einer
+  Reihe kompromittierter Zwischenzertifikate einer CA nicht mehr;
+  `govulncheck` meldete den Pfad über `x509.Certificate.Verify` als
+  erreichbar. `build-agent.sh` nutzt `golang:1.26-alpine` und zieht die
+  Version beim nächsten Build von selbst.
+- `vite` von 8.2.2 auf 8.2.4 angehoben. Das mitgelieferte `launch-editor`
+  hatte drei als hoch eingestufte Lücken (u. a. GHSA-r825-w8mm-5pxw); betrifft
+  nur den Dev-Server, ließ aber `npm audit` in CI scheitern.
+
 ### Behoben
+- **MDM: `NANOMDM_CERT_HEADER` wieder entfernt.** Die Variable war auf
+  `Mdm-Signature` gesetzt, in der Annahme, damit den Header zu benennen, über
+  den sich ein Gerät ausweist. NanoMDM entscheidet genau andersherum: mit
+  gesetztem `-cert-header` erwartet es ein PEM-Zertifikat in diesem Header,
+  nur mit leerem Flag prüft es die CMS-Signatur aus `SignMessage = true`.
+  Jede Geräteanfrage wäre abgelehnt worden. Aufgefallen ist es vor dem ersten
+  Start — der Container läuft ja erst mit Push-Zertifikat.
+- **MDM-Prüfung korrigiert:** `https://rmm.rxf-sys.de/version` zeigt nicht
+  NanoMDM, sondern das Dashboard — `/version` ist im Caddyfile keiner
+  MDM-Route zugeordnet und fällt in den SPA-Catch-all. Die Prüfung lief also
+  erfolgreich ins Leere. `docs/MDM-SETUP.md` und `docs/OPERATIONS.md` fragen
+  jetzt `http://127.0.0.1:9000/version` im LXC; von außen zählt weiterhin nur
+  `/v1/pushcert` → 404. Dazu zwei neue Zeilen in der Fehlertabelle: NanoMDM
+  startet ohne lesbare `ca.pem` gar nicht (`-ca` ist Pflicht), und die
+  `.p7`-Datei aus der mdmcert-Mail verträgt kein abschließendes Zeilenende.
 - **Menüs und Aufklapp-Fenster ließen sich mit der Tastatur schlecht
   bedienen.** Beim ersten Öffnen eines Menüs („Weitere Aktionen", „Aktionen"
   der Auswahl, Zeilenmenüs) blieb der Fokus auf dem Knopf, Pfeiltasten und
@@ -722,10 +790,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   wird die bereinigte Form. Ein Heartbeat mit ungültigem Wert behält die
   gespeicherte ID, `PATCH /api/devices/{id}` antwortet mit 422 (leer löscht
   die ID weiterhin), und aus einer schon gespeicherten ungültigen ID entsteht
-  kein Link mehr (409, ohne Audit-Eintrag). Die Meldung sagt, wie es
-  weitergeht — per `PATCH /api/devices/{id}` neu eintragen oder leeren —,
-  denn das Dashboard hat für eine schon gespeicherte ID kein Feld;
-  `docs/TROUBLESHOOTING.md` zeigt den Aufruf.
+  kein Link mehr (409, ohne Audit-Eintrag). Die Meldung nennt den Aufruf,
+  der sie korrigiert (`PATCH /api/devices/{id}` mit `rustdesk_id`); ist
+  RustDesk auf dem Server eingerichtet, bietet der Reiter „Fernzugriff" im
+  Dashboard eine solche ID vorbefüllt zum Neu-Speichern an.
+  `docs/TROUBLESHOOTING.md` beschreibt beide Wege.
 - **Ein Agent konnte über die Jobs anderer Geräte berichten.** Der Server
   übernahm die `job_id` aus `job_started`, `job_output` und `job_result`
   ungeprüft. Ein manipuliertes oder fehlerhaftes Gerät konnte damit den Job
@@ -758,6 +827,25 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   zurückfällt, wenn `TRUST_PROXY_HEADERS` aus ist.
 - Das Dashboard bietet keinen kopierbaren Download-Link mit Token in der URL
   mehr an. Beide verbleibenden Wege übergeben das Token im Header.
+- Abmelden und abgelaufene Sitzungen leeren jetzt den gesamten
+  Abfrage-Cache und die Auftrags-Toasts. Vorher sah, wer sich im selben Tab
+  mit einem anderen Konto anmeldete, für einen Moment Geräte, Alarme und
+  Auftragsausgaben des vorherigen Kontos.
+- RustDesk-Links öffnet das Dashboard nur noch, wenn die ID wohlgeformt ist;
+  eine vom Agent gemeldete ID landet sonst nicht ungeprüft in
+  `window.location`. Manuell eingetragene IDs werden genauso geprüft.
+- Fernzugriff, Fernsteuerung, die Einrichtung von RustDesk und die
+  Auftragskonsole laufender Updates sind für die Rolle Viewer ausgeblendet —
+  das Backend verweigert sie ohnehin.
+- Die Auftrags-Verbindung gibt auf, wenn der Server sie endgültig abweist
+  (4401/4403/4404), statt es endlos neu zu versuchen.
+- Ein als destruktiv markiertes Skript lässt sich nur noch nach Eingabe
+  seines Namens einplanen oder als Zeitplan einschalten — wie beim
+  direkten Ausführen.
+- Massenaktionen nennen vor dem Start jedes betroffene Gerät; die
+  Software-Installation zeigt den Befehl, der je Betriebssystem läuft.
+  Gleichnamige Geräte werden in Auswahllisten und Bestätigungen per
+  `#ID` unterschieden.
 - **Der Agent nimmt vom Server höchstens 1 MiB pro Nachricht an.**
   gorilla/websocket hält eine Nachricht vollständig im Speicher und setzt ab
   Werk keine Grenze; ein defekter Server oder etwas zwischen Server und Gerät
@@ -806,6 +894,22 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   neu an. Minor- und Patch-Updates dieser Pakete laufen weiter.
 
 ### Behoben
+- **Der Agent konnte sich dauerhaft aufhängen, solange Jobs viel ausgaben.**
+  Die Hauptschleife ist die einzige, die die Warteschlange zum Server leert,
+  stellte aber Heartbeat, Inventar und die Antworten auf `ping` und
+  `get_logs` selbst in dieselbe Warteschlange. War sie von Job-Ausgaben voll,
+  wartete die Schleife auf sich selbst: kein Heartbeat mehr, keine Antwort,
+  und auch ein Verbindungsabbruch blieb unbemerkt, bis der Dienst neu
+  startete. Diese Nachrichten schreibt die Schleife jetzt direkt; sie können
+  dabei wartende Job-Ausgaben überholen, deren Reihenfolge untereinander
+  bleibt erhalten.
+- Der Agent konnte bei jedem Verbindungsabbruch eine Goroutine samt
+  Nachricht zurücklassen: Der Leser des Sockets blieb an einem ungepufferten
+  Kanal hängen, sobald die Hauptschleife schon beendet war. Er gibt jetzt auf,
+  sobald die Verbindung vorbei ist.
+- Der Agent meldete aus einer Zeile wie `nameservers 10.0.0.2` in der
+  `resolv.conf` einen DNS-Server. Das Schlüsselwort muss jetzt für sich
+  stehen, wie es auch der Resolver verlangt.
 - Eine abgelehnte Eingabe (422 mit FastAPIs Fehlerliste) brachte die
   Geräteseite zum Absturz: `apiErrorMessage` reichte die Liste als Meldung
   weiter, und das RustDesk-Formular rendert die Meldung als Text. Die Liste

@@ -17,6 +17,16 @@
 	handle /api/* {
 		reverse_proxy backend:8080
 	}
+	# Container-to-container MDM endpoints: NanoMDM's webhook and the SCEP
+	# CSR verifier call the backend directly on the rmm network. Both carry
+	# their own secret; from outside they simply do not exist. Caddy sorts
+	# path matchers by length, so these win over /api/*.
+	handle /api/mdm/webhook* {
+		respond 404
+	}
+	handle /api/mdm/scep/* {
+		respond 404
+	}
 
 	# --- MDM (iOS), siehe docs/MDM-SETUP.md ---------------------------------
 	# Die Verwaltungs-API von NanoMDM zuerst zumachen: /v1/* verschickt Pushes
@@ -33,11 +43,15 @@
 	# Was Apple-Geräte tatsächlich sprechen. Solange das mdm-Profil nicht
 	# gestartet ist, gibt es hier 502 — kein Nutzer und kein Gerät ruft diese
 	# Pfade vorher auf.
+	# NanoMDM serves check-ins and commands on the same endpoint (/checkin
+	# exists only with -checkin, which is not set), so /mdm is all it needs.
 	handle /mdm* {
 		reverse_proxy nanomdm:9000
 	}
-	handle /checkin* {
-		reverse_proxy nanomdm:9000
+	# SCEP: devices fetch their identity certificate here during enrollment.
+	# scepserver only signs CSRs whose challenge the backend accepts once.
+	handle /scep* {
+		reverse_proxy scep:8080
 	}
 
 	handle {

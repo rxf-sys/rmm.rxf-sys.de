@@ -1,6 +1,6 @@
 # Roadmap
 
-Stand: 17.09.2026. Der ursprüngliche Phasenplan (Phasen 0–7) ist
+Stand: 21.10.2026. Der ursprüngliche Phasenplan (Phasen 0–7) ist
 abgeschlossen und liegt als Entscheidungsdokumentation unter
 [`_archiv/RMM-PLAN.md`](_archiv/RMM-PLAN.md).
 
@@ -36,17 +36,30 @@ hinter dem Cloudflare-Tunnel nicht ankommt. Voraussetzung ist ein
 APNs-Push-Zertifikat von Apple — ohne das läuft kein Kommando. Damit kommen
 Inventar, Sperren, Verloren-Modus und Richtlinien.
 
-Die Infrastruktur dafür steht bereits, aber abgeschaltet: der Container
-hängt am Compose-Profil `mdm`, Caddy kennt die Routen und sperrt die
-Verwaltungs-API. Was noch fehlt, in dieser Reihenfolge — das Push-Zertifikat
-(der Betreiber, Anleitung in [`MDM-SETUP.md`](MDM-SETUP.md)), ein
-SCEP-Server für die Geräte-Identitätszertifikate (Image muss selbst gebaut
-werden, siehe dort Teil 4), das Enrollment-Profil und die Kommandos im
-Dashboard.
+Die Infrastruktur dafür steht: NanoMDM und der SCEP-Server hängen am
+Compose-Profil `mdm`, Caddy kennt die Routen und sperrt die
+Verwaltungs-API, das Push-Zertifikat ist eingespielt (gültig bis
+21.10.2027). Registriert wird aus dem Dashboard: ein Admin erzeugt pro
+Gerät einen Einmal-Link als QR-Code, das Profil trägt eine Challenge, die
+genau einmal gilt, und der NanoMDM-Webhook ordnet das Telefon seiner
+Karteikarte zu und füllt das Inventar (Anleitung in
+[`MDM-SETUP.md`](MDM-SETUP.md), Teil 6). Was noch fehlt: die Kommandos im
+Dashboard, Inventar auf Abruf und die Erneuerung der
+Geräte-Identitätszertifikate vor ihrem Ablauf.
+
+**Betreuung (Supervision).** Per Profil registrierte Geräte sind nicht
+betreut. Verloren-Modus (`EnableLostMode`) und erzwungene Updates
+(`ScheduleOSUpdate`) setzen Betreuung voraus — auf Privatgeräten gibt es
+den Verloren-Modus deshalb nicht; Sperren, Inventar und Löschen gehen. Für
+Firmengeräte wäre die automatische Registrierung über Apple Business
+Manager (NanoDEP) der Weg zu Betreuung und Zero-Touch: Gerät einschalten,
+fertig. Bestandsgeräte kommen dorthin nur über Apple Configurator, und dabei
+werden sie gelöscht.
 
 **Befugnisse nach Besitzverhältnis.** Privat: Inventar, Sperren,
-Verloren-Modus, Richtlinien. Firma: zusätzlich Komplett-Löschen und
-erzwungene Updates. Die Grenze gehört in den Server, nicht in die Disziplin
+Richtlinien (Verloren-Modus nur betreut, s. o.). Firma: zusätzlich
+Komplett-Löschen und erzwungene Updates. Das Profil eines Privatgeräts
+enthält das Löschrecht gar nicht erst. Die Grenze gehört in den Server, nicht in die Disziplin
 dessen, der das Dashboard bedient — dieselbe Stelle, die heute schon die
 agentgebundenen Befehle abweist.
 

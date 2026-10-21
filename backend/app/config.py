@@ -126,6 +126,28 @@ class Settings(BaseSettings):
     ntfy_topic: str = "rxf-rmm"
     ntfy_token: str = ""
 
+    # ---- MDM (iOS/iPadOS via NanoMDM, compose profile `mdm`) ----
+    # Public origin the enrollment profile points devices at (/mdm, /scep)
+    # and the one-time download link uses. Not derived from request headers:
+    # a profile with the wrong ServerURL would be installed and then silent.
+    mdm_base_url: str = "https://rmm.rxf-sys.de"
+    # NanoMDM management API on the internal network; same key as the
+    # nanomdm container's NANOMDM_API_KEY.
+    nanomdm_url: str = "http://nanomdm:9000"
+    nanomdm_api_key: str = ""
+    # APNs topic of the push certificate (UID=com.apple.mgmt.External.…).
+    mdm_apns_topic: str = ""
+    # Shared with nanomdm's -webhook-hmac-key: every webhook POST carries an
+    # HMAC-SHA256 of its body. Empty disables the webhook endpoint.
+    mdm_webhook_secret: str = ""
+    # Shared with the scep container's CSR verifier. Empty disables the
+    # verify endpoint, and with it every new enrollment.
+    mdm_scep_verify_token: str = ""
+    # Lifetime of a one-time enrollment link.
+    mdm_enrollment_ttl_hours: int = Field(default=24, ge=1, le=24 * 7)
+    # Organisation shown in the profile and in the certificate subject.
+    mdm_organization: str = "rxf-sys"
+
 
     @field_validator("cors_origins", mode="before")
     @classmethod

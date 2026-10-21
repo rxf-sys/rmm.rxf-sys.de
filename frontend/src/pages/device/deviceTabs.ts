@@ -8,18 +8,23 @@ export type TabId =
   | 'patches'
   | 'passwords'
   | 'diagnostics'
-  | 'jobs';
+  | 'jobs'
+  | 'mdm';
 
 /** `agentOnly`: the tab lives on data only an agent reports. On a phone it
- *  would stay empty forever, so it is not shown at all. */
+ *  would stay empty forever, so it is not shown at all. `appleOnly`: the
+ *  reverse — only an iPhone or iPad without agent can be enrolled in MDM. */
 export const TABS: {
   id: TabId;
   label: string;
   adminOnly?: boolean;
   operatorOnly?: boolean;
   agentOnly?: boolean;
+  appleOnly?: boolean;
 }[] = [
   { id: 'overview', label: 'Übersicht' },
+  // iPhone and iPad without agent: enrollment and what the phone reports.
+  { id: 'mdm', label: 'MDM', appleOnly: true },
   { id: 'history', label: 'Verlauf', agentOnly: true },
   { id: 'inventory', label: 'Inventar', agentOnly: true },
   // Remote desktop, terminal and installs are operator actions; a viewer
@@ -34,8 +39,12 @@ export const TABS: {
 
 export const TAB_IDS = TABS.map((t) => t.id);
 
-export function visibleTabs(opts: { isAdmin: boolean; isOperator: boolean; agent: boolean }) {
+export function visibleTabs(opts: { isAdmin: boolean; isOperator: boolean; agent: boolean; apple?: boolean }) {
   return TABS.filter(
-    (t) => (!t.adminOnly || opts.isAdmin) && (!t.operatorOnly || opts.isOperator) && (!t.agentOnly || opts.agent),
+    (t) =>
+      (!t.adminOnly || opts.isAdmin) &&
+      (!t.operatorOnly || opts.isOperator) &&
+      (!t.agentOnly || opts.agent) &&
+      (!t.appleOnly || !!opts.apple),
   );
 }

@@ -442,6 +442,7 @@ export default function App() {
             fleet.refresh();
           }}
           onDeviceCreated={() => fleet.refresh()}
+          isAdmin={isAdmin}
         />
       )}
       <Toaster
