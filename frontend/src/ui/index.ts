@@ -6,6 +6,7 @@ export { LineChart, type ChartSeries } from './LineChart';
 export { Menu, type MenuEntry } from './Menu';
 export { Meter, type MeterLevel } from './Meter';
 export { PageHeader } from './PageHeader';
+export { QrCode } from './QrCode';
 export { Panel } from './Panel';
 export { Popover } from './Popover';
 export { usePopoverClose } from './popoverContext';

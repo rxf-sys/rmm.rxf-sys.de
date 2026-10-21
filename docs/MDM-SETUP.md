@@ -2,7 +2,8 @@
 
 Stand: 21.10.2026. Diese Anleitung führt von „nichts" bis zu einem
 laufenden NanoMDM-Container mit gültigem Apple-Push-Zertifikat, einem
-SCEP-Server und einem Test-Enrollment-Profil für das erste Gerät.
+SCEP-Server und iPhones, die per QR-Code aus dem Dashboard registriert
+werden.
 
 > **Was hier geprüft ist und was nicht.** Die Compose- und Caddy-Teile sind
 > gegen die NanoMDM-Dokumentation geschrieben; die Routen `/v1/*` → 404 und
@@ -10,9 +11,11 @@ SCEP-Server und einem Test-Enrollment-Profil für das erste Gerät.
 > Zertifikatsweg über mdmcert.download ist am 21.10.2026 einmal komplett
 > durchlaufen. Der SCEP-Dienst ist mit `scepserver` und `scepclient` v2.3.0
 > getestet (Ausstellung, Abweisung bei falscher Challenge, Zertifikatskette
-> mit `ClientAuth`); das Test-Profil ist als Plist validiert, aber **noch
-> auf keinem echten Gerät installiert** — der erste Lauf mit einem iPhone
-> steht aus.
+> mit `ClientAuth`). Die Registrierung aus dem Dashboard (Teil 6) ist gegen
+> den Quelltext von NanoMDM `sha-9ba4d95` und scep v2.3.0 geschrieben und mit
+> Tests abgedeckt (Profil, Einmal-Challenge, Webhook, CSR-Verifier mit einem
+> openssl-CSR); **auf einem echten iPhone ist sie noch nicht gelaufen** —
+> der erste Lauf steht aus.
 
 ## Der Aufbau in einem Absatz
 
@@ -27,9 +30,10 @@ Registrierung sein Identitätszertifikat aus; NanoMDM prüft jede
 Geräteanfrage gegen dessen CA. **Caddy** entscheidet, was von außen
 erreichbar ist: `/mdm` und `/scep` ja, die Verwaltungs-API `/v1/*` niemals.
 
-Was noch fehlt, ehrlich benannt: Profile pro Gerät aus dem Dashboard
-erzeugen und Kommandos von dort abschicken (Teil 6, ROADMAP Etappe 1). Bis
-dahin registriert das Test-Profil aus Teil 6 ein einzelnes Gerät.
+Was noch fehlt, ehrlich benannt: Kommandos aus dem Dashboard (Sperren,
+Inventar auf Abruf, Richtlinien) und die Erneuerung der
+Gerätezertifikate vor Ablauf (ROADMAP Etappe 1). Die Registrierung selbst
+läuft über das Dashboard (Teil 6).
 
 ---
 
@@ -200,17 +204,24 @@ Eine neue CA hieße: jedes bereits registrierte Gerät wird abgewiesen.
 
 ```bash
 SCEP_CA_PASS=...                                  # das Passwort aus Schritt 1
-SCEP_CHALLENGE_PASSWORD=$(openssl rand -hex 24)   # nur [A-Za-z0-9]
+MDM_SCEP_VERIFY_TOKEN=$(openssl rand -hex 32)     # Einmal-Challenges, Teil 6
 SCEP_CERT_VALID=365
 ```
 
-**Die Challenge ist Pflicht.** Ohne sie signiert `scepserver` jeden CSR,
-der `/scep` erreicht — jeder im Internet bekäme ein Zertifikat, dem NanoMDM
-vertraut. Der Container verweigert deshalb den Start, solange sie leer ist.
-Sie steht im Enrollment-Profil im Klartext: das Profil ist wie ein Passwort
-zu behandeln. Wird die Challenge geändert, funktionieren alte Profile für
-neue Registrierungen nicht mehr; bereits registrierte Geräte sind davon
-nicht betroffen.
+**Eine Challenge-Prüfung ist Pflicht.** Ohne sie signiert `scepserver`
+jeden CSR, der `/scep` erreicht — jeder im Internet bekäme ein Zertifikat,
+dem NanoMDM vertraut. Der Container startet deshalb nur mit genau einem
+von zwei Werten:
+
+- `MDM_SCEP_VERIFY_TOKEN` (Normalbetrieb): Jedes Profil aus dem Dashboard
+  trägt eine eigene Challenge, die genau einmal gilt. Der CSR-Verifier im
+  Image fragt dafür das Backend.
+- `SCEP_CHALLENGE_PASSWORD` (nur für das archivierte Test-Profil): eine
+  statische Challenge für alle. Sie steht im Profil im Klartext, und jedes
+  je ausgegebene Profil stellt damit weiter Zertifikate aus.
+
+Beide gleichzeitig lehnt der Entrypoint ab. Bereits registrierte Geräte
+betrifft ein Wechsel nicht — die Challenge zählt nur beim Ausstellen.
 
 ### Schritt 3: Starten und prüfen
 
@@ -273,7 +284,7 @@ curl -si https://rmm.rxf-sys.de/v1/pushcert      # muss 404 sein
 
 ---
 
-## Teil 6 — Das Enrollment-Profil
+## Teil 6 — Geräte registrieren
 
 Ein registriertes Gerät braucht ein **Enrollment-Profil**: ein
 `.mobileconfig`, das auf `https://rmm.rxf-sys.de/mdm` zeigt, die SCEP-Payload
@@ -292,40 +303,104 @@ die Variable deshalb bewusst weg.
 **`ServerURL` und `CheckInURL` zeigen beide auf `/mdm`.** NanoMDM bedient
 Check-ins und Kommandos standardmäßig auf demselben Endpunkt; `/checkin`
 gibt es nur mit dem Schalter `-checkin`, und den setzt das Compose-File
-nicht. `https://rmm.rxf-sys.de/checkin` liefert deshalb 404 — das ist
-richtig so. Die Caddy-Route `/checkin` ist für diesen Aufbau ohne Wirkung.
+nicht. Caddy leitet `/checkin` deshalb auch nicht mehr weiter.
 
-### Ein Test-Profil für das erste Gerät
+Das Profil entsteht pro Gerät im Dashboard. Von Hand baut es niemand mehr;
+das frühere Test-Skript liegt unter `infrastructure/_archiv/`.
+
+### Einmalig: Umstellung am LXC
+
+In dieser Reihenfolge — erst muss das Backend die neuen Endpunkte kennen,
+dann dürfen NanoMDM und scep sie aufrufen.
+
+1. **Backend deployen.** Das passiert mit dem Merge über den Runner
+   (`deploy.sh` fasst die MDM-Container nicht an). Danach antwortet
+   `/api/mdm/webhook` von außen mit 404 — das ist richtig so:
+
+   ```bash
+   curl -si -X POST https://rmm.rxf-sys.de/api/mdm/webhook | head -1   # 404
+   ```
+
+2. **`.env` ergänzen** (`/opt/rxf-rmm/infrastructure/.env`):
+
+   ```bash
+   # APNs-Topic aus dem Push-Zertifikat
+   openssl x509 -in mdm/push.pem -noout -subject -nameopt RFC2253 \
+     | sed -n 's/^subject=.*UID=\([^,]*\).*$/\1/p'
+   ```
+
+   ```bash
+   MDM_APNS_TOPIC=com.apple.mgmt.External.…   # Ausgabe von oben
+   MDM_WEBHOOK_SECRET=$(openssl rand -hex 32)
+   MDM_SCEP_VERIFY_TOKEN=$(openssl rand -hex 32)
+   ```
+
+   `NANOMDM_API_KEY` steht schon drin; das Backend liest denselben Wert.
+   **`SCEP_CHALLENGE_PASSWORD` entfernen** (oder leeren) — mit beiden Werten
+   startet `scep` nicht.
+
+3. **Neu starten**, damit alle drei Container die Werte sehen:
+
+   ```bash
+   cd /opt/rxf-rmm/infrastructure
+   docker compose up -d backend
+   docker compose --profile mdm up -d --build scep nanomdm
+   docker compose --profile mdm logs --tail 20 scep nanomdm
+   ```
+
+   Der `scep`-Build führt die Tests des CSR-Verifiers aus; schlägt einer
+   fehl, entsteht kein Image. Im Dashboard zeigt der Reiter „MDM“ eines
+   iPhones danach „Nicht registriert“ statt „nicht eingerichtet“.
+
+Bereits registrierte Geräte (das Testgerät) bleiben registriert, sind dem
+Dashboard aber unbekannt — ihr Webhook wird als „unbound“ geloggt. Für die
+Zuordnung das Testprofil am Gerät entfernen und das Gerät wie unten neu
+registrieren.
+
+### Ein Gerät registrieren
+
+1. Im Dashboard **Gerät hinzufügen → Telefon oder Tablet**, Typ iPhone oder
+   iPad, Bezeichnung, Person, Besitzverhältnis. „Danach per MDM
+   registrieren“ ist angehakt (nur für Admins sichtbar).
+2. **Gerät anlegen** zeigt einen QR-Code. Bestehende Geräte: Reiter „MDM“
+   → **Registrierungslink erzeugen**.
+3. Am iPhone mit der Kamera scannen, den Link öffnen, „Zulassen“ tippen.
+4. **Einstellungen** → oben „Profil geladen“ → *Installieren*, Gerätecode,
+   nochmals *Installieren*, der Fernverwaltung vertrauen.
+
+Der Status im Dashboard folgt von selbst: *Wartet auf das Gerät* →
+*Profil geladen* → *Zertifikat ausgestellt* → *Registriert*. Danach fragt
+das Backend die Geräteinformationen ab; Seriennummer, IMEI und iOS-Version
+der Karteikarte füllen sich, der Reiter „MDM“ zeigt den Rest.
+
+Was dabei gilt:
+
+- Der Link gilt 24 Stunden (`MDM_ENROLLMENT_TTL_HOURS`), für höchstens fünf
+  Abrufe und nur bis zum ausgestellten Zertifikat. Ein neuer Link widerruft
+  den alten.
+- Jeder Abruf erzeugt eine neue Challenge — **installiert wird immer das
+  zuletzt geladene Profil**. Ein älteres scheitert beim Zertifikat.
+- Privatgeräte bekommen ein Profil **ohne Löschrecht** (`AccessRights`
+  8183); iOS zeigt das in den Profildetails. Wird ein Gerät später zum
+  Firmengerät, sagt der Reiter „MDM“, dass dafür neu zu registrieren ist.
+- Das Profil ist nicht signiert; iOS zeigt es als „Nicht überprüft“ an.
+- Per Profil registrierte Geräte sind **nicht betreut** (*supervised*). Der
+  Verloren-Modus und erzwungene Updates setzen Betreuung voraus und sind so
+  nicht möglich; das geht nur über Apple Business Manager oder Apple
+  Configurator (ROADMAP).
+
+Kontrolle im LXC, falls etwas hängt:
 
 ```bash
-cd /opt/rxf-rmm/infrastructure
-bash mdm-test-profile.sh
-# schreibt /root/mdm-enroll/vulpexa-enroll-test.mobileconfig (Modus 600)
-```
-
-Das Skript liest die Challenge aus `.env` und das APNs-Topic
-(`com.apple.mgmt.External.…`) aus `mdm/push.pem`. Das Profil ist nicht
-signiert; iOS zeigt es deshalb als „Nicht überprüft" an. Für einen Test
-ist das in Ordnung.
-
-Aufs Gerät bringen, zum Beispiel als Mail-Anhang an sich selbst oder über
-iCloud Drive, auf dem iPhone öffnen und unter *Einstellungen → Profil
-geladen* installieren. Danach im LXC:
-
-```bash
-docker compose --profile mdm logs nanomdm | grep -E 'Authenticate|TokenUpdate'
+docker compose --profile mdm logs nanomdm | grep -E 'Authenticate|TokenUpdate|webhook'
 tail -n 3 scep-depot/index.txt
 ```
 
-`Authenticate` und `TokenUpdate` mit derselben `device_id` heißen: das
-Gerät ist registriert und per Push erreichbar. In `index.txt` steht jedes
-ausgestellte Gerätezertifikat; bei Erfolg schreibt `scepserver` nichts ins
-Log, nur Fehler wie „invalid challenge".
-
-Profile pro Gerät zu erzeugen und die Kommandos aus dem Dashboard
-abzuschicken — abgestuft nach Besitzverhältnis, auf einem Privatgerät
-niemals Komplett-Löschen — ist der Code-Teil von Etappe 1 und steht in
-[`ROADMAP.md`](ROADMAP.md).
+`scepserver` verwirft die Ausgabe des CSR-Verifiers und loggt bei einer
+Ablehnung nur `exit status 1`. Den Grund nennt das Audit-Log
+(`mdm.scep_rejected` mit `unknown` oder `cn_mismatch`). Steht dort nichts,
+hat der Verifier das Backend nicht erreicht — dann
+`docker compose --profile mdm exec scep wget -qO- http://backend:8080/api/health`.
 
 ---
 
@@ -339,8 +414,8 @@ und eine neue CA heißt, jedes Gerät neu zu registrieren.
 
 **Gerätezertifikate laufen ab.** Nach `SCEP_CERT_VALID` Tagen (Default 365)
 wird das Identitätszertifikat eines Geräts ungültig, und NanoMDM weist es ab.
-Bis die Erneuerung aus dem Dashboard kommt, heißt das: Profil neu
-installieren.
+Bis die Erneuerung aus dem Dashboard kommt, heißt das: im Reiter „MDM“ neu
+registrieren und das neue Profil installieren.
 
 **Verlängerung.** Ein Jahr nach Ausstellung. Auf <https://identity.apple.com>
 mit **derselben** Apple-ID anmelden und beim bestehenden Zertifikat „Renew"
@@ -355,8 +430,11 @@ derselbe; das neue `.pem` wie oben hochladen.
 | Container startet nicht, Log sagt „must supply CA cert path flag" oder nennt `/mdm/ca.pem` | `-ca` ist bei NanoMDM Pflicht: ohne lesbare `mdm/ca.pem` beendet es sich sofort. Erst die SCEP-CA erzeugen (Teil 4), dann starten |
 | `-decrypt` meldet „error decoding hex" | Die `.p7` ist Hex-Text und verträgt kein abschließendes Zeilenende: `tr -d '\r\n \t' < datei.p7 > datei.hex` und die bereinigte Datei verwenden |
 | Geräte melden sich nie | Push-Zertifikat nicht hochgeladen, oder abgelaufen |
-| Gerät wird beim Registrieren abgewiesen | `mdm/ca.pem` ist nicht dieselbe Datei wie `scep-depot/ca.pem` (Fingerprints vergleichen, Teil 4), oder die Challenge im Profil passt nicht mehr zur `.env` (SCEP-Log: „invalid challenge") |
-| `scep` beendet sich sofort mit „SCEP_CHALLENGE_PASSWORD is empty" oder „SCEP_CA_PASS is empty" | Absicht: ohne beide Werte startet der Server nicht. In `.env` setzen (Teil 4, Schritt 2), dann `docker compose --profile mdm up -d scep` |
+| Gerät wird beim Registrieren abgewiesen | `mdm/ca.pem` ist nicht dieselbe Datei wie `scep-depot/ca.pem` (Fingerprints vergleichen, Teil 4), oder es wurde ein älteres Profil installiert als das zuletzt geladene (SCEP-Log: „CSR verify failed", Audit-Log: `mdm.scep_rejected`). Neuen Link erzeugen, nur das neue Profil installieren |
+| Dashboard: „MDM ist nicht eingerichtet — es fehlt: …" | Die genannten Werte fehlen in `.env` oder das Backend wurde danach nicht neu gestartet (Teil 6) |
+| Status bleibt bei „Zertifikat ausgestellt" | NanoMDM erreicht den Webhook nicht oder signiert falsch: `docker compose --profile mdm logs nanomdm` nach `webhook` durchsuchen; `MDM_WEBHOOK_SECRET` muss für `nanomdm` und `backend` derselbe sein (beide neu starten) |
+| `scep` beendet sich sofort mit „neither MDM_SCEP_VERIFY_TOKEN nor SCEP_CHALLENGE_PASSWORD" oder „SCEP_CA_PASS is empty" | Absicht: ohne Challenge-Prüfung startet der Server nicht. In `.env` setzen (Teil 4, Schritt 2), dann `docker compose --profile mdm up -d scep` |
+| `scep` meldet „both MDM_SCEP_VERIFY_TOKEN and SCEP_CHALLENGE_PASSWORD are set" | `SCEP_CHALLENGE_PASSWORD` aus `.env` entfernen (Teil 6) |
 | `scep` meldet „ca.key missing or not readable for uid 10001" | `scep-depot` gehört nicht uid 10001: `chown -R 10001:10001 scep-depot` |
 | `401` auf `/v1/*` im LXC | `NANOMDM_API_KEY` in `.env` weicht vom laufenden Container ab — Container neu starten |
 | Container startet und beendet sich sofort, „permission denied" auf `/mdm/db` | Das Image läuft nicht als `root`. Besitzer des Verzeichnisses auf die uid des Containers setzen: `docker compose --profile mdm run --rm --entrypoint id nanomdm`, dann `chown -R <uid>:<gid> mdm` |

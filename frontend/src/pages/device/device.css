@@ -131,6 +131,15 @@
 .dv-note:first-child {
   margin-top: 0;
 }
+.dv-mdm-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+.dv-mdm-status .dv-note {
+  margin: 0;
+}
 .dv-notes {
   margin: 0;
   white-space: pre-wrap;

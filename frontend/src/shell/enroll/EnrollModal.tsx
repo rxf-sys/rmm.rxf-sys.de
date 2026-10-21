@@ -10,6 +10,7 @@ interface Props {
   onClose: () => void;
   /** After a device without agent was created: reload the fleet. */
   onDeviceCreated?: () => void;
+  isAdmin?: boolean;
 }
 
 type EnrollPath = 'agent' | 'mobile';
@@ -24,7 +25,7 @@ const PATHS: { id: EnrollPath; title: string; text: string; icon: ReactNode }[] 
   {
     id: 'mobile',
     title: 'Telefon oder Tablet ohne Agent',
-    text: 'iPhone, iPad, Android. Eine Karteikarte, von Hand gepflegt.',
+    text: 'iPhone, iPad, Android. iPhone und iPad lassen sich per MDM verwalten.',
     icon: <IconPhone size={18} />,
   },
 ];
@@ -69,7 +70,7 @@ function PathChoice({ value, onChange }: { value: EnrollPath; onChange: (p: Enro
  * command, a phone gets an index card. Two ways in one dialog — separate
  * entry points would have meant knowing in advance which one to look for.
  */
-export function EnrollModal({ onClose, onDeviceCreated }: Props) {
+export function EnrollModal({ onClose, onDeviceCreated, isAdmin = false }: Props) {
   const [path, setPath] = useState<EnrollPath>('agent');
   const [created, setCreated] = useState<CreatedEnrollToken | null>(null);
 
@@ -80,7 +81,7 @@ export function EnrollModal({ onClose, onDeviceCreated }: Props) {
         {path === 'agent' ? (
           <AgentEnroll created={created} onCreated={setCreated} onReset={() => setCreated(null)} onClose={onClose} />
         ) : (
-          <MobileDeviceForm onCreated={() => onDeviceCreated?.()} onCancel={onClose} />
+          <MobileDeviceForm onCreated={() => onDeviceCreated?.()} onCancel={onClose} isAdmin={isAdmin} />
         )}
       </div>
     </Modal>

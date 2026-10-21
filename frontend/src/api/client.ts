@@ -6,9 +6,11 @@ import type {
   AuditPage,
   AutomationConfig,
   CreatedEnrollToken,
+  CreatedMdmEnrollment,
   Credential,
   Device,
   DeviceDetail,
+  DeviceMdm,
   EnrollToken,
   FleetSample,
   InventoryMatch,
@@ -361,6 +363,12 @@ export const api = {
   createEnrollToken: (body: { label?: string; ttl_hours?: number }) =>
     post<CreatedEnrollToken>('/api/devices/enroll-tokens', body),
   deleteEnrollToken: (id: number) => del<{ ok: boolean }>(`/api/devices/enroll-tokens/${id}`),
+
+  // Apple MDM (iPhone/iPad without agent)
+  deviceMdm: (deviceId: number, signal?: AbortSignal) => get<DeviceMdm>(`/api/devices/${deviceId}/mdm`, signal),
+  createMdmEnrollment: (deviceId: number) =>
+    post<CreatedMdmEnrollment>(`/api/devices/${deviceId}/mdm/enrollment`, {}),
+  revokeMdmEnrollment: (deviceId: number) => del<{ revoked: number }>(`/api/devices/${deviceId}/mdm/enrollment`),
 
   // Jobs
   deviceJobs: (deviceId: number, signal?: AbortSignal) =>

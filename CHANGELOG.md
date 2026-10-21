@@ -8,6 +8,19 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **MDM: iPhone und iPad per QR-Code registrieren.** „Gerät hinzufügen →
+  Telefon oder Tablet“ zeigt Admins nach dem Anlegen einen QR-Code mit einem
+  Einmal-Link (24 h, höchstens fünf Abrufe, ein neuer widerruft den alten);
+  bestehende Geräte bekommen den Reiter „MDM“. Jedes Profil trägt eine
+  eigene SCEP-Challenge, die genau einmal gilt: `scep-csr-verifier`
+  (`infrastructure/scep/verifier/`, nur Standardbibliothek) fragt dafür
+  `POST /api/mdm/scep/verify`. Der NanoMDM-Webhook (HMAC-signiert) ordnet das
+  Telefon über `?e=<ref>` in der `ServerURL` seiner Karteikarte zu; danach
+  stellt das Backend `DeviceInformation` ein, die Antwort füllt
+  Seriennummer, IMEI und iOS-Version. Privatgeräte bekommen ein Profil ohne
+  Löschrecht (`AccessRights` 8183). Neue Tabellen `mdm_enrollments`,
+  `mdm_devices`; Audit-Ereignisse `mdm.*`. Neue Frontend-Abhängigkeit
+  `qrcode` 1.5.4 (SVG ohne Canvas oder Data-URL).
 - **MDM: SCEP-Server als Compose-Service `scep`** (Profil `mdm`, startet
   nicht mit einem normalen Deploy). `micromdm/scep` hat kein
   Container-Image; `infrastructure/scep/` baut das gepinnte Release v2.3.0
@@ -22,6 +35,14 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   `mdm/push.pem`).
 
 ### Geändert
+- **SCEP: Einmal-Challenges statt statischer.** Der Entrypoint startet mit
+  genau einem von `MDM_SCEP_VERIFY_TOKEN` und `SCEP_CHALLENGE_PASSWORD`;
+  die statische Challenge bleibt nur für das nach
+  `infrastructure/_archiv/` verschobene Test-Profil. Umstellung am LXC:
+  `docs/MDM-SETUP.md`, Teil 6.
+- **Caddy:** `/checkin` wird nicht mehr an NanoMDM geleitet (ohne Wirkung,
+  NanoMDM bedient alles auf `/mdm`); `/api/mdm/webhook` und
+  `/api/mdm/scep/*` antworten von außen mit 404.
 - **`docs/MDM-SETUP.md`:** Teil 4 beschreibt jetzt CA, `.env` und Start des
   SCEP-Servers statt eines offenen Punkts; Teil 6 das Test-Profil. Neu
   festgehalten: `/checkin` gibt es bei NanoMDM nur mit `-checkin`, beide

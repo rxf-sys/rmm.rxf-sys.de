@@ -143,6 +143,11 @@
   --console-ok: #6ad48f;
   --console-err: #ff8a7e;
 
+  /* --- Colour: QR codes (dark on light in both themes — cameras read
+     inverted codes unreliably) --- */
+  --qr-fg: #000000;
+  --qr-bg: #ffffff;
+
   /* --- Elevation (overlays only; panels are flat) --- */
   --shadow-sm: 0 1px 2px rgba(22, 24, 31, 0.06);
   --shadow-md: 0 8px 24px rgba(28, 31, 51, 0.14), 0 1px 3px rgba(28, 31, 51, 0.08);

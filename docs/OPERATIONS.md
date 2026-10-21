@@ -321,8 +321,9 @@ erster Start, Verlängerung: [`MDM-SETUP.md`](MDM-SETUP.md).
 | SCEP erreichbar | `curl -s 'https://rmm.rxf-sys.de/scep?operation=GetCACaps'` | Liste mit u. a. `POSTPKIOperation` und `SHA-256` |
 | Server erreichbar | `curl -s http://127.0.0.1:9000/version` **im LXC** | JSON mit der NanoMDM-Version. Von außen geht das nicht: `/version` ist keiner MDM-Route zugeordnet und liefert die SPA |
 | Verwaltungs-API dicht | `curl -si https://rmm.rxf-sys.de/v1/pushcert` | **404** — alles andere ist ein Fehler |
+| Interne MDM-Endpunkte dicht | `curl -si -X POST https://rmm.rxf-sys.de/api/mdm/webhook` und `…/api/mdm/scep/verify` | **404** — beide sind nur für die Container im `rmm`-Netz |
 
-Die dritte Zeile ist die wichtige: `/v1/*` verschickt Pushes und Kommandos
+Die vierte Zeile ist die wichtige: `/v1/*` verschickt Pushes und Kommandos
 an jedes eingebuchte Gerät und nimmt Zertifikats-Uploads entgegen. Caddy
 beantwortet diese Pfade deshalb mit 404, und zusätzlich schützt
 `NANOMDM_API_KEY` sie innerhalb des Docker-Netzes. Wenn dort jemals etwas
