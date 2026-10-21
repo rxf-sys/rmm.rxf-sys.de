@@ -94,7 +94,8 @@ test('the command palette finds a device by keyboard', async ({ page }, info) =>
   // The shortcut is registered once the shell has rendered.
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await page.keyboard.press('Control+k');
-  const box = page.getByRole('combobox');
+  // By name: the overview has comboboxes of its own (the Lagebild's person filter).
+  const box = page.getByRole('combobox', { name: 'Gerät, Seite oder Aktion' });
   await box.fill('nas');
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/devices\/2/);
