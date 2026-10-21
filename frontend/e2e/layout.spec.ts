@@ -1,4 +1,4 @@
-import { expect, signIn, test } from './fixtures';
+import { expect, noHorizontalScroll, signIn, test } from './fixtures';
 
 /** Window widths the layout must hold at: tablet, laptop, desktop, wide. */
 const WIDTHS = [820, 1280, 1920, 2560];
@@ -27,4 +27,44 @@ test.describe('charts stay inside their frame', () => {
       }
     });
   }
+});
+
+/** Every page, between phone and wide screen: the tablet range used to keep
+ *  the full rail and push the top bar and the automation page sideways. */
+const PATHS = ['/', '/devices', '/devices/2', '/devices/11', '/alarme', '/patches', '/skripte', '/automatisierung', '/personen', '/audit', '/administration', '/doku'];
+
+for (const width of [768, 1024, 2560]) {
+  test(`no page scrolls sideways at ${width}px`, async ({ page }, info) => {
+    test.skip(info.project.name === 'phone', 'sets its own window widths');
+    await page.setViewportSize({ width, height: 1000 });
+    await signIn(page);
+    for (const path of PATHS) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      await noHorizontalScroll(page);
+    }
+  });
+}
+
+test('the content uses the whole width of a wide screen', async ({ page }, info) => {
+  test.skip(info.project.name === 'phone', 'sets its own window width');
+  await page.setViewportSize({ width: 2560, height: 1000 });
+  await signIn(page);
+  await page.goto('/patches');
+  const content = await page.locator('.shell-content').boundingBox();
+  expect(content).not.toBeNull();
+  // Everything beside the rail, no dead band on the right.
+  expect(content!.x + content!.width).toBeGreaterThan(2560 - 2);
+});
+
+test('the rail keeps its link names when it shrinks to icons', async ({ page }, info) => {
+  test.skip(info.project.name === 'phone', 'sets its own window width');
+  await page.setViewportSize({ width: 900, height: 900 });
+  await signIn(page);
+  await page.goto('/');
+  const rail = page.getByRole('navigation', { name: 'Hauptnavigation' });
+  const patches = rail.getByRole('link', { name: /Patches/ });
+  await expect(patches).toBeVisible();
+  // Icons only: the link is about as wide as the compact rail, not 200 px.
+  expect((await patches.boundingBox())!.width).toBeLessThan(80);
 });

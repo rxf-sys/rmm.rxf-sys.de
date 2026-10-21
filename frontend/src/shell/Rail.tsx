@@ -54,7 +54,7 @@ export function Rail({ user, devices, favorites, openAlerts, openPatches, theme,
               {g.items.map((it) => {
                 const c = count(it.id);
                 return (
-                  <NavLink key={it.id} to={it.path} end={it.path === '/'} className="rail-link">
+                  <NavLink key={it.id} to={it.path} end={it.path === '/'} className="rail-link" title={it.label}>
                     <span className="rail-ico" aria-hidden>
                       {it.icon}
                     </span>
@@ -74,7 +74,7 @@ export function Rail({ user, devices, favorites, openAlerts, openPatches, theme,
             <div className="rail-group">
               <span className="rail-group-label">Favoriten</span>
               {favDevices.map((d) => (
-                <NavLink key={d.id} to={devicePath(d.id)} className="rail-link rail-fav">
+                <NavLink key={d.id} to={devicePath(d.id)} className="rail-link rail-fav" title={d.hostname}>
                   <StatusBadge kind={deviceStatusKind(d)} iconOnly plain size={14} />
                   <span className="rail-label">{d.hostname}</span>
                 </NavLink>
