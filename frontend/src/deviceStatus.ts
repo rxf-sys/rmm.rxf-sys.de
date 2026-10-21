@@ -71,18 +71,51 @@ export function osShort(os: string): string {
   return OS_SHORT[os] ?? os.slice(0, 3).toUpperCase();
 }
 
-/** Status kind for StatusBadge: devices without an agent have no live state. */
-export function deviceStatusKind(d: Device): 'ok' | 'warn' | 'danger' | 'off' | 'noagent' {
-  if (d.device_class === 'mobile') return 'noagent';
+/** Days without an MDM check-in before a managed phone counts as silent —
+ *  the server's default for the "mdm_silent" rule (backend/app/automation.py). */
+export const MDM_SILENT_DAYS = 7;
+
+export type DeviceStatusKind = 'ok' | 'warn' | 'danger' | 'off' | 'mdm' | 'noagent';
+
+/** Where a phone stands: managed (and when it last checked in), profile
+ *  removed, silent, or kept by hand. ``now`` in seconds. */
+export function mobileState(d: Device, now: number): 'mdm' | 'removed' | 'silent' | 'manual' {
+  const m = d.mdm;
+  if (!m) return 'manual';
+  if (m.checked_out_at) return 'removed';
+  if (now - m.last_seen_at > MDM_SILENT_DAYS * 86400) return 'silent';
+  return 'mdm';
+}
+
+/** Status kind for StatusBadge. Phones have no heartbeat; under MDM their
+ *  check-ins stand in for it. ``now`` defaults to the call time — callers that
+ *  render use their own clock (useNow) so the badge ages with the page. */
+export function deviceStatusKind(d: Device, now: number = Date.now() / 1000): DeviceStatusKind {
+  if (d.device_class === 'mobile') {
+    const m = mobileState(d, now);
+    return m === 'mdm' ? 'mdm' : m === 'manual' ? 'noagent' : 'warn';
+  }
   const s = deviceState(d);
   return s === 'off' ? 'off' : s === 'crit' ? 'danger' : s === 'warn' ? 'warn' : 'ok';
 }
 
-const STATUS_WORD = { ok: 'OK', warn: 'Warnung', danger: 'Kritisch', off: 'Offline', noagent: 'Ohne Agent' } as const;
+const STATUS_WORD: Record<DeviceStatusKind, string> = {
+  ok: 'OK',
+  warn: 'Warnung',
+  danger: 'Kritisch',
+  off: 'Offline',
+  mdm: 'MDM',
+  noagent: 'Ohne Agent',
+};
 
 /** The word for a device's status, as shown next to its icon. */
-export function deviceStatusLabel(d: Device): string {
-  return STATUS_WORD[deviceStatusKind(d)];
+export function deviceStatusLabel(d: Device, now: number = Date.now() / 1000): string {
+  if (d.device_class === 'mobile') {
+    const m = mobileState(d, now);
+    if (m === 'removed') return 'Profil entfernt';
+    if (m === 'silent') return 'MDM stumm';
+  }
+  return STATUS_WORD[deviceStatusKind(d, now)];
 }
 
 /** Severity of an alert as the device's current state tells it: a disk

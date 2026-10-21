@@ -140,6 +140,77 @@
 .dv-mdm-status .dv-note {
   margin: 0;
 }
+.dv-mdm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.dv-mdm-bad {
+  color: var(--warn-tx);
+  font-weight: 600;
+}
+.dv-mdm-ios {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.dv-mdm-search {
+  width: 100%;
+  margin-bottom: var(--sp-2);
+}
+.dv-mdm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+.dv-mdm-list + .dv-mdm-list {
+  margin-top: var(--sp-3);
+}
+.dv-mdm-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+.dv-mdm-list li:last-child {
+  border-bottom: 0;
+}
+.dv-mdm-item-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.dv-mdm-perms {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dv-mdm-perms li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+.dv-mdm-perms li:last-child {
+  border-bottom: 0;
+}
+.dv-mdm-perm-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-sm);
+}
+.dv-mdm-perm-label {
+  font-weight: 600;
+}
 .dv-notes {
   margin: 0;
   white-space: pre-wrap;

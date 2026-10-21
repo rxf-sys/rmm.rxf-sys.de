@@ -8,6 +8,7 @@ const PAGES: [string, RegExp][] = [
   ['/devices/2?tab=history', /nas-keller/],
   ['/devices/2?tab=jobs', /nas-keller/],
   ['/devices/11', /iPhone von Anna/],
+  ['/devices/12?tab=mdm', /iPad Küche/],
   ['/alarme', /Alarm/],
   ['/patches', /Updates|Patches/],
   ['/skripte', /Skripte/],

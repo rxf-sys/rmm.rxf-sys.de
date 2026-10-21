@@ -48,6 +48,7 @@ import {
   STATE_FILTERS,
   STATE_LABEL,
   categoryStats,
+  iosStats,
   currentPct,
   emptyText,
   formatSort,
@@ -80,6 +81,8 @@ import {
 
 interface Props {
   devices: Device[];
+  /** iPhones and iPads under MDM, for the iOS card. */
+  phones?: Device[];
   patchSummary: PatchSummary;
   persons: Person[];
   onOpenDevice: (id: number) => void;
@@ -241,7 +244,7 @@ function Queued({ d }: { d: Device }) {
   );
 }
 
-export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOperator }: Props) {
+export function PatchesPage({ devices, phones = [], patchSummary, persons, onRefresh, isOperator }: Props) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const now = useNow();
@@ -296,6 +299,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
 
   const stats = useMemo(() => patchStats(devices, patchSummary, now), [devices, patchSummary, now]);
   const groups = useMemo(() => categoryStats(devices, patchSummary, now), [devices, patchSummary, now]);
+  const ios = useMemo(() => iosStats(phones), [phones]);
 
   // Person, connection and search narrow the set both filter bars count
   // over; each bar's numbers also respect the other bar.
@@ -673,7 +677,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
               {loading ? (
                 <Skeleton h={120} />
               ) : (
-                <SystemCards groups={groups} active={os} onSelect={(f) => setParam({ os: f === 'alle' ? null : f })} />
+                <SystemCards groups={groups} ios={ios} active={os} onSelect={(f) => setParam({ os: f === 'alle' ? null : f })} />
               )}
             </Panel>
           </div>

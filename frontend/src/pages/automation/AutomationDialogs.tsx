@@ -101,23 +101,25 @@ export function RuleDialog({ draft, tags, persons, onSave, onClose }: { draft: R
           </select>
         </div>
         <ScopeFields value={d} onChange={(s) => setD({ ...d, ...s })} tags={tags} persons={persons} />
-        <div className="field">
-          <label className="field-label" htmlFor={`${id}-thr`}>
-            Schwelle in {meta.unit}
-          </label>
-          <input
-            id={`${id}-thr`}
-            className="input"
-            inputMode="numeric"
-            value={d.threshold}
-            onChange={(e) => setD({ ...d, threshold: e.target.value.replace(/\D/g, '') })}
-            placeholder={meta.defaultHint}
-            aria-describedby={`${id}-thr-hint`}
-          />
-          <span className="field-hint" id={`${id}-thr-hint`}>
-            Leer lassen für den Standard ({meta.defaultHint.replace('Standard: ', '')}).
-          </span>
-        </div>
+        {meta.unit && (
+          <div className="field">
+            <label className="field-label" htmlFor={`${id}-thr`}>
+              Schwelle in {meta.unit}
+            </label>
+            <input
+              id={`${id}-thr`}
+              className="input"
+              inputMode="numeric"
+              value={d.threshold}
+              onChange={(e) => setD({ ...d, threshold: e.target.value.replace(/\D/g, '') })}
+              placeholder={meta.defaultHint}
+              aria-describedby={`${id}-thr-hint`}
+            />
+            <span className="field-hint" id={`${id}-thr-hint`}>
+              Leer lassen für den Standard ({meta.defaultHint.replace('Standard: ', '')}).
+            </span>
+          </div>
+        )}
         <Actions onClose={onClose} disabled={d.scope_kind !== 'all' && !d.scope_value} />
       </form>
     </Modal>

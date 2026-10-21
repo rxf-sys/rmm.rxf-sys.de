@@ -72,6 +72,25 @@ export interface Device {
   /** Actions queued for the next time online; only list and detail views
    *  carry it. */
   open_actions?: number;
+  /** Phones only, list and detail views: the MDM binding in short; null =
+   *  not enrolled. */
+  mdm?: MdmSummary | null;
+}
+
+/** iOS against Apple's catalogue (backend/app/ios_versions.py). */
+export type IosStatus = 'current' | 'major_behind' | 'outdated' | 'unknown';
+
+export interface MdmSummary {
+  enrolled_at: number;
+  last_seen_at: number;
+  checked_out_at: number | null;
+  /** From SecurityInfo; null until the phone answered. */
+  passcode_present: boolean | null;
+  identity_expires_at: number | null;
+  os_version: string | null;
+  os_status: IosStatus;
+  /** Newest iOS Apple offers for this hardware. */
+  os_latest: string | null;
 }
 
 export type DeviceClass = 'agent' | 'mobile';
@@ -150,14 +169,15 @@ export interface Alert {
   acked_by: string;
 }
 
-export type RuleType = 'offline' | 'disk' | 'patch_age';
+export type RuleType = 'offline' | 'disk' | 'patch_age' | 'mdm_silent' | 'mdm_passcode' | 'mdm_identity';
 export type ScopeKind = 'all' | 'tag' | 'person';
 
 export interface AlertRule {
   id: number;
   type: RuleType;
   enabled: boolean;
-  /** null = server default (offline: Sekunden, disk: %, patch_age: Tage). */
+  /** null = server default (offline: Sekunden, disk: %, patch_age and the
+   *  mdm_* rules: Tage; mdm_passcode has none). */
   threshold: number | null;
   scope_kind: ScopeKind;
   scope_value: string;
@@ -361,6 +381,7 @@ export interface MdmEnrollment {
 /** A phone bound to its device row via NanoMDM. */
 export interface MdmBinding {
   udid: string;
+  enrollment_id: number | null;
   access_rights: number;
   enrolled_at: number;
   last_seen_at: number;
@@ -368,6 +389,63 @@ export interface MdmBinding {
   /** DeviceInformation answer, as the phone sent it. */
   info: Record<string, string | number | boolean>;
   info_at: number | null;
+  /** SecurityInfo answer (passcode, encryption). */
+  security: Record<string, string | number | boolean>;
+  security_at: number | null;
+  /** Empty while "apps" is switched off for the phone. */
+  apps: MdmApp[];
+  apps_at: number | null;
+  profiles: MdmProfile[];
+  profiles_at: number | null;
+  certificates: MdmCertificate[];
+  certificates_at: number | null;
+  /** When the last inventory round went out. */
+  refresh_at: number | null;
+  /** The phone sent an unlock token — needed for "Code entfernen". */
+  unlock_token: boolean;
+  unlock_token_at: number | null;
+  identity_issued_at: number | null;
+  identity_expires_at: number | null;
+  renewal: { started_at: number | null; scep_at: number | null; done_at: number | null; error: string };
+}
+
+export interface MdmApp {
+  name: string;
+  identifier: string;
+  version: string;
+  size: number | null;
+}
+
+export interface MdmProfile {
+  name: string;
+  identifier: string;
+  organization: string;
+  managed: boolean;
+  removal_disallowed: boolean;
+}
+
+export interface MdmCertificate {
+  cn: string;
+  identity: boolean;
+  issuer: string;
+  not_after: number | null;
+}
+
+/** Capabilities an admin can switch off per phone. */
+export type MdmPermission = 'lock' | 'erase' | 'clear_passcode' | 'apps';
+export type MdmAction = 'refresh' | 'lock' | 'erase' | 'clear_passcode' | 'renew';
+
+export type MdmCommandStatus = 'queued' | 'acknowledged' | 'error' | 'notnow' | 'failed';
+
+export interface MdmCommand {
+  id: number;
+  command_uuid: string;
+  request_type: string;
+  created_by: string;
+  created_at: number;
+  status: MdmCommandStatus;
+  status_at: number | null;
+  error: string;
 }
 
 export interface DeviceMdm {
@@ -377,8 +455,24 @@ export interface DeviceMdm {
   missing: string[];
   enrollment: MdmEnrollment | null;
   binding: MdmBinding | null;
-  /** Enrolled as private, now marked company: the profile lacks the erase right. */
+  /** Enrolled with an old private profile: it lacks the erase right. */
   needs_reenroll: boolean;
+  permissions: MdmPermission[];
+  denied: MdmPermission[];
+  /** Why each command is unavailable; null = available (roles on top). */
+  actions: Record<MdmAction, string | null>;
+  commands: MdmCommand[];
+}
+
+export interface MdmLockRequest {
+  message: string;
+  phone: string;
+}
+
+export interface MdmEraseRequest {
+  confirm: string;
+  preserve_data_plan: boolean;
+  disallow_proximity_setup: boolean;
 }
 
 export interface CreatedMdmEnrollment {

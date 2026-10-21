@@ -350,3 +350,35 @@ export function isForbidden(e: unknown): boolean {
 }
 
 export const FORBIDDEN_TEXT = 'Prüfen und Installieren ist Administratoren und Technikern vorbehalten.';
+
+// ---- iPhone and iPad (MDM) ---------------------------------------------------
+
+export interface IosStat {
+  total: number;
+  current: number;
+  majorBehind: number;
+  outdated: number;
+  /** No answer from Apple's catalogue or the phone yet. */
+  unknown: number;
+  /** Phones behind, worst first — the card links them. */
+  behind: Device[];
+}
+
+/** iOS state of the phones under MDM, from the server's comparison with
+ *  Apple's catalogue (backend/app/ios_versions.py). A phone on the newest
+ *  release of an older major version counts as current for its security,
+ *  so the ring only counts outdated ones against it. */
+export function iosStats(phones: Device[]): IosStat {
+  const s: IosStat = { total: phones.length, current: 0, majorBehind: 0, outdated: 0, unknown: 0, behind: [] };
+  for (const d of phones) {
+    const st = d.mdm?.os_status ?? 'unknown';
+    if (st === 'current') s.current += 1;
+    else if (st === 'major_behind') s.majorBehind += 1;
+    else if (st === 'outdated') s.outdated += 1;
+    else s.unknown += 1;
+  }
+  s.behind = phones
+    .filter((d) => d.mdm?.os_status === 'outdated' || d.mdm?.os_status === 'major_behind')
+    .sort((a, b) => (a.mdm?.os_status === 'outdated' ? 0 : 1) - (b.mdm?.os_status === 'outdated' ? 0 : 1));
+  return s;
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatMdmInfo, hasEraseRight, isAppleMobile, mdmStatus } from '../mdm';
 import { visibleTabs } from '../pages/device/deviceTabs';
+import { mdmBinding } from '../test/mdmFixtures';
 import type { MdmBinding, MdmEnrollment } from '../types';
 
 const enrollment = (state: MdmEnrollment['state']): MdmEnrollment => ({
@@ -17,15 +18,7 @@ const enrollment = (state: MdmEnrollment['state']): MdmEnrollment => ({
   revoked_at: null,
   state,
 });
-const binding = (checkedOut: number | null): MdmBinding => ({
-  udid: 'U',
-  access_rights: 8191,
-  enrolled_at: 1,
-  last_seen_at: 1,
-  checked_out_at: checkedOut,
-  info: {},
-  info_at: null,
-});
+const binding = (checkedOut: number | null): MdmBinding => mdmBinding({ checked_out_at: checkedOut });
 
 describe('mdm', () => {
   it('only offers MDM for iPhone and iPad without agent', () => {

@@ -5,6 +5,7 @@ import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client';
 import type { CreatedMdmEnrollment, DeviceMdm, MdmEnrollment } from '../../../types';
+import { deviceMdm, mdmBinding } from '../../../test/mdmFixtures';
 import { MdmEnrollLink } from '../MdmEnrollLink';
 
 const { mdmMock, createMock, revokeMock } = vi.hoisted(() => ({
@@ -39,14 +40,7 @@ const enrollment = (over: Partial<MdmEnrollment> = {}): MdmEnrollment => ({
   state: 'waiting',
   ...over,
 });
-const state = (over: Partial<DeviceMdm> = {}): DeviceMdm => ({
-  configured: true,
-  missing: [],
-  enrollment: null,
-  binding: null,
-  needs_reenroll: false,
-  ...over,
-});
+const state = (over: Partial<DeviceMdm> = {}): DeviceMdm => deviceMdm(over);
 const link = 'https://rmm.example.org/api/mdm/enroll/mde_secret';
 
 function show(autoCreate = false) {
@@ -62,15 +56,7 @@ function show(autoCreate = false) {
   return { user };
 }
 
-const bound = {
-  udid: 'U',
-  access_rights: 8183,
-  enrolled_at: 1_790_000_100,
-  last_seen_at: 1_790_000_100,
-  checked_out_at: null,
-  info: {},
-  info_at: null,
-};
+const bound = mdmBinding({ udid: 'U', enrolled_at: 1_790_000_100, last_seen_at: 1_790_000_100 });
 
 describe('MdmEnrollLink', () => {
   // What the server would answer right now; the mocks move it along like

@@ -6,7 +6,7 @@ import { qk } from '../../api/queryClient';
 import { formatAgo, formatDateTime } from '../../format';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useNow } from '../../hooks/useNow';
-import { IconClock, IconFileCode, IconMore, IconPlus, IconPower, IconShield, IconStatusWarn } from '../../icons';
+import { IconClock, IconFileCode, IconLock, IconMore, IconPhone, IconPlus, IconPower, IconShield, IconStatusWarn } from '../../icons';
 import { RULE_META, affectedDevices, ruleSentence, scopeLabel } from '../../ruleText';
 import { WEEKDAY_NAMES, lastScanSlot, nextWeekdayHour, whenLabel } from '../../schedule';
 import type { AlertRule, AutomationConfig, Device, Person, RuleType, ScriptSchedule } from '../../types';
@@ -25,6 +25,8 @@ const CATCH_UP_OPTIONS: { days: number; label: string }[] = [
 
 interface Props {
   devices: Device[];
+  /** Phones under MDM — what the mdm_* rules look at. */
+  phones?: Device[];
   persons: Person[];
   isAdmin: boolean;
 }
@@ -35,6 +37,9 @@ const RULE_ICON: Record<RuleType, ReactNode> = {
   offline: <IconPower size={15} />,
   disk: <IconStatusWarn size={15} />,
   patch_age: <IconShield size={15} />,
+  mdm_silent: <IconPhone size={15} />,
+  mdm_passcode: <IconLock size={15} />,
+  mdm_identity: <IconClock size={15} />,
 };
 
 const hh = (h: number) => `${String(h).padStart(2, '0')}:00`;
@@ -42,7 +47,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 /** Everything Vulpexa does on its own: install updates in a window, scan for
  *  them daily, raise alarms by rule, run scripts on a schedule. */
-export function AutomationPage({ devices, persons, isAdmin }: Props) {
+export function AutomationPage({ devices, phones = [], persons, isAdmin }: Props) {
   const qc = useQueryClient();
   const { ask, dialog: confirmDialog } = useConfirm();
   const now = useNow();
@@ -334,7 +339,7 @@ export function AutomationPage({ devices, persons, isAdmin }: Props) {
             ) : (
               <ul className="au-list">
                 {cfg.rules.map((r) => {
-                  const n = affectedDevices(r, devices).length;
+                  const n = affectedDevices(r, r.type.startsWith('mdm_') ? phones : devices).length;
                   return (
                     <li key={r.id} className={r.enabled ? 'au-row' : 'au-row is-off'}>
                       <span className="au-ico" aria-hidden>

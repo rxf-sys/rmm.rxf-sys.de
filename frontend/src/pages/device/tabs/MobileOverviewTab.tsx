@@ -52,8 +52,9 @@ export function MobileOverviewTab({ device, isOperator, onEdit }: { device: Devi
           ]}
         />
         <p className="dv-note">
-          Dieses Gerät wird ohne Agent geführt: keine Auslastung, kein Update-Scan, keine Fernbefehle. Alles hier
-          ist von Hand gepflegt — der Server lehnt Befehle an dieses Gerät ab.
+          {device.mdm && !device.mdm.checked_out_at
+            ? 'Dieses Gerät wird per MDM verwaltet: Systemversion, Seriennummer und IMEI kommen vom Gerät selbst. Befehle und Sicherheitsstatus stehen im Reiter MDM.'
+            : 'Dieses Gerät wird ohne Agent geführt: keine Auslastung, kein Update-Scan, keine Fernbefehle. Alles hier ist von Hand gepflegt — der Server lehnt Agent-Befehle an dieses Gerät ab.'}
         </p>
       </Panel>
       {device.notes && (

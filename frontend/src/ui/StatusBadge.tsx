@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
 import { IconInfo, IconPhone, IconStatusDanger, IconStatusOff, IconStatusOk, IconStatusWarn } from '../icons';
 
-export type StatusKind = 'ok' | 'warn' | 'danger' | 'off' | 'noagent' | 'info' | 'neutral';
+export type StatusKind = 'ok' | 'warn' | 'danger' | 'off' | 'mdm' | 'noagent' | 'info' | 'neutral';
 
 const DEFAULT_LABEL: Record<StatusKind, string> = {
   ok: 'OK',
   warn: 'Warnung',
   danger: 'Kritisch',
   off: 'Offline',
+  mdm: 'MDM',
   noagent: 'Ohne Agent',
   info: 'Hinweis',
   neutral: '',
@@ -23,6 +24,7 @@ function icon(kind: StatusKind, size: number): ReactNode {
       return <IconStatusDanger size={size} />;
     case 'off':
       return <IconStatusOff size={size} />;
+    case 'mdm':
     case 'noagent':
       return <IconPhone size={size} />;
     default:
@@ -46,6 +48,8 @@ interface Props {
 /**
  * Status as icon and word. Colour supports the reading, it never carries it:
  * the five shapes differ (circle, triangle, octagon, dashed circle, phone).
+ * A managed and a hand-kept phone share the phone; their words tell them
+ * apart ("MDM" / "Ohne Agent").
  */
 export function StatusBadge({ kind, label, iconOnly, plain, size = 14, title }: Props) {
   const text = label ?? DEFAULT_LABEL[kind];

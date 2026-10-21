@@ -20,6 +20,9 @@ const RULE_LABEL: Record<string, string> = {
   offline: 'Offline',
   disk: 'Platte',
   patch_age: 'Updates',
+  mdm_silent: 'MDM stumm',
+  mdm_passcode: 'Gerätecode',
+  mdm_identity: 'Zertifikat',
 };
 
 function chartSummary(samples: MetricSample[], label: string): string {

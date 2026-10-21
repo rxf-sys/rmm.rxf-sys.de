@@ -93,6 +93,26 @@
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+/* The iPhone card is no filter: no pointer, no hover. */
+.pt-sys-card.pt-sys-static {
+  cursor: default;
+}
+@media (hover: hover) and (pointer: fine) {
+  .pt-sys-card.pt-sys-static:hover {
+    border-color: var(--line);
+    background: var(--surface);
+  }
+}
+.pt-sys-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: var(--sp-2) 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  font-size: var(--fs-sm);
+}
 .pt-sys-head {
   display: flex;
   align-items: center;

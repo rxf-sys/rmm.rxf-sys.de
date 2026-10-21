@@ -7,17 +7,18 @@ import { isAgent } from '../../deviceClass';
 import { deviceStatusKind, loadLevel, type LoadKind } from '../../deviceStatus';
 import type { Alert, Device, PatchSummary } from '../../types';
 
-export type TileKind = 'danger' | 'warn' | 'off' | 'ok' | 'noagent';
+export type TileKind = 'danger' | 'warn' | 'off' | 'ok' | 'mdm' | 'noagent';
 export type BoardFilter = 'alle' | TileKind;
 
 /** Problems first: what needs a look stands top left. */
-export const KIND_ORDER: TileKind[] = ['danger', 'warn', 'off', 'ok', 'noagent'];
+export const KIND_ORDER: TileKind[] = ['danger', 'warn', 'off', 'ok', 'mdm', 'noagent'];
 
 export const KIND_LABEL: Record<TileKind, string> = {
   danger: 'Kritisch',
   warn: 'Warnung',
   off: 'Offline',
   ok: 'OK',
+  mdm: 'MDM',
   noagent: 'Ohne Agent',
 };
 
@@ -53,8 +54,8 @@ function reading(kind: LoadKind, label: string, value: number | undefined, detai
   return { kind, label, pct, level: loadLevel(pct, kind), detail };
 }
 
-export function tileOf(d: Device, ps: PatchSummary, alerts: Alert[]): Tile {
-  const kind = deviceStatusKind(d);
+export function tileOf(d: Device, ps: PatchSummary, alerts: Alert[], now?: number): Tile {
+  const kind = deviceStatusKind(d, now);
   const hb = d.heartbeat;
   const fullest = [...(hb.disks ?? [])].sort((a, b) => b.used_pct - a.used_pct)[0];
   const load =
@@ -91,12 +92,14 @@ function compare(a: Tile, b: Tile): number {
   );
 }
 
-export function buildTiles(devices: Device[], ps: PatchSummary, alerts: Alert[]): Tile[] {
-  return devices.map((d) => tileOf(d, ps, alerts)).sort(compare);
+/** ``now`` in seconds: a phone's MDM status depends on how long ago it
+ *  checked in. */
+export function buildTiles(devices: Device[], ps: PatchSummary, alerts: Alert[], now?: number): Tile[] {
+  return devices.map((d) => tileOf(d, ps, alerts, now)).sort(compare);
 }
 
 export function countByKind(tiles: Tile[]): Record<TileKind, number> {
-  const c: Record<TileKind, number> = { danger: 0, warn: 0, off: 0, ok: 0, noagent: 0 };
+  const c: Record<TileKind, number> = { danger: 0, warn: 0, off: 0, ok: 0, mdm: 0, noagent: 0 };
   for (const t of tiles) c[t.kind] += 1;
   return c;
 }
