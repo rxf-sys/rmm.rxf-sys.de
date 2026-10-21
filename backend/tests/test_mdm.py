@@ -15,35 +15,13 @@ import time
 import pytest
 from httpx import AsyncClient
 
-from app import accounts, audit, mdm, nanomdm
+from app import accounts, audit, mdm, mdm_profile, nanomdm
 from app.config import Settings
 from app.routers import mdm as mdm_router
 
-WEBHOOK_SECRET = "hook-secret"
-VERIFY_TOKEN = "verify-token"
+from .conftest import VERIFY_TOKEN, WEBHOOK_SECRET
+
 UDID = "00008110-000A1B2C3D4E5F60"
-
-
-@pytest.fixture
-def mdm_settings(settings: Settings) -> Settings:
-    settings.mdm_base_url = "https://rmm.example.org"
-    settings.mdm_apns_topic = "com.apple.mgmt.External.test"
-    settings.nanomdm_api_key = "api-key"
-    settings.mdm_webhook_secret = WEBHOOK_SECRET
-    settings.mdm_scep_verify_token = VERIFY_TOKEN
-    return settings
-
-
-@pytest.fixture
-def enqueued(monkeypatch) -> list[tuple[str, dict]]:
-    calls: list[tuple[str, dict]] = []
-
-    async def fake_enqueue(_settings, enrollment_id, plist, **_kw):
-        calls.append((enrollment_id, plistlib.loads(plist)))
-        return {"status": {enrollment_id: {"push_result": "ok"}}}
-
-    monkeypatch.setattr(mdm_router.nanomdm, "enqueue", fake_enqueue)
-    return calls
 
 
 async def _mobile(client: AsyncClient, **over) -> dict:
@@ -130,7 +108,8 @@ async def test_full_enrollment(admin_client: AsyncClient, mdm_settings: Settings
     # The phone has no session: the link alone must be enough.
     admin_client.cookies.clear()
     challenge, ref, payload = await _download(admin_client, url)
-    assert payload["AccessRights"] == 8183  # private: no erase bit
+    # Every right, private or not: the limits are per device on the server.
+    assert payload["AccessRights"] == 8191
     assert payload["Topic"] == "com.apple.mgmt.External.test"
     assert (await _scep(admin_client, challenge, ref)).status_code == 200
     # Single use.
@@ -144,16 +123,19 @@ async def test_full_enrollment(admin_client: AsyncClient, mdm_settings: Settings
     )
     r = await _hook(admin_client, _event("mdm.TokenUpdate", ref, {"MessageType": "TokenUpdate"}))
     assert r.json()["action"] == "enrolled"
-    # Inventory is requested automatically, for exactly this device.
-    assert len(enqueued) == 1
-    target, command = enqueued[0]
-    assert target == UDID
-    assert command["Command"]["RequestType"] == "DeviceInformation"
+    # A full inventory round is requested automatically, for exactly this
+    # device.
+    assert [c["Command"]["RequestType"] for _, c in enqueued] == [
+        "DeviceInformation", "SecurityInfo", "ProfileList", "CertificateList",
+        "InstalledApplicationList",
+    ]
+    assert {target for target, _ in enqueued} == {UDID}
+    command = enqueued[0][1]
 
-    # A token refresh later must not enqueue a second inventory request.
+    # A token refresh later must not enqueue a second round.
     r = await _hook(admin_client, _event("mdm.TokenUpdate", None, {"MessageType": "TokenUpdate"}))
     assert r.json()["action"] == "token_refresh"
-    assert len(enqueued) == 1
+    assert len(enqueued) == 5
 
     answer = {
         "UDID": UDID,
@@ -185,7 +167,7 @@ async def test_full_enrollment(admin_client: AsyncClient, mdm_settings: Settings
 
     events = await _events()
     for name in ("mdm.enrollment_created", "mdm.profile_downloaded", "mdm.enrolled",
-                 "mdm.command_queued"):
+                 "mdm.refresh_requested"):
         assert name in events, name
 
     r = await _hook(admin_client, _event("mdm.CheckOut", None, {"MessageType": "CheckOut"}))
@@ -203,19 +185,31 @@ async def test_typed_model_name_is_kept(admin_client: AsyncClient, mdm_settings:
     assert r.json()["device"]["serial"] == "F2LX9K3QJ1"
 
 
-async def test_company_device_gets_erase_right_and_private_switch_is_flagged(
+async def test_old_private_profile_without_erase_is_flagged(
     admin_client: AsyncClient, mdm_settings: Settings, enqueued
 ):
     company = await _mobile(admin_client, ownership="company")
     _, _, payload = await _download(admin_client, await _link(admin_client, company["id"]))
     assert payload["AccessRights"] == 8191
 
+    # Enrolled before 2026-10 as private: the phone's profile lacks erase.
     private = await _mobile(admin_client, hostname="Privat", ownership="private")
     await _enroll(admin_client, private["id"])
-    r = await admin_client.patch(f"/api/devices/{private['id']}", json={"ownership": "company"})
+    async with mdm._connect() as db:
+        await db.execute(
+            "UPDATE mdm_devices SET access_rights = ? WHERE device_id = ?",
+            (mdm_profile.ACCESS_PRIVATE, private["id"]),
+        )
+        await db.commit()
+    state = (await admin_client.get(f"/api/devices/{private['id']}/mdm")).json()
+    assert state["needs_reenroll"] is True
+    assert "neu registrieren" in state["actions"]["erase"]
+    assert state["actions"]["lock"] is None
+    # Switched off anyway: then nothing needs a new enrollment.
+    r = await admin_client.put(f"/api/devices/{private['id']}/mdm/permissions", json={"denied": ["erase"]})
     assert r.status_code == 200, r.text
-    r = await admin_client.get(f"/api/devices/{private['id']}/mdm")
-    assert r.json()["needs_reenroll"] is True
+    state = (await admin_client.get(f"/api/devices/{private['id']}/mdm")).json()
+    assert state["needs_reenroll"] is False
 
 
 async def test_enqueue_failure_is_audited_not_raised(
@@ -227,7 +221,9 @@ async def test_enqueue_failure_is_audited_not_raised(
     monkeypatch.setattr(mdm_router.nanomdm, "enqueue", down)
     device = await _mobile(admin_client)
     await _enroll(admin_client, device["id"])
-    assert "mdm.command_failed" in await _events()
+    assert "mdm.refresh_failed" in await _events()
+    commands = (await admin_client.get(f"/api/devices/{device['id']}/mdm")).json()["commands"]
+    assert commands[0]["status"] == "failed"
 
 
 async def test_reenroll_moves_udid_and_device_delete_cascades(

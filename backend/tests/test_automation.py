@@ -53,9 +53,11 @@ async def test_get_returns_seeded_state(admin_client: AsyncClient):
     # Der tägliche Update-Scan steht in der Serverkonfiguration, wird aber
     # hier mitgeliefert — die Automatisierungsseite zeigt ihn an.
     assert cfg["patch_scan"] == {"enabled": True, "hour": 3}
-    # Stock rules: offline scoped to tag 'server', disk + patch_age fleet-wide.
+    # Stock rules: offline scoped to tag 'server', disk + patch_age fleet-wide,
+    # and the three phone rules fleet-wide.
     by_type = {r["type"]: r for r in cfg["rules"]}
-    assert set(by_type) == {"offline", "disk", "patch_age"}
+    assert set(by_type) == {"offline", "disk", "patch_age", "mdm_silent", "mdm_passcode", "mdm_identity"}
+    assert by_type["mdm_silent"]["scope_kind"] == "all"
     assert by_type["offline"]["scope_kind"] == "tag"
     assert by_type["offline"]["scope_value"] == "server"
     assert by_type["disk"]["scope_kind"] == "all"

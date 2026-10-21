@@ -254,6 +254,21 @@ async def delete_for_device(device_id: int) -> None:
         await db.commit()
 
 
+def seal(data: bytes) -> bytes:
+    """Encrypt a secret another module keeps (the MDM unlock token) with the
+    vault key, so a copied database alone does not hand it out."""
+    return _vault().encrypt(data)
+
+
+def unseal(token: bytes) -> bytes | None:
+    """Inverse of ``seal``; ``None`` when the key no longer matches."""
+    try:
+        return _vault().decrypt(token)
+    except InvalidToken:
+        log.exception("credentials.unseal_failed")
+        return None
+
+
 def reset_for_tests(db_path: str) -> None:
     global _db_path, _fernet
     _db_path = db_path

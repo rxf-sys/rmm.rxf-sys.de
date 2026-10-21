@@ -84,6 +84,12 @@ _SECURITY_EVENTS = (
     "mdm.enrollment_created",
     "mdm.enrollment_revoked",
     "mdm.scep_rejected",
+    # Sperren, Löschen und Code entfernen greifen in ein Telefon ein, und wer
+    # was auf welchem Telefon darf, ist eine Sicherheitsentscheidung.
+    "mdm.device_lock",
+    "mdm.device_erase",
+    "mdm.passcode_cleared",
+    "mdm.permissions_updated",
 )
 
 

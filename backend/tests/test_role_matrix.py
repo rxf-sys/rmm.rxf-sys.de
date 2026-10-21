@@ -210,6 +210,13 @@ MATRIX: tuple[Endpoint, ...] = (
     # 409: the world's device is an agent, not an iPhone — the handler ran.
     Endpoint("POST", "/api/devices/{device_id}/mdm/enrollment", ADMIN, 409, _const({})),
     Endpoint("DELETE", "/api/devices/{device_id}/mdm/enrollment", ADMIN, 200),
+    # --- MDM commands: inventory and lock for operators, the rest admin ---
+    Endpoint("POST", "/api/devices/{device_id}/mdm/refresh", OPERATOR, 409),
+    Endpoint("POST", "/api/devices/{device_id}/mdm/lock", OPERATOR, 409, _const({})),
+    Endpoint("POST", "/api/devices/{device_id}/mdm/erase", ADMIN, 409, _const({"confirm": "x"})),
+    Endpoint("POST", "/api/devices/{device_id}/mdm/clear-passcode", ADMIN, 409),
+    Endpoint("POST", "/api/devices/{device_id}/mdm/renew", ADMIN, 409),
+    Endpoint("PUT", "/api/devices/{device_id}/mdm/permissions", ADMIN, 409, _const({"denied": []})),
     # --- Accounts and settings (admin) ---
     Endpoint(
         "POST",

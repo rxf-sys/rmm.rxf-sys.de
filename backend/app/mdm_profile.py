@@ -14,8 +14,10 @@ Differences to the test profile, each on purpose:
 - ``ServerURL``/``CheckInURL`` carry ``?e=<ref>``. NanoMDM passes query
   parameters through to its webhook as ``url_params``; that is how the backend
   learns which device row a new enrollment belongs to.
-- Private devices get ``AccessRights`` without the erase bit: iOS itself then
-  refuses ``EraseDevice``, in addition to the server-side policy.
+- Every profile grants all ``AccessRights``, whatever the ownership. What may
+  actually be done to one phone is decided on the server, per device and
+  changeable at any time (``mdm.PERMISSIONS``): rights missing from an
+  installed profile could only be added by enrolling the phone again.
 
 ``plistlib`` does the XML escaping; no value is spliced into markup by hand.
 """
@@ -28,8 +30,15 @@ from dataclasses import dataclass
 
 # MDM AccessRights bits (Apple MDM payload reference). 8191 = all 13 bits.
 ACCESS_ALL = 8191
+ACCESS_PROFILE_INSPECT = 1
+ACCESS_PROFILE_INSTALL = 2
+ACCESS_LOCK = 4  # device lock and passcode removal
 ACCESS_ERASE = 8
-# Everything except "Device erase".
+ACCESS_DEVICE_INFO = 16
+ACCESS_APPS_INSPECT = 256
+ACCESS_SECURITY = 1024
+# What profiles from before 2026-10 gave private devices: everything except
+# "Device erase". Phones enrolled with it keep it until enrolled again.
 ACCESS_PRIVATE = ACCESS_ALL & ~ACCESS_ERASE
 
 PROFILE_IDENTIFIER = "de.rxf-sys.rmm.enroll"
@@ -37,11 +46,6 @@ MDM_PAYLOAD_IDENTIFIER = "de.rxf-sys.rmm.mdm"
 SCEP_PAYLOAD_IDENTIFIER = "de.rxf-sys.rmm.mdm.scep"
 
 CONTENT_TYPE = "application/x-apple-aspen-config"
-
-
-def access_rights_for(ownership: str) -> int:
-    """Company devices get every right; anything else is treated as private."""
-    return ACCESS_ALL if ownership == "company" else ACCESS_PRIVATE
 
 
 def identity_common_name(ref: str) -> str:

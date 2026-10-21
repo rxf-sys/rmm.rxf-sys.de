@@ -48,11 +48,11 @@ def test_profile_layout():
     assert mdm["IdentityCertificateUUID"] == scep["PayloadUUID"]
 
 
-def test_access_rights_by_ownership():
-    assert mdm_profile.access_rights_for("company") == 8191
-    assert mdm_profile.access_rights_for("private") == 8183
-    # Unknown or empty ownership must not get the erase right.
-    assert mdm_profile.access_rights_for("") & mdm_profile.ACCESS_ERASE == 0
+def test_access_rights_are_carried_into_the_profile():
+    assert mdm_profile.ACCESS_ALL == 8191
+    assert mdm_profile.ACCESS_PRIVATE == 8183
+    # A renewal keeps the rights of the installed profile: adding one in an
+    # update is refused by iOS, so an old private profile stays without erase.
     _, _, mdm = _payloads(mdm_profile.build_profile(_params()))
     assert mdm["AccessRights"] & mdm_profile.ACCESS_ERASE == 0
 

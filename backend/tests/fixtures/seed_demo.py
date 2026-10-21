@@ -14,6 +14,7 @@ never land in a real database.
 from __future__ import annotations
 
 import asyncio
+import json
 import random
 import sys
 import time
@@ -27,6 +28,7 @@ from app import (
     credentials,
     devices,
     jobs,
+    mdm,
     metrics,
     patches,
     persons,
@@ -180,6 +182,40 @@ PATCH_TITLES = [
 ]
 
 
+async def _seed_mdm(device_id: int) -> None:
+    info = {
+        "DeviceName": "iPad Küche", "OSVersion": "18.6", "ProductName": "iPad13,16",
+        "ModelName": "iPad Air", "SerialNumber": "DMPXK2", "DeviceCapacity": 64.0,
+        "AvailableDeviceCapacity": 21.5, "BatteryLevel": 0.81, "IsSupervised": False,
+        "IsActivationLockEnabled": True, "IsDeviceLocatorServiceEnabled": True,
+        "IsCloudBackupEnabled": True, "LastCloudBackupDate": NOW - 2 * 86400,
+    }
+    security = {"PasscodePresent": False, "PasscodeCompliant": True, "HardwareEncryptionCaps": 3}
+    apps = [
+        {"name": "Kochbuch", "identifier": "de.example.kochbuch", "version": "4.2", "size": 81_000_000},
+        {"name": "Signal", "identifier": "org.whispersystems.signal", "version": "7.40", "size": 152_000_000},
+    ]
+    async with mdm._connect() as db:
+        cur = await db.execute(
+            "INSERT INTO mdm_enrollments (device_id, ref, link_hash, access_rights, created_by,"
+            " created_at, expires_at, scep_at, enrolled_at, udid)"
+            " VALUES (?, 'demo-ref', 'demo-link', 8191, 'admin', ?, ?, ?, ?, 'DEMO-UDID')",
+            (device_id, NOW - 30 * 86400, NOW - 29 * 86400, NOW - 30 * 86400, NOW - 30 * 86400),
+        )
+        await db.execute(
+            "INSERT INTO mdm_devices (device_id, udid, enrollment_id, access_rights, enrolled_at,"
+            " last_seen_at, info_json, info_at, security_json, security_at, apps_json, apps_at,"
+            " identity_issued_at)"
+            " VALUES (?, 'DEMO-UDID', ?, 8191, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                device_id, cur.lastrowid, NOW - 30 * 86400, NOW - 3600,
+                json.dumps(info), NOW - 3600, json.dumps(security), NOW - 3600,
+                json.dumps(apps), NOW - 3600, NOW - 30 * 86400,
+            ),
+        )
+        await db.commit()
+
+
 async def main(db_path: str, many: int) -> None:
     s = Settings(_env_file=None, app_env="development", storage_db_path=db_path, bootstrap_admin_password="")
     for mod in (
@@ -194,6 +230,7 @@ async def main(db_path: str, many: int) -> None:
         automation,
         persons,
         credentials,
+        mdm,
     ):
         await mod.ensure_schema(s)
 
@@ -348,6 +385,23 @@ async def main(db_path: str, many: int) -> None:
         tags=["mobil"],
         person_id=p1["id"],
     )
+
+    # An iPad under MDM, as the webhook would have left it: enrolled, with
+    # inventory, security state and a few apps.
+    ipad = await devices.create_manual_device(
+        hostname="iPad Küche",
+        os="ipados",
+        os_version="18.6",
+        ownership="company",
+        model="iPad Air",
+        serial="DMPXK2",
+        imei="",
+        notes="",
+        owner_label="Familie",
+        tags=["mobil"],
+        person_id=None,
+    )
+    await _seed_mdm(int(ipad["id"]))
 
     # Alerts: some open, some acked, some resolved
     await alerts._fire(

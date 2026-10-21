@@ -11,6 +11,9 @@ services:
       # Der tägliche Update-Scan rechnet in lokaler Zeit; ohne TZ wäre das UTC
       # und PATCH_SCAN_HOUR=3 läge im Sommer um 05:00 Ortszeit.
       TZ: ${TZ:-Europe/Berlin}
+      # Lifetime of MDM device identities, the same value the scep container
+      # signs with — the backend renews them MDM_RENEW_BEFORE_DAYS earlier.
+      MDM_IDENTITY_VALID_DAYS: ${SCEP_CERT_VALID:-365}
     expose:
       - "8080"
     volumes:
@@ -182,9 +185,14 @@ services:
       # entrypoint refuses to start with both or neither of the two set —
       # without a check scepserver would sign any CSR.
       SCEP_CHALLENGE_PASSWORD: ${SCEP_CHALLENGE_PASSWORD:-}
-      # Lifetime of device identity certificates in days. When one expires
-      # the device can no longer talk to NanoMDM until it is re-enrolled.
+      # Lifetime of device identity certificates in days. The backend sends
+      # each phone a renewal profile MDM_RENEW_BEFORE_DAYS before expiry.
       SCEP_CERT_VALID: ${SCEP_CERT_VALID:-365}
+      # A renewal asks for a second certificate with the same subject while
+      # the old one is still valid. scepserver refuses that unless the old
+      # one expires within this many days; 0 lifts the limit. The one-time
+      # challenge the backend checks is what stands in the way instead.
+      SCEP_CERT_RENEW: "0"
     # No published port: only Caddy talks to it, as scep:8080 on the rmm net.
     volumes:
       # Separate from ./mdm on purpose: the depot holds ca.key, and the

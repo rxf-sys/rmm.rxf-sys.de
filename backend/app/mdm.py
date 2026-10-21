@@ -36,6 +36,7 @@ from typing import Any
 import aiosqlite
 import structlog
 
+from . import credentials, mdm_results
 from .config import Settings
 from .db import connect as db_connect
 from .mdm_profile import identity_common_name
@@ -74,7 +75,57 @@ CREATE TABLE IF NOT EXISTS mdm_devices (
     info_json      TEXT    NOT NULL DEFAULT '{}',
     info_at        INTEGER
 );
+
+-- Every command sent to a phone and what became of it. The answer arrives
+-- seconds or days later through the webhook; the CommandUUID ties it to
+-- the request, and with it to the parser for its result.
+CREATE TABLE IF NOT EXISTS mdm_commands (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id      INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    command_uuid   TEXT    NOT NULL UNIQUE,
+    request_type   TEXT    NOT NULL,
+    created_by     TEXT    NOT NULL DEFAULT '',
+    created_at     INTEGER NOT NULL,
+    -- queued | acknowledged | error | notnow | failed (never reached NanoMDM)
+    status         TEXT    NOT NULL DEFAULT 'queued',
+    status_at      INTEGER,
+    error          TEXT    NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_mdm_commands_device ON mdm_commands (device_id, created_at);
+
+-- What may be done to one phone beyond what its profile allows. Empty =
+-- everything; an admin switches single capabilities off (and on again).
+CREATE TABLE IF NOT EXISTS mdm_policies (
+    device_id      INTEGER PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+    denied         TEXT    NOT NULL DEFAULT '',
+    updated_by     TEXT    NOT NULL DEFAULT '',
+    updated_at     INTEGER NOT NULL
+);
 """
+
+# Columns added to mdm_devices after the first MDM release. Results of the
+# periodic queries, the sealed unlock token, and the identity renewal.
+_DEVICE_COLUMNS = (
+    ("security_json", "TEXT NOT NULL DEFAULT '{}'"),
+    ("security_at", "INTEGER"),
+    ("apps_json", "TEXT NOT NULL DEFAULT '[]'"),
+    ("apps_at", "INTEGER"),
+    ("profiles_json", "TEXT NOT NULL DEFAULT '[]'"),
+    ("profiles_at", "INTEGER"),
+    ("certs_json", "TEXT NOT NULL DEFAULT '[]'"),
+    ("certs_at", "INTEGER"),
+    ("refresh_at", "INTEGER"),
+    ("unlock_token", "BLOB"),
+    ("unlock_token_at", "INTEGER"),
+    ("identity_issued_at", "INTEGER"),
+    ("identity_expires_at", "INTEGER"),
+    ("renew_challenge_hash", "TEXT NOT NULL DEFAULT ''"),
+    ("renew_started_at", "INTEGER"),
+    ("renew_scep_at", "INTEGER"),
+    ("renew_command_uuid", "TEXT NOT NULL DEFAULT ''"),
+    ("renew_done_at", "INTEGER"),
+    ("renew_error", "TEXT NOT NULL DEFAULT ''"),
+)
 
 _db_path: str = ""
 
@@ -83,30 +134,17 @@ LINK_PREFIX = "mde_"
 # tap). Beyond that something is fetching the link that is not the phone.
 MAX_DOWNLOADS = 5
 # Largest webhook body accepted. A DeviceInformation answer is a few KiB;
-# an installed-app list can be larger but is not requested here.
-MAX_WEBHOOK_BYTES = 2 * 1024 * 1024
-MAX_INFO_BYTES = 64 * 1024
+# an installed-app list with icons stripped stays well below this.
+MAX_WEBHOOK_BYTES = 4 * 1024 * 1024
+# Largest stored result (JSON). An app list of a well-used phone is a few
+# hundred KiB at most.
+MAX_RESULT_BYTES = 1024 * 1024
 
-#: Queries sent right after enrollment. All of them fall under
-#: "query device information" / "network information", which both
-#: AccessRights variants include.
-DEVICE_INFO_QUERIES = (
-    "DeviceName",
-    "OSVersion",
-    "BuildVersion",
-    "ModelName",
-    "Model",
-    "ProductName",
-    "SerialNumber",
-    "IMEI",
-    "MEID",
-    "DeviceCapacity",
-    "AvailableDeviceCapacity",
-    "BatteryLevel",
-    "WiFiMAC",
-    "IsSupervised",
-    "IsActivationLockEnabled",
-)
+#: Queries of every inventory request (see mdm_results).
+DEVICE_INFO_QUERIES = mdm_results.DEVICE_INFO_QUERIES
+# A renewal challenge is good for a week: the phone installs the new
+# profile at its next check-in, which can be days away for one that is off.
+RENEW_CHALLENGE_TTL_S = 7 * 86400
 
 
 async def ensure_schema(settings: Settings) -> None:
@@ -117,6 +155,19 @@ async def ensure_schema(settings: Settings) -> None:
     Path(_db_path).parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(_db_path) as db:
         await db.executescript(_SCHEMA)
+        async with db.execute("PRAGMA table_info(mdm_devices)") as cur:
+            cols = {row[1] for row in await cur.fetchall()}
+        for name, decl in _DEVICE_COLUMNS:
+            if name not in cols:
+                await db.execute(f"ALTER TABLE mdm_devices ADD COLUMN {name} {decl}")
+                log.info("mdm.migrated", column=name)
+        # Bound before identity_issued_at existed: the certificate was
+        # issued when the enrollment's challenge was used.
+        await db.execute(
+            "UPDATE mdm_devices SET identity_issued_at ="
+            " (SELECT scep_at FROM mdm_enrollments e WHERE e.id = mdm_devices.enrollment_id)"
+            " WHERE identity_issued_at IS NULL"
+        )
         await db.commit()
     log.info("mdm.ready", db=_db_path)
 
@@ -286,13 +337,9 @@ async def verify_scep(challenge: str, common_name: str) -> tuple[str, dict[str, 
         return "unknown", None
     row = await _enrollment_by("challenge_hash", _sha256(challenge))
     now = int(time.time())
-    if (
-        row is None
-        or row["revoked_at"]
-        or row["enrolled_at"]
-        or row["scep_at"]
-        or int(row["expires_at"]) <= now
-    ):
+    if row is None:
+        return await _verify_renewal(challenge, common_name, now)
+    if row["revoked_at"] or row["enrolled_at"] or row["scep_at"] or int(row["expires_at"]) <= now:
         return "unknown", None
     async with _connect() as db:
         if common_name != identity_common_name(str(row["ref"])):
@@ -316,24 +363,88 @@ async def verify_scep(challenge: str, common_name: str) -> tuple[str, dict[str, 
     return "ok", _public_enrollment(fresh) if fresh else None
 
 
+async def _verify_renewal(challenge: str, common_name: str, now: int) -> tuple[str, dict[str, Any] | None]:
+    """The challenge of a renewal profile (``start_renewal``). The CSR must
+    name the enrollment the phone is bound to — the renewed identity keeps
+    its subject, only the key and the dates are new."""
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT d.device_id, d.enrollment_id, d.renew_started_at, d.renew_scep_at, e.ref"
+            " FROM mdm_devices d JOIN mdm_enrollments e ON e.id = d.enrollment_id"
+            " WHERE d.renew_challenge_hash = ?",
+            (_sha256(challenge),),
+        ) as cur:
+            row = await cur.fetchone()
+    if (
+        row is None
+        or row["renew_scep_at"]
+        or not row["renew_started_at"]
+        or int(row["renew_started_at"]) + RENEW_CHALLENGE_TTL_S <= now
+    ):
+        return "unknown", None
+    found = {"id": int(row["enrollment_id"]), "device_id": int(row["device_id"]), "renewal": True}
+    async with _connect() as db:
+        if common_name != identity_common_name(str(row["ref"])):
+            await db.execute(
+                "UPDATE mdm_devices SET renew_challenge_hash = '', renew_error = ? WHERE device_id = ?",
+                ("Zertifikatsanfrage mit fremdem Namen abgewiesen", row["device_id"]),
+            )
+            await db.commit()
+            return "cn_mismatch", found
+        cur = await db.execute(
+            "UPDATE mdm_devices SET renew_scep_at = ?"
+            " WHERE device_id = ? AND renew_scep_at IS NULL AND renew_challenge_hash = ?",
+            (now, row["device_id"], _sha256(challenge)),
+        )
+        await db.commit()
+        if (cur.rowcount or 0) == 0:
+            return "unknown", None
+    return "ok", found
+
+
 # ---------------------------------------------------------------------------
 # Bound devices
 # ---------------------------------------------------------------------------
 
 
-def _public_binding(row: aiosqlite.Row) -> dict[str, Any]:
+def _json(raw: Any, default: Any) -> Any:
     try:
-        info = json.loads(row["info_json"])
+        value = json.loads(raw) if raw else default
     except (ValueError, TypeError):
-        info = {}
+        return default
+    return value if isinstance(value, type(default)) else default
+
+
+def _public_binding(row: aiosqlite.Row) -> dict[str, Any]:
     return {
         "udid": row["udid"],
+        "enrollment_id": row["enrollment_id"],
         "access_rights": int(row["access_rights"]),
         "enrolled_at": int(row["enrolled_at"]),
         "last_seen_at": int(row["last_seen_at"]),
         "checked_out_at": row["checked_out_at"],
-        "info": info if isinstance(info, dict) else {},
+        "info": _json(row["info_json"], {}),
         "info_at": row["info_at"],
+        "security": _json(row["security_json"], {}),
+        "security_at": row["security_at"],
+        "apps": _json(row["apps_json"], []),
+        "apps_at": row["apps_at"],
+        "profiles": _json(row["profiles_json"], []),
+        "profiles_at": row["profiles_at"],
+        "certificates": _json(row["certs_json"], []),
+        "certificates_at": row["certs_at"],
+        "refresh_at": row["refresh_at"],
+        "unlock_token": row["unlock_token"] is not None,
+        "unlock_token_at": row["unlock_token_at"],
+        "identity_issued_at": row["identity_issued_at"],
+        "identity_expires_at": row["identity_expires_at"],
+        "renewal": {
+            "started_at": row["renew_started_at"],
+            "scep_at": row["renew_scep_at"],
+            "done_at": row["renew_done_at"],
+            "error": row["renew_error"],
+        },
     }
 
 
@@ -343,6 +454,216 @@ async def binding_for_device(device_id: int) -> dict[str, Any] | None:
         async with db.execute("SELECT * FROM mdm_devices WHERE device_id = ?", (device_id,)) as cur:
             row = await cur.fetchone()
     return _public_binding(row) if row else None
+
+
+async def bindings() -> dict[int, dict[str, Any]]:
+    """Every bound phone, for the device list and the background jobs."""
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM mdm_devices") as cur:
+            rows = await cur.fetchall()
+    return {int(r["device_id"]): _public_binding(r) for r in rows}
+
+
+async def unlock_token(device_id: int) -> bytes | None:
+    """The phone's unlock token, decrypted — only ClearPasscode needs it."""
+    async with (
+        _connect() as db,
+        db.execute("SELECT unlock_token FROM mdm_devices WHERE device_id = ?", (device_id,)) as cur,
+    ):
+        row = await cur.fetchone()
+    if row is None or row[0] is None:
+        return None
+    return credentials.unseal(bytes(row[0]))
+
+
+async def enrollment_ref(enrollment_id: int) -> str | None:
+    row = await _enrollment_by("id", enrollment_id)
+    return str(row["ref"]) if row else None
+
+
+async def mark_refresh(device_id: int, now: int) -> None:
+    async with _connect() as db:
+        await db.execute("UPDATE mdm_devices SET refresh_at = ? WHERE device_id = ?", (now, device_id))
+        await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+
+async def record_command(
+    device_id: int,
+    command_uuid: str,
+    request_type: str,
+    created_by: str,
+    *,
+    status: str = "queued",
+    error: str = "",
+) -> None:
+    now = int(time.time())
+    async with _connect() as db:
+        await db.execute(
+            "INSERT INTO mdm_commands"
+            " (device_id, command_uuid, request_type, created_by, created_at, status, status_at, error)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (device_id, command_uuid, request_type, created_by, now, status, now, error[:300]),
+        )
+        await db.commit()
+
+
+def _public_command(row: aiosqlite.Row) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "command_uuid": row["command_uuid"],
+        "request_type": row["request_type"],
+        "created_by": row["created_by"],
+        "created_at": int(row["created_at"]),
+        "status": row["status"],
+        "status_at": row["status_at"],
+        "error": row["error"],
+    }
+
+
+async def list_commands(device_id: int, limit: int = 30) -> list[dict[str, Any]]:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM mdm_commands WHERE device_id = ? ORDER BY id DESC LIMIT ?",
+            (device_id, limit),
+        ) as cur:
+            rows = await cur.fetchall()
+    return [_public_command(r) for r in rows]
+
+
+async def open_command(device_id: int, request_type: str, since: int) -> bool:
+    """A command of this type still waiting for the phone, sent after ``since``."""
+    async with (
+        _connect() as db,
+        db.execute(
+            "SELECT 1 FROM mdm_commands WHERE device_id = ? AND request_type = ?"
+            " AND status IN ('queued', 'notnow') AND created_at >= ? LIMIT 1",
+            (device_id, request_type, since),
+        ) as cur,
+    ):
+        return await cur.fetchone() is not None
+
+
+async def _command_by_uuid(command_uuid: str) -> aiosqlite.Row | None:
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM mdm_commands WHERE command_uuid = ?", (command_uuid,)) as cur:
+            row: aiosqlite.Row | None = await cur.fetchone()
+            return row
+
+
+async def prune_commands(older_than_s: int) -> int:
+    async with _connect() as db:
+        cur = await db.execute(
+            "DELETE FROM mdm_commands WHERE created_at < ?", (int(time.time()) - older_than_s,)
+        )
+        await db.commit()
+        return cur.rowcount or 0
+
+
+# ---------------------------------------------------------------------------
+# Per-device permissions
+# ---------------------------------------------------------------------------
+
+#: Capabilities an admin can switch off for one phone.
+PERMISSIONS = ("lock", "erase", "clear_passcode", "apps")
+
+
+async def denied(device_id: int) -> set[str]:
+    async with (
+        _connect() as db,
+        db.execute("SELECT denied FROM mdm_policies WHERE device_id = ?", (device_id,)) as cur,
+    ):
+        row = await cur.fetchone()
+    if row is None:
+        return set()
+    return {p for p in str(row[0]).split(",") if p in PERMISSIONS}
+
+
+async def set_denied(device_id: int, values: set[str], updated_by: str) -> set[str]:
+    clean = sorted(v for v in values if v in PERMISSIONS)
+    async with _connect() as db:
+        await db.execute(
+            "INSERT INTO mdm_policies (device_id, denied, updated_by, updated_at) VALUES (?, ?, ?, ?)"
+            " ON CONFLICT(device_id) DO UPDATE SET denied = excluded.denied,"
+            "   updated_by = excluded.updated_by, updated_at = excluded.updated_at",
+            (device_id, ",".join(clean), updated_by, int(time.time())),
+        )
+        if "apps" in clean:
+            # Switched off means gone, not hidden: the stored list goes too.
+            await db.execute(
+                "UPDATE mdm_devices SET apps_json = '[]', apps_at = NULL WHERE device_id = ?",
+                (device_id,),
+            )
+        await db.commit()
+    return set(clean)
+
+
+# ---------------------------------------------------------------------------
+# Identity renewal
+# ---------------------------------------------------------------------------
+
+
+async def start_renewal(device_id: int) -> tuple[str, str] | None:
+    """Mint the challenge for a renewal profile → (challenge, enrollment ref).
+
+    One renewal at a time: a new one replaces an unfinished one, and the old
+    challenge stops working."""
+    challenge = secrets.token_hex(24)
+    now = int(time.time())
+    async with _connect() as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT e.ref FROM mdm_devices d JOIN mdm_enrollments e ON e.id = d.enrollment_id"
+            " WHERE d.device_id = ? AND d.checked_out_at IS NULL",
+            (device_id,),
+        ) as cur:
+            row = await cur.fetchone()
+        if row is None:
+            return None
+        await db.execute(
+            "UPDATE mdm_devices SET renew_challenge_hash = ?, renew_started_at = ?,"
+            " renew_scep_at = NULL, renew_done_at = NULL, renew_error = '', renew_command_uuid = ''"
+            " WHERE device_id = ?",
+            (_sha256(challenge), now, device_id),
+        )
+        await db.commit()
+    return challenge, str(row["ref"])
+
+
+async def set_renewal_command(device_id: int, command_uuid: str, error: str = "") -> None:
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE mdm_devices SET renew_command_uuid = ?, renew_error = ? WHERE device_id = ?",
+            (command_uuid, error[:300], device_id),
+        )
+        await db.commit()
+
+
+async def _finish_renewal(device_id: int, command_uuid: str, ok: bool, error: str, now: int) -> bool:
+    """Close the renewal this InstallProfile belonged to. ``True`` if it was one."""
+    async with _connect() as db:
+        if ok:
+            cur = await db.execute(
+                "UPDATE mdm_devices SET renew_done_at = ?, renew_challenge_hash = '',"
+                "   identity_issued_at = COALESCE(renew_scep_at, ?), identity_expires_at = NULL"
+                " WHERE device_id = ? AND renew_command_uuid = ?",
+                (now, now, device_id, command_uuid),
+            )
+        else:
+            cur = await db.execute(
+                "UPDATE mdm_devices SET renew_error = ?, renew_challenge_hash = ''"
+                " WHERE device_id = ? AND renew_command_uuid = ?",
+                (error[:300], device_id, command_uuid),
+            )
+        await db.commit()
+        return (cur.rowcount or 0) > 0
 
 
 async def device_id_for_udid(udid: str) -> int | None:
@@ -401,7 +722,7 @@ async def handle_event(event: dict[str, Any]) -> dict[str, Any]:
     if topic == "mdm.Authenticate":
         return await _on_authenticate(udid, ref, raw, now)
     if topic == "mdm.TokenUpdate":
-        return await _on_token_update(udid, ref, now)
+        return await _on_token_update(udid, ref, raw, now)
     if topic == "mdm.CheckOut":
         return await _on_checkout(udid, now)
     if topic == "mdm.Connect":
@@ -454,7 +775,22 @@ async def _on_authenticate(udid: str, ref: str, raw: dict[str, Any], now: int) -
     }
 
 
-async def _on_token_update(udid: str, ref: str, now: int) -> dict[str, Any]:
+async def _store_unlock_token(udid: str, raw: dict[str, Any], now: int) -> None:
+    """The phone sends its unlock token in a TokenUpdate (only with the
+    "device lock and passcode removal" right). ClearPasscode needs it, and
+    nothing else can produce it — so it is kept, sealed with the vault key."""
+    token = raw.get("UnlockToken")
+    if not isinstance(token, bytes) or not token:
+        return
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE mdm_devices SET unlock_token = ?, unlock_token_at = ? WHERE udid = ?",
+            (credentials.seal(token), now, udid),
+        )
+        await db.commit()
+
+
+async def _on_token_update(udid: str, ref: str, raw: dict[str, Any], now: int) -> dict[str, Any]:
     row = await _bindable(ref)
     if row is None:
         # A TokenUpdate without a usable ref is either a token refresh of a
@@ -464,6 +800,7 @@ async def _on_token_update(udid: str, ref: str, now: int) -> dict[str, Any]:
             log.warning("mdm.token_update_unbound", udid=udid, has_ref=bool(ref))
             return {"action": "ignored", "reason": "unknown device", "udid": udid}
         await _touch(udid, now)
+        await _store_unlock_token(udid, raw, now)
         return {"action": "token_refresh", "device_id": device_id, "udid": udid}
     if row["udid"] and row["udid"] != udid:
         log.warning("mdm.token_update_udid_mismatch", enrollment_id=row["id"])
@@ -473,9 +810,7 @@ async def _on_token_update(udid: str, ref: str, now: int) -> dict[str, Any]:
     async with _connect() as db:
         # A phone re-enrolled for another device row moves over; one UDID is
         # one row.
-        await db.execute(
-            "DELETE FROM mdm_devices WHERE udid = ? AND device_id != ?", (udid, device_id)
-        )
+        await db.execute("DELETE FROM mdm_devices WHERE udid = ? AND device_id != ?", (udid, device_id))
         await db.execute(
             "INSERT INTO mdm_devices"
             " (device_id, udid, enrollment_id, access_rights, enrolled_at, last_seen_at)"
@@ -489,11 +824,11 @@ async def _on_token_update(udid: str, ref: str, now: int) -> dict[str, Any]:
             (device_id, udid, row["id"], row["access_rights"], now, now),
         )
         await db.execute(
-            "UPDATE mdm_enrollments SET udid = ?, enrolled_at = COALESCE(enrolled_at, ?)"
-            " WHERE id = ?",
+            "UPDATE mdm_enrollments SET udid = ?, enrolled_at = COALESCE(enrolled_at, ?) WHERE id = ?",
             (udid, now, row["id"]),
         )
         await db.commit()
+    await _store_unlock_token(udid, raw, now)
     if first:
         log.info("mdm.enrolled", device_id=device_id, enrollment_id=row["id"])
     return {"action": "enrolled", "device_id": device_id, "udid": udid, "first": first}
@@ -519,37 +854,133 @@ async def _on_checkout(udid: str, now: int) -> dict[str, Any]:
     return {"action": "checked_out", "device_id": device_id, "udid": udid}
 
 
+#: Where each result lands in mdm_devices: (parser, json column, time column).
+_RESULT_COLUMNS: dict[str, tuple[Any, str, str]] = {
+    "SecurityInfo": (mdm_results.security_info, "security_json", "security_at"),
+    "InstalledApplicationList": (mdm_results.installed_apps, "apps_json", "apps_at"),
+    "ProfileList": (mdm_results.profiles, "profiles_json", "profiles_at"),
+    "CertificateList": (mdm_results.certificates, "certs_json", "certs_at"),
+}
+
+_STATUS = {
+    "Acknowledged": "acknowledged",
+    "Error": "error",
+    "CommandFormatError": "error",
+    "NotNow": "notnow",
+}
+
+
 async def _on_connect(udid: str, raw: dict[str, Any], now: int) -> dict[str, Any]:
+    """A command result (or an Idle poll). The CommandUUID says which request
+    it answers; an answer to a command not sent from here (the first
+    inventory before the command table existed) is recognised by its keys."""
     device_id = await device_id_for_udid(udid)
     if device_id is None:
         return {"action": "ignored", "reason": "unknown device", "udid": udid}
-    responses = raw.get("QueryResponses")
-    if raw.get("Status") != "Acknowledged" or not isinstance(responses, dict):
-        await _touch(udid, now)
+    await _touch(udid, now)
+    status = _STATUS.get(str(raw.get("Status") or ""))
+    command_uuid = _text(raw.get("CommandUUID"), 64)
+    if status is None or not command_uuid:
         return {"action": "seen", "device_id": device_id, "udid": udid}
-    info = {
-        k: v
-        for k, v in responses.items()
-        if k in DEVICE_INFO_QUERIES and isinstance(v, str | int | float | bool)
-    }
-    info_json = json.dumps(info, ensure_ascii=False)
-    if len(info_json.encode("utf-8")) > MAX_INFO_BYTES:
-        log.warning("mdm.info_too_large", device_id=device_id)
-        await _touch(udid, now)
+
+    command = await _command_by_uuid(command_uuid)
+    if command is not None and int(command["device_id"]) != device_id:
+        log.warning("mdm.result_foreign_command", device_id=device_id)
         return {"action": "seen", "device_id": device_id, "udid": udid}
-    async with _connect() as db:
-        await db.execute(
-            "UPDATE mdm_devices SET info_json = ?, info_at = ?, last_seen_at = ? WHERE udid = ?",
-            (info_json, now, now, udid),
-        )
-        await db.commit()
-    return {
-        "action": "info",
+    request_type = str(command["request_type"]) if command else _guess_type(raw)
+    error = mdm_results.error_text(raw) if status == "error" else ""
+    if command is not None:
+        async with _connect() as db:
+            await db.execute(
+                "UPDATE mdm_commands SET status = ?, status_at = ?, error = ? WHERE id = ?",
+                (status, now, error[:300], command["id"]),
+            )
+            await db.commit()
+    result: dict[str, Any] = {
+        "action": "result",
         "device_id": device_id,
         "udid": udid,
-        "fields": _identity_fields(responses),
-        "command_uuid": _text(raw.get("CommandUUID"), 64),
+        "request_type": request_type,
+        "status": status,
+        "error": error,
+        "command_uuid": command_uuid,
+        "known": command is not None,
     }
+    if request_type == "InstallProfile" and status in ("acknowledged", "error"):
+        result["renewal"] = await _finish_renewal(
+            device_id, command_uuid, status == "acknowledged", error, now
+        )
+    if status != "acknowledged":
+        return result
+
+    if request_type == "DeviceInformation":
+        responses = raw.get("QueryResponses")
+        info = mdm_results.device_info(responses)
+        if info:
+            await _store_json(device_id, "info_json", "info_at", info, now)
+            result["action"] = "info"
+            result["fields"] = _identity_fields(responses if isinstance(responses, dict) else {})
+    elif request_type in _RESULT_COLUMNS:
+        parse, column, at_column = _RESULT_COLUMNS[request_type]
+        if request_type == "InstalledApplicationList" and "apps" in await denied(device_id):
+            # Switched off after the query went out: the answer is dropped.
+            return result
+        value = parse(raw)
+        await _store_json(device_id, column, at_column, value, now)
+        if request_type == "CertificateList":
+            await _update_identity_expiry(device_id, value)
+    return result
+
+
+def _guess_type(raw: dict[str, Any]) -> str:
+    if isinstance(raw.get("QueryResponses"), dict):
+        return "DeviceInformation"
+    for request_type, key in (
+        ("SecurityInfo", "SecurityInfo"),
+        ("InstalledApplicationList", "InstalledApplicationList"),
+        ("ProfileList", "ProfileList"),
+        ("CertificateList", "CertificateList"),
+    ):
+        if key in raw:
+            return request_type
+    return ""
+
+
+async def _store_json(device_id: int, column: str, at_column: str, value: Any, now: int) -> None:
+    payload = json.dumps(value, ensure_ascii=False)
+    if len(payload.encode("utf-8")) > MAX_RESULT_BYTES:
+        log.warning("mdm.result_too_large", device_id=device_id, column=column)
+        return
+    if column not in ("info_json", "security_json", "apps_json", "profiles_json", "certs_json"):
+        raise ValueError(column)
+    async with _connect() as db:
+        await db.execute(
+            f"UPDATE mdm_devices SET {column} = ?, {at_column} = ? WHERE device_id = ?",  # noqa: S608 - whitelisted column
+            (payload, now, device_id),
+        )
+        await db.commit()
+
+
+async def _update_identity_expiry(device_id: int, certs: list[dict[str, Any]]) -> None:
+    async with (
+        _connect() as db,
+        db.execute(
+            "SELECT e.ref FROM mdm_devices d JOIN mdm_enrollments e ON e.id = d.enrollment_id"
+            " WHERE d.device_id = ?",
+            (device_id,),
+        ) as cur,
+    ):
+        row = await cur.fetchone()
+    if row is None:
+        return
+    expires = mdm_results.identity_expiry(certs, identity_common_name(str(row[0])))
+    if expires is None:
+        return
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE mdm_devices SET identity_expires_at = ? WHERE device_id = ?", (expires, device_id)
+        )
+        await db.commit()
 
 
 def reset_for_tests(db_path: str) -> None:

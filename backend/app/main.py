@@ -18,8 +18,10 @@ from . import (
     credentials,
     db,
     devices,
+    ios_versions,
     jobs,
     mdm,
+    mdm_commands,
     metrics,
     notify,
     patches,
@@ -82,6 +84,7 @@ async def _cleanup_loop() -> None:
             await devices.cleanup_expired_enrollment_tokens()
             await metrics.aggregate_and_cleanup(_settings)
             await action_runner.housekeeping()
+            await mdm_commands.housekeeping()
             # Floor the sweep above the agent's per-job limit — the agent
             # must always get the chance to report the result itself.
             await jobs.sweep_stale(
@@ -108,6 +111,8 @@ async def _alert_loop() -> None:
             await alerts.evaluate(_settings, _ntfy)
             await automation.run_patch_window(_settings)
             await automation.run_script_schedules(_settings)
+            await ios_versions.refresh_if_due(_settings)
+            await mdm_commands.run_due(_settings)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 - never let the loop die
