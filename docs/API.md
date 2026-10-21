@@ -1,8 +1,8 @@
 # API-Referenz
 
-Stand: 07.09.2026. Die Tabellen unten sind aus der laufenden Anwendung
+Stand: 21.10.2026. Die Tabellen unten sind aus der laufenden Anwendung
 erzeugt (`app.routes` inkl. der tatsächlich registrierten Dependencies), nicht
-von Hand gepflegt. Sie umfassen **68 HTTP-Endpunkte und 3 WebSockets**.
+von Hand gepflegt. Sie umfassen **74 HTTP-Endpunkte und 3 WebSockets**.
 
 Die maschinenlesbare Fassung mit allen Request-/Response-Schemata liefert
 FastAPI selbst:
@@ -92,10 +92,36 @@ der Hash eines Geheimnisses, das nie jemand erfährt, und
 `authenticate_device()` weist die Klasse zusätzlich ab. Der einzige Weg zu
 einem Gerät, das sich anmelden kann, bleibt das Enrollment-Token.
 
-Feld `ownership`: `private` oder `company`. Heute Information für die
-Übersicht; sobald Verwaltungsbefehle dazukommen, entscheidet es über deren
-Umfang (privat: Inventar, Sperren, Verloren-Modus, Richtlinien — Firma
-zusätzlich Komplett-Löschen und Zwangs-Updates).
+Feld `ownership`: `private` oder `company`. Es entscheidet über die Rechte
+im MDM-Profil (privat ohne Komplett-Löschen, siehe unten) und künftig über
+den Umfang der Verwaltungsbefehle.
+
+## Apple MDM (iPhone und iPad)
+
+Registrierung eines Geräts der Klasse `mobile` mit `os` `ios` oder `ipados`
+bei NanoMDM. Ablauf und Vertrauensmodell: `backend/app/mdm.py`,
+Einrichtung: [`MDM-SETUP.md`](MDM-SETUP.md).
+
+| Methode | Pfad | Auth | Zweck |
+|---|---|---|---|
+| GET | `/api/devices/{device_id}/mdm` | Session | Stand der Registrierung: `configured`, `missing` (fehlende ENV-Namen, nur für Admins), letzte `enrollment` mit `state` (`waiting`, `downloaded`, `certificate`, `enrolled`, `expired`, `revoked`), `binding` (UDID, Rechte, letzter Kontakt, gemeldete Geräteinformationen) und `needs_reenroll` (als privat registriert, jetzt Firmengerät). Viewer nur für eigene Geräte, sonst 404 |
+| POST | `/api/devices/{device_id}/mdm/enrollment` | Admin | Neuer Einmal-Link `https://…/api/mdm/enroll/mde_…`. Der Klartext steht **nur** in dieser Antwort; ein offener älterer Link desselben Geräts wird widerrufen. 409 für alles außer iPhone/iPad ohne Agent, 503 solange MDM nicht eingerichtet ist. Audit `mdm.enrollment_created` |
+| DELETE | `/api/devices/{device_id}/mdm/enrollment` | Admin | Offenen Link widerrufen. Audit `mdm.enrollment_revoked` |
+| GET | `/api/mdm/enroll/{token}` | Link | Das Enrollment-Profil (`application/x-apple-aspen-config`) für das Telefon — ohne Login, der Link ist das Credential. Jeder Abruf erzeugt eine neue Einmal-Challenge und macht die vorige ungültig; höchstens 5 Abrufe, danach, nach Ablauf, Widerruf oder ausgestelltem Zertifikat 404. 429 nach 20 Fehlversuchen pro IP in 300 s. Audit `mdm.profile_downloaded` |
+| POST | `/api/mdm/scep/verify` | Bearer `MDM_SCEP_VERIFY_TOKEN` | Nur für `scep-csr-verifier` im `rmm`-Netz, von außen 404 (Caddy). Body `{challenge, cn}`; 200 genau einmal je Challenge, sonst 403 (`unknown`, `cn_mismatch` — dann ist die Registrierung widerrufen). Audit `mdm.scep_rejected` bei Ablehnung |
+| POST | `/api/mdm/webhook` | HMAC `X-Hmac-Signature` | Nur für NanoMDM im `rmm`-Netz, von außen 404 (Caddy). MicroMDM-kompatibles Format; verarbeitet `mdm.Authenticate`, `mdm.TokenUpdate`, `mdm.CheckOut` und `mdm.Connect` des Gerätekanals. Audit `mdm.enrolled`, `mdm.checked_out`, `mdm.command_queued` / `mdm.command_failed` |
+
+**Zuordnung.** Das Profil trägt in `ServerURL` und `CheckInURL` den
+Parameter `?e=<ref>`; NanoMDM reicht ihn als `url_params` an den Webhook
+durch. Gebunden wird nur eine Registrierung, deren Challenge bereits ein
+Zertifikat ergeben hat. Nach dem ersten `TokenUpdate` stellt das Backend
+`DeviceInformation` ein; die Antwort füllt Seriennummer, IMEI und
+OS-Version der Karteikarte (ein getippter Modellname bleibt stehen).
+
+**Rechte im Profil.** `AccessRights` ist 8191 für Firmengeräte und 8183 für
+alles andere — ohne das Bit „Device erase“, iOS selbst verweigert dann das
+Löschen. Ein späterer Wechsel auf „Firma“ ändert das Profil auf dem Gerät
+nicht; `needs_reenroll` sagt, dass dafür neu zu registrieren ist.
 
 ## Jobs und Skripte
 

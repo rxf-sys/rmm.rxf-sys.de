@@ -7,6 +7,59 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Hinzugefügt
+- **MDM: iPhone und iPad per QR-Code registrieren.** „Gerät hinzufügen →
+  Telefon oder Tablet“ zeigt Admins nach dem Anlegen einen QR-Code mit einem
+  Einmal-Link (24 h, höchstens fünf Abrufe, ein neuer widerruft den alten);
+  bestehende Geräte bekommen den Reiter „MDM“. Jedes Profil trägt eine
+  eigene SCEP-Challenge, die genau einmal gilt: `scep-csr-verifier`
+  (`infrastructure/scep/verifier/`, nur Standardbibliothek) fragt dafür
+  `POST /api/mdm/scep/verify`. Der NanoMDM-Webhook (HMAC-signiert) ordnet das
+  Telefon über `?e=<ref>` in der `ServerURL` seiner Karteikarte zu; danach
+  stellt das Backend `DeviceInformation` ein, die Antwort füllt
+  Seriennummer, IMEI und iOS-Version. Privatgeräte bekommen ein Profil ohne
+  Löschrecht (`AccessRights` 8183). Neue Tabellen `mdm_enrollments`,
+  `mdm_devices`; Audit-Ereignisse `mdm.*`. Neue Frontend-Abhängigkeit
+  `qrcode` 1.5.4 (SVG ohne Canvas oder Data-URL).
+- **MDM: SCEP-Server als Compose-Service `scep`** (Profil `mdm`, startet
+  nicht mit einem normalen Deploy). `micromdm/scep` hat kein
+  Container-Image; `infrastructure/scep/` baut das gepinnte Release v2.3.0
+  und läuft als uid 10001. Das Depot mit dem CA-Schlüssel liegt in
+  `infrastructure/scep-depot/`, getrennt von `infrastructure/mdm/`, damit
+  NanoMDM `ca.key` nicht lesen kann. Der Entrypoint verweigert den Start ohne
+  `SCEP_CHALLENGE_PASSWORD` — ohne Challenge würde `scepserver` jeden CSR
+  signieren. Caddy leitet `/scep*` an den Container.
+- **MDM: `infrastructure/mdm-test-profile.sh`** schreibt ein unsigniertes
+  Enrollment-Profil für ein erstes Testgerät (SCEP-Payload, `ServerURL` und
+  `CheckInURL` auf `/mdm`, `SignMessage = true`, APNs-Topic aus
+  `mdm/push.pem`).
+
+### Geändert
+- **SCEP: Einmal-Challenges statt statischer.** Der Entrypoint startet mit
+  genau einem von `MDM_SCEP_VERIFY_TOKEN` und `SCEP_CHALLENGE_PASSWORD`;
+  die statische Challenge bleibt nur für das nach
+  `infrastructure/_archiv/` verschobene Test-Profil. Umstellung am LXC:
+  `docs/MDM-SETUP.md`, Teil 6.
+- **Caddy:** `/checkin` wird nicht mehr an NanoMDM geleitet (ohne Wirkung,
+  NanoMDM bedient alles auf `/mdm`); `/api/mdm/webhook` und
+  `/api/mdm/scep/*` antworten von außen mit 404.
+- **`docs/MDM-SETUP.md`:** Teil 4 beschreibt jetzt CA, `.env` und Start des
+  SCEP-Servers statt eines offenen Punkts; Teil 6 das Test-Profil. Neu
+  festgehalten: `/checkin` gibt es bei NanoMDM nur mit `-checkin`, beide
+  URLs im Profil zeigen auf `/mdm`. `CONFIGURATION.md`, `OPERATIONS.md`
+  (Backup, Prüfung) und `ROADMAP.md` nachgezogen.
+
+### Sicherheit
+- Go-Toolchain für den Agent von 1.26.9 auf 1.26.10 angehoben
+  (CVE-2026-111943, go.dev/issue/82345). `crypto/x509` vertraut damit einer
+  Reihe kompromittierter Zwischenzertifikate einer CA nicht mehr;
+  `govulncheck` meldete den Pfad über `x509.Certificate.Verify` als
+  erreichbar. `build-agent.sh` nutzt `golang:1.26-alpine` und zieht die
+  Version beim nächsten Build von selbst.
+- `vite` von 8.2.2 auf 8.2.4 angehoben. Das mitgelieferte `launch-editor`
+  hatte drei als hoch eingestufte Lücken (u. a. GHSA-r825-w8mm-5pxw); betrifft
+  nur den Dev-Server, ließ aber `npm audit` in CI scheitern.
+
 ### Behoben
 - **MDM: `NANOMDM_CERT_HEADER` wieder entfernt.** Die Variable war auf
   `Mdm-Signature` gesetzt, in der Annahme, damit den Header zu benennen, über

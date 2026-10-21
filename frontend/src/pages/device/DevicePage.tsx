@@ -7,6 +7,7 @@ import { qk } from '../../api/queryClient';
 import { DeviceTabs } from '../../components/DeviceTabs';
 import { isAgent } from '../../deviceClass';
 import { restartCommand } from '../../deviceCommands';
+import { isAppleMobile } from '../../mdm';
 import { safeDeepLink } from '../../remoteDesk';
 import { rememberDevice } from '../../shell/palette/recent';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -20,6 +21,7 @@ import { ActivityTab } from './tabs/ActivityTab';
 import { DiagnosticsTab } from './tabs/DiagnosticsTab';
 import { HistoryTab } from './tabs/HistoryTab';
 import { InventoryTab } from './tabs/InventoryTab';
+import { MdmTab } from './tabs/MdmTab';
 import { MobileOverviewTab } from './tabs/MobileOverviewTab';
 import { OverviewTab } from './tabs/OverviewTab';
 import { PasswordsTab } from './tabs/PasswordsTab';
@@ -90,7 +92,7 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
   const detail = q.data;
   const d = detail.device;
   const agent = isAgent(d);
-  const tabs = visibleTabs({ isAdmin, isOperator, agent });
+  const tabs = visibleTabs({ isAdmin, isOperator, agent, apple: isAppleMobile(d) });
   // A link to "?tab=remote" on a phone must not lead nowhere: there is no
   // such tab, so the overview takes over.
   const tab: TabId = tabs.some((t) => t.id === tabFromUrl) ? tabFromUrl : 'overview';
@@ -247,6 +249,7 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
         {tab === 'jobs' && <ActivityTab deviceId={deviceId} isAdmin={isAdmin} />}
         {tab === 'diagnostics' && <DiagnosticsTab deviceId={deviceId} connected={d.connected} />}
         {tab === 'passwords' && <PasswordsTab deviceId={deviceId} />}
+        {tab === 'mdm' && <MdmTab device={d} isAdmin={isAdmin} />}
       </div>
 
       {editing && isOperator && (

@@ -127,6 +127,14 @@ services:
       NANOMDM_CA: "/mdm/ca.pem"
       NANOMDM_STORAGE: "filekv"
       NANOMDM_STORAGE_DSN: "/mdm/db"
+      # Check-ins and command answers go to the backend, which binds a new
+      # enrollment to its device row (url_params ?e=<ref> from the profile)
+      # and stores the inventory. Signed with HMAC-SHA256 over the body; the
+      # backend rejects unsigned calls, and Caddy blocks the path from
+      # outside. Without MDM_WEBHOOK_SECRET the backend answers 503 and
+      # NanoMDM only logs that — devices are not affected.
+      NANOMDM_WEBHOOK_URL: "http://backend:8080/api/mdm/webhook"
+      NANOMDM_WEBHOOK_HMAC_KEY: ${MDM_WEBHOOK_SECRET:-}
     ports:
       # Nur Loopback im LXC, nicht ins LAN: das Einspielen des
       # Push-Zertifikats läuft über /v1/pushcert, und das geht über die
@@ -138,6 +146,51 @@ services:
       # Push-Zertifikat, SCEP-CA und der Zustand in einem Verzeichnis: so ist
       # klar, was gesichert werden muss. Der Inhalt ist gitignored.
       - ./mdm:/mdm
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - rmm
+
+  # SCEP server: issues the identity certificate each device presents to
+  # NanoMDM. Same `mdm` profile, so it never starts with a plain deploy.
+  #
+  #   docker compose --profile mdm up -d --build scep
+  #
+  # micromdm/scep has no published image; ./scep builds the pinned release.
+  # CA creation, .env values and the depot owner: docs/MDM-SETUP.md, part 4.
+  scep:
+    profiles: ["mdm"]
+    build:
+      context: ./scep
+      args:
+        SCEP_VERSION: v2.3.0
+    image: rxf-sys/rmm-scep:v2.3.0
+    container_name: rxf-rmm-scep
+    restart: unless-stopped
+    environment:
+      SCEP_FILE_DEPOT: "/depot"
+      SCEP_HTTP_LISTEN_PORT: "8080"
+      # Password of the encrypted ca.key (chosen at `ca -init`).
+      SCEP_CA_PASS: ${SCEP_CA_PASS:-}
+      # One-time challenges per enrollment: the CSR verifier asks the backend
+      # with this token (same value as the backend's MDM_SCEP_VERIFY_TOKEN).
+      SCEP_VERIFY_TOKEN: ${MDM_SCEP_VERIFY_TOKEN:-}
+      SCEP_VERIFY_URL: "http://backend:8080/api/mdm/scep/verify"
+      # Legacy static challenge, only for the archived test profile. The
+      # entrypoint refuses to start with both or neither of the two set —
+      # without a check scepserver would sign any CSR.
+      SCEP_CHALLENGE_PASSWORD: ${SCEP_CHALLENGE_PASSWORD:-}
+      # Lifetime of device identity certificates in days. When one expires
+      # the device can no longer talk to NanoMDM until it is re-enrolled.
+      SCEP_CERT_VALID: ${SCEP_CERT_VALID:-365}
+    # No published port: only Caddy talks to it, as scep:8080 on the rmm net.
+    volumes:
+      # Separate from ./mdm on purpose: the depot holds ca.key, and the
+      # NanoMDM container must not be able to read it. Only ca.pem is copied
+      # over to mdm/ca.pem. Gitignored.
+      - ./scep-depot:/depot
     cap_drop:
       - ALL
     security_opt:
