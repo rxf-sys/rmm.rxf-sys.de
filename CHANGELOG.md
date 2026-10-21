@@ -7,7 +7,37 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Hinzugefügt
+- **Vormerken fürs nächste Online-Gehen.** Updates (alle oder nur
+  Sicherheit, optional mit Neustart, falls nötig) und Skripte lassen sich für
+  ein Gerät vormerken, das gerade offline ist; der nächste Heartbeat führt sie
+  aus, ein verbundenes Gerät sofort. Im Reiter Updates und Aktivität, als
+  Massenaktion auf der Patches-Seite, mit „vorgemerkt“ in der Tabelle.
+  Abgelaufene Vormerkungen schließen von selbst; jeder Schritt steht im
+  Audit-Log (`action.*`). Neue Tabelle `pending_actions`, Endpunkte
+  `…/devices/{id}/actions`.
+- **Patch-Fenster nachholen und Neustart.** Geräte, die im Fenster offline
+  sind, installieren beim Wiederkommen innerhalb von `catch_up_days`
+  (Standard 3, 0 = wie bisher bis zum nächsten Fenster warten). Neue Option
+  „mit Neustart, falls nötig“.
+- **Lagebild als Geräte-Kacheln** auf der Übersicht: Zustand, CPU/RAM/Platte,
+  offene Updates und Sicherheit, Alarme, Neustart nötig, Wartung, letzte
+  Meldung; Probleme zuerst, Filter nach Zustand und Person.
+- **Patches: eine Karte je System** mit Logo, Ring für „aktuell“, offenen
+  Updates, Sicherheitsupdates und überfälligen Prüfungen; die Karte filtert
+  die Tabelle.
+
+### Geändert
+- **Volle Breite:** Der Inhalt endet nicht mehr bei 1520 px. Zwischen 721 und
+  1100 px schrumpft die Seitenleiste auf Icons, statt den Inhalt zu
+  quetschen.
+
 ### Behoben
+- **Diagramme ragten aus ihrer Box** (Verlauf, Flottenlast) auf breiten
+  Bildschirmen: Die Zeichenfläche fiel auf das Seitenverhältnis ihrer
+  viewBox zurück und war bei 1920 px 87 px höher als ihr Rahmen.
+- **Seitwärts-Scrollen bei Tablet-Breite** (Geräteseite, Automatisierung,
+  Kopfleiste) — siehe kompakte Seitenleiste.
 - **MDM: iPhones lehnten das Profil ab** („Die SCEP-Serverkonfiguration wird
   nicht unterstützt"). `scepserver ca -init` erzeugt die CA ohne Key Usage
   *Key Encipherment*; iOS verschlüsselt seinen Antrag nur an ein Zertifikat

@@ -48,6 +48,7 @@ from app import (
     credentials,
     devices,
     metrics,
+    pending_actions,
     persons,
     scripts,
 )
@@ -115,6 +116,16 @@ MATRIX: tuple[Endpoint, ...] = (
     Endpoint("POST", "/api/devices/{device_id}/update-agent", OPERATOR, 409),
     Endpoint("POST", "/api/devices/{device_id}/maintenance", OPERATOR, 200, _const({"minutes": 30})),
     Endpoint("DELETE", "/api/devices/{device_id}", OPERATOR, 200),
+    # --- Queued actions (operator) ---
+    # 201: queued for the next time online (merged into the seeded one).
+    Endpoint(
+        "POST",
+        "/api/devices/{device_id}/actions",
+        OPERATOR,
+        201,
+        _const({"kind": "patch_install"}),
+    ),
+    Endpoint("DELETE", "/api/devices/{device_id}/actions/{action_id}", OPERATOR, 200),
     # --- Jobs, scripts, patches (operator) ---
     # 200 with a failed job: the device is not connected.
     Endpoint(
@@ -284,6 +295,7 @@ async def world(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> dict[st
     sched = await automation.create_schedule(script["id"], hour=3)
     target = await accounts.create_user("ziel", "ziel-passwort-1", role="viewer")
     alert_id = await alerts._fire(device_id, "disk", "Platte voll")
+    action, _ = await pending_actions.create(device_id, "patch_install", created_by="seed")
     return {
         "person_id": person["id"],
         "device_id": device_id,
@@ -294,6 +306,7 @@ async def world(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> dict[st
         "sched_id": sched["id"],
         "user_id": target["id"],
         "alert_id": alert_id,
+        "action_id": action["id"],
         "totp_secret": pyotp.random_base32(),
         # Replaced by a real prefix of the caller's own spare session.
         "token_prefix": "deadbeef",

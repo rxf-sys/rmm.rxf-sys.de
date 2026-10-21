@@ -33,13 +33,14 @@ import {
 } from '../../icons';
 import { PAGE_PATH, devicePath } from '../../routes';
 import type { Device, Job, PatchSummary, Person } from '../../types';
-import { EmptyState, ErrorNote, Meter, PageHeader, Panel, Skeleton, SkeletonRows, StatusBadge } from '../../ui';
+import { EmptyState, ErrorNote, PageHeader, Panel, Skeleton, SkeletonRows, StatusBadge } from '../../ui';
 import { notify, trackJobs } from '../../ui/toast';
 import { deviceLabel, duplicateHostnames } from '../../deviceLabel';
 import { names, partition, reachable, runBulk, skippedText, type BulkOutcome } from '../devices/bulk';
 import { DeviceNames } from '../devices/DeviceNames';
 import { useFleetLoad } from './fleetLoading';
 import { PatchBulkBar } from './PatchBulkBar';
+import { SystemCards } from './SystemCards';
 import {
   FORBIDDEN_TEXT,
   OS_CATEGORIES,
@@ -47,7 +48,6 @@ import {
   STATE_FILTERS,
   STATE_LABEL,
   categoryStats,
-  currentLevel,
   currentPct,
   emptyText,
   formatSort,
@@ -230,6 +230,17 @@ function ScanButton({ d, busy, onScan }: { d: Device; busy: boolean; onScan: (d:
  * installing on a selection. Every scan and installation goes through the
  * per-device endpoint, so it is checked and audited once per device.
  */
+/** Something waits for this device's next time online (an install, a
+ *  script, a reboot) — said in the row so nobody queues it twice. */
+function Queued({ d }: { d: Device }) {
+  if (!d.open_actions) return null;
+  return (
+    <span className="pt-queued" title="Vorgemerkt fürs nächste Online-Gehen — Details im Reiter Updates des Geräts">
+      <IconClock size={12} /> vorgemerkt
+    </span>
+  );
+}
+
 export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOperator }: Props) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -284,7 +295,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
   );
 
   const stats = useMemo(() => patchStats(devices, patchSummary, now), [devices, patchSummary, now]);
-  const groups = useMemo(() => categoryStats(devices, patchSummary), [devices, patchSummary]);
+  const groups = useMemo(() => categoryStats(devices, patchSummary, now), [devices, patchSummary, now]);
 
   // Person, connection and search narrow the set both filter bars count
   // over; each bar's numbers also respect the other bar.
@@ -458,6 +469,47 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
     reportFailures('Installation', res, n);
   }
 
+  /** Install on each device's next time online — the way to reach the ones
+   *  that are offline right now. Connected devices start at once. */
+  async function queueUpdates(list: Device[]) {
+    const plan = partition(list, [{ test: (d) => (pendingOf(d, patchSummary) ?? 0) > 0, reason: 'ohne offene Updates' }]);
+    if (plan.targets.length === 0) {
+      notify.warning('Auf keinem ausgewählten Gerät ist etwas offen', skippedText(plan.skipped));
+      return;
+    }
+    const n = plan.targets.length;
+    const offline = plan.targets.filter((d) => !reachable(d)).length;
+    const ok = await ask({
+      title: n === 1 ? `Updates auf ${deviceLabel(plan.targets[0]!, dups)} vormerken?` : `Updates auf ${fmt.format(n)} Geräten vormerken?`,
+      body: (
+        <>
+          <DeviceNames devices={plan.targets} dups={dups} />
+          <p>
+            Alle offenen Updates werden installiert, sobald sich das jeweilige Gerät meldet
+            {offline < n ? ' — verbundene Geräte beginnen sofort' : ''}. Die Vormerkung gilt zwei Wochen; im Reiter Updates des
+            Geräts lässt sie sich zurückziehen.
+          </p>
+          {plan.skipped.length > 0 && <p className="muted">Übersprungen: {skippedText(plan.skipped)}.</p>}
+        </>
+      ),
+      confirmLabel: n === 1 ? 'Vormerken' : `Auf ${fmt.format(n)} Geräten vormerken`,
+    });
+    if (!ok) return;
+    setBusy(true);
+    const res = await runBulk(plan.targets, async (d) => {
+      await api.queueAction(d.id, { kind: 'patch_install' });
+    });
+    setBusy(false);
+    refreshFleet(plan.targets);
+    if (res.ok.length > 0) {
+      notify.success(
+        res.ok.length === 1 ? `Updates auf ${res.ok[0]!.hostname} vorgemerkt` : `Updates auf ${onDevices(res.ok.length)} vorgemerkt`,
+        offline > 0 ? 'Offline-Geräte installieren beim nächsten Online-Gehen.' : undefined,
+      );
+    }
+    reportFailures('Vormerkung', res, n);
+  }
+
   const scannable = shown.filter(reachable);
   const withSecurity = selectedDevices.filter((d) => securityOf(d, patchSummary) > 0).length;
   const asCards = useMediaQuery(CARDS_QUERY);
@@ -619,23 +671,9 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
               meta={loading ? undefined : `${fmt.format(stats.current)} von ${fmt.format(stats.devices)} vollständig aktuell · ${allPct} %`}
             >
               {loading ? (
-                <Skeleton h={52} />
+                <Skeleton h={120} />
               ) : (
-                <div className="pt-sys">
-                  {groups.map((g) => {
-                    const pct = currentPct(g.current, g.total);
-                    return (
-                      <Meter
-                        key={g.id}
-                        label={OS_CATEGORY_LABEL[g.id]}
-                        value={pct}
-                        level={currentLevel(pct)}
-                        detail={`${fmt.format(g.current)} von ${fmt.format(g.total)}`}
-                        title={`${OS_CATEGORY_LABEL[g.id]}: ${fmt.format(g.current)} von ${fmt.format(g.total)} Geräten vollständig aktuell`}
-                      />
-                    );
-                  })}
-                </div>
+                <SystemCards groups={groups} active={os} onSelect={(f) => setParam({ os: f === 'alle' ? null : f })} />
               )}
             </Panel>
           </div>
@@ -715,6 +753,7 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
               busy={busy}
               onScan={() => void scan(selectedDevices)}
               onInstall={() => void installSecurity(selectedDevices)}
+              onQueue={() => void queueUpdates(selectedDevices)}
               onClear={() => setSelected(new Set())}
             />
           )}
@@ -769,7 +808,10 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
                           </Link>
                           <Connection d={d} now={now} />
                         </div>
-                        <span className="pt-sub">{d.os_version || osLabel(d.os)}</span>
+                        <span className="pt-sub">
+                              {d.os_version || osLabel(d.os)}
+                              <Queued d={d} />
+                            </span>
                         <dl className="pt-card-facts">
                           <div>
                             <dt>Ausstehend</dt>
@@ -842,7 +884,10 @@ export function PatchesPage({ devices, patchSummary, persons, onRefresh, isOpera
                                 {d.hostname}
                               </Link>
                             </span>
-                            <span className="pt-sub">{d.os_version || osLabel(d.os)}</span>
+                            <span className="pt-sub">
+                              {d.os_version || osLabel(d.os)}
+                              <Queued d={d} />
+                            </span>
                           </td>
                           <td className="pt-c-person" title={owner || undefined}>
                             {owner || <Unknown word="ohne Person" />}

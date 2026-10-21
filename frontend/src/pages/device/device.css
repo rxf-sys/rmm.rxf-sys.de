@@ -552,3 +552,64 @@
     left: 50px;
   }
 }
+
+/* ---- Queued for the next time online (QueuedActions.tsx) ---- */
+.qa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.qa-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.qa-form-title {
+  font-weight: 700;
+}
+.qa-ttl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--tx-2);
+  font-size: var(--fs-sm);
+}
+.qa-ttl .input,
+.qa-script {
+  width: auto;
+}
+.qa-script {
+  min-width: 220px;
+}
+.qa-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.qa-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--line);
+}
+.qa-main {
+  display: flex;
+  flex: 1 1 240px;
+  flex-direction: column;
+  min-width: 0;
+}
+.qa-title {
+  font-weight: 700;
+}
+.qa-meta {
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}

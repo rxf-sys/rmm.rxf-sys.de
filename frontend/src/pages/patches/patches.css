@@ -1,13 +1,12 @@
 /* Patches (pages/patches). */
 
 /* ---- Summary: figures beside the state per system ---- */
+/* Figures on top, the systems below them over the full width: side by side
+   the two never had the same height. */
 .pt-top {
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-4);
-  /* The figures keep their own height; stretched to the system panel they
-     ended in an empty band. */
-  align-items: start;
 }
 .pt-stats {
   display: grid;
@@ -57,10 +56,140 @@
   color: var(--tx-3);
   font-size: var(--fs-sm);
 }
+/* ---- Systems: one card each, also the table's system filter ---- */
 .pt-sys {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
-  gap: var(--sp-4) var(--sp-6);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pt-sys-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  width: 100%;
+  height: 100%;
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--tx);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-1) ease,
+    background-color var(--dur-1) ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .pt-sys-card:hover {
+    border-color: var(--line-strong);
+    background: var(--surface-2);
+  }
+}
+.pt-sys-card[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.pt-sys-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+.pt-sys-ico {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+  color: var(--tx);
+}
+.pt-sys-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pt-sys-count {
+  margin-left: auto;
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.pt-sys-body {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.pt-sys-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--fs-sm);
+}
+.pt-sys-fact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tx-2);
+}
+.pt-sys-fact.strong {
+  color: var(--tx);
+  font-weight: 700;
+}
+.pt-sys-fact.danger {
+  color: var(--danger-tx);
+  font-weight: 700;
+}
+.pt-sys-fact.warn {
+  color: var(--warn-tx);
+}
+.pt-sys-fact.ok {
+  color: var(--ok-tx);
+}
+.pt-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 68px;
+  height: 68px;
+}
+.pt-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.pt-ring circle {
+  fill: none;
+  stroke-width: 3.6;
+}
+.pt-ring-track {
+  stroke: var(--surface-3);
+}
+.pt-ring-value {
+  stroke-linecap: round;
+}
+.pt-ring.ok .pt-ring-value {
+  stroke: var(--ok);
+}
+.pt-ring.warn .pt-ring-value {
+  stroke: var(--warn);
+}
+.pt-ring.crit .pt-ring-value {
+  stroke: var(--danger);
+}
+.pt-ring-text {
+  font-size: var(--fs-sm);
+  font-weight: 800;
 }
 
 /* ---- Toolbar and filters ---- */
@@ -417,11 +546,6 @@
 }
 
 /* ---- Narrow screens ---- */
-@media (max-width: 1100px) {
-  .pt-top {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
 /* Two labelled buttons need the room of a wide screen; below that one menu. */
 @media (max-width: 900px) {
   .pt .bulkbar-actions {
@@ -484,4 +608,15 @@
     border-left: 0;
     border-radius: 0;
   }
+}
+
+/* "vorgemerkt": something waits for the device's next time online. */
+.pt-queued {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: var(--sp-2);
+  color: var(--info-tx);
+  font-weight: 700;
+  white-space: nowrap;
 }

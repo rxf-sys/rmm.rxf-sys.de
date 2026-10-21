@@ -24,6 +24,7 @@ from .. import (
     metrics,
     patch_scan,
     patches,
+    pending_actions,
     persons,
     releases,
     wol,
@@ -36,7 +37,7 @@ from ..config import Settings, get_settings
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 
-def _with_connected(device: dict[str, Any]) -> dict[str, Any]:
+def _with_connected(device: dict[str, Any], open_actions: int | None = None) -> dict[str, Any]:
     """Attach the live-socket flag. ``online`` (heartbeat recency) drives the
     UI status; ``connected`` is the raw 'socket open right now' signal."""
     device["connected"] = manager.is_connected(device["id"])
@@ -49,6 +50,10 @@ def _with_connected(device: dict[str, Any]) -> dict[str, Any]:
         else None
     )
     device["agent_update_available"] = upd["version"] if upd else None
+    # Actions queued for the next time online (app/pending_actions.py);
+    # only the list and the detail view count them.
+    if open_actions is not None:
+        device["open_actions"] = open_actions
     return device
 
 
@@ -62,7 +67,8 @@ async def list_devices(
     scope = person_scope(user)
     if scope is not None:
         items = [d for d in items if d["person_id"] == scope]
-    return {"devices": [_with_connected(d) for d in items]}
+    queued = await pending_actions.open_counts()
+    return {"devices": [_with_connected(d, queued.get(d["id"], 0)) for d in items]}
 
 
 # --- Enrollment tokens -------------------------------------------------------
@@ -174,8 +180,9 @@ async def get_device(
     settings: Settings = Depends(get_settings),
 ) -> dict:
     device = await _visible_or_404(device_id, user, settings)
+    queued = await pending_actions.open_counts()
     return {
-        "device": _with_connected(device),
+        "device": _with_connected(device, queued.get(device_id, 0)),
         "inventory": await devices.get_inventory(device_id),
     }
 

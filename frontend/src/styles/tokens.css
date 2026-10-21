@@ -74,10 +74,11 @@
 
   /* --- Layout --- */
   --rail-w: 240px;
+  /* Icons only, between phone and laptop width (shell.css). */
+  --rail-w-compact: 72px;
   --topbar-h: 56px;
   /* Phone navigation bar at the bottom edge (shell.css .bottomnav). */
   --bottomnav-h: 68px;
-  --content-max: 1520px;
 
   /* --- Colour: neutrals --- */
   --bg: #f6f5f2;

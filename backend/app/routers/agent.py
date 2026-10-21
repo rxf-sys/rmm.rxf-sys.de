@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import shlex
 import time
+from typing import Any
 
 import structlog
 from fastapi import (
@@ -25,7 +26,7 @@ from fastapi import (
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
-from .. import devices, job_secrets, jobs, metrics, patch_scan, patches, releases
+from .. import action_runner, devices, job_secrets, jobs, metrics, patch_scan, patches, releases
 from ..agents_ws import manager
 from ..audit import record as audit_record
 from ..config import Settings, get_settings
@@ -402,6 +403,24 @@ async def _maybe_request_patch_scan(
     log.info("patch.scan_scheduled", device_id=device_id)
 
 
+async def _run_actions(device_id: int, heartbeat: dict[str, Any] | None = None) -> None:
+    """Queued actions for this device (app/action_runner.py). A failure there
+    is logged with its cause and does not drop the agent's connection: the
+    action stays pending and the next heartbeat tries again."""
+    try:
+        await action_runner.run_due(device_id, heartbeat=heartbeat)
+    except Exception:  # the socket must outlive a failed action; logged with traceback
+        log.exception("agent.actions_failed", device_id=device_id)
+
+
+async def _close_action(job_id: int, status: str) -> None:
+    """Close the queued action a job belonged to; same rule as above."""
+    try:
+        await action_runner.on_job_finished(job_id, status)
+    except Exception:  # the socket must outlive a failed action; logged with traceback
+        log.exception("agent.action_close_failed", job_id=job_id)
+
+
 @router.websocket("/ws")
 async def agent_ws(ws: WebSocket, settings: Settings = Depends(get_settings)) -> None:
     creds = _parse_bearer(ws.headers.get("authorization", ""))
@@ -448,6 +467,7 @@ async def agent_ws(ws: WebSocket, settings: Settings = Depends(get_settings)) ->
             if msg_type == "heartbeat" and isinstance(payload, dict):
                 await devices.record_heartbeat(device_id, payload)
                 await _maybe_request_patch_scan(ws, device_id, last_scan_at, settings)
+                await _run_actions(device_id, heartbeat=payload)
                 # Offer a signed update once per connection if this agent is
                 # behind the current release. The agent verifies the signature
                 # before installing, so this is a hint, not a trusted push.
@@ -530,6 +550,7 @@ async def agent_ws(ws: WebSocket, settings: Settings = Depends(get_settings)) ->
                         result_status,
                         exit_code if isinstance(exit_code, int) else None,
                     )
+                    await _close_action(job_id, result_status)
             elif msg_type == "patch_report" and isinstance(payload, dict):
                 items = payload.get("patches")
                 if isinstance(items, list):
@@ -537,6 +558,8 @@ async def agent_ws(ws: WebSocket, settings: Settings = Depends(get_settings)) ->
                     last_scan_at = int(time.time())
                     await devices.mark_patch_scan(device_id, last_scan_at)
                     fleet_hub.broadcast("patches")
+                    # An install that waited for this report runs now.
+                    await _run_actions(device_id)
             elif msg_type == "agent_logs" and isinstance(payload, dict):
                 lines = payload.get("lines")
                 manager.resolve_logs(

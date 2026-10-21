@@ -157,6 +157,39 @@ export function describeAudit(e: AuditEvent, names: AuditNames = {}): string {
     case 'patch.window_install':
       return `Patch-Fenster: ${num(d.count) ?? '?'} Updates auf ${device()} gestartet`;
 
+    // --- Vorgemerkt fürs nächste Online-Gehen ---
+    case 'action.queued':
+    case 'action.dispatched':
+    case 'action.done':
+    case 'action.failed':
+    case 'action.expired':
+    case 'action.cancelled': {
+      const kind = str(d.kind);
+      const what =
+        kind === 'script'
+          ? `Skript „${script()}“`
+          : kind === 'reboot'
+            ? 'Neustart'
+            : d.security_only === true
+              ? 'Sicherheitsupdates'
+              : 'Updates';
+      const origin = d.source === 'patch_window' ? ' (Patch-Fenster, nachgeholt)' : '';
+      switch (e.event) {
+        case 'action.queued':
+          return `${what} auf ${device()} vorgemerkt${origin}`;
+        case 'action.dispatched':
+          return `${what} auf ${device()} gestartet${num(d.count) !== undefined ? ` (${num(d.count)})` : ''}${origin}`;
+        case 'action.done':
+          return `Vormerkung auf ${device()} erledigt${str(d.note) ? `: ${str(d.note)}` : ''}`;
+        case 'action.failed':
+          return `Vormerkung auf ${device()} fehlgeschlagen${str(d.note) ? `: ${str(d.note)}` : ''}`;
+        case 'action.expired':
+          return `Vormerkung auf ${device()} abgelaufen — das Gerät war nicht online`;
+        default:
+          return `Vormerkung auf ${device()} zurückgezogen`;
+      }
+    }
+
     // --- Fernzugriff und Passwörter ---
     case 'remote.session_opened':
       return `Remote-Sitzung auf ${device()}`;

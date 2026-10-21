@@ -1199,7 +1199,13 @@ kbd,
 .lc-plot:focus-visible {
   outline-offset: 4px;
 }
+/* Absolutely placed on purpose: as an in-flow child of the grid item, the
+   SVG's `height: 100%` did not resolve and it fell back to its viewBox's
+   aspect ratio — on a wide screen 300 px of drawing in a 220 px frame, the
+   lines below the box while the HTML dots stayed in place. */
 .lc-svg {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;

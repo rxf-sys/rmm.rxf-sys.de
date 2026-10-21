@@ -316,12 +316,14 @@ html {
   white-space: nowrap;
 }
 
+/* The content takes the whole width beside the rail. A cap (1520 px) left a
+   dead band on wide screens; the pages' grids use the room instead. Reading
+   text keeps its own measure (`max-width: …ch`) where it matters. */
 .shell-content {
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
   width: 100%;
-  max-width: var(--content-max);
   padding: var(--sp-6);
 }
 .shell-content:focus {
@@ -817,6 +819,71 @@ html [data-sonner-toast] [data-button] {
 @media (max-width: 1100px) {
   .search-trigger {
     width: 200px;
+  }
+}
+
+/* Tablet and narrow laptop: the rail shrinks to its icons, so the content
+   keeps room for tables and charts instead of losing a third of the screen.
+   Labels stay in the DOM, visually hidden — they are the links' names. */
+@media (min-width: 721px) and (max-width: 1100px) {
+  .shell {
+    grid-template-columns: var(--rail-w-compact) minmax(0, 1fr);
+  }
+  .rail-in {
+    padding: var(--sp-4) var(--sp-2);
+    align-items: stretch;
+  }
+  .rail-brand {
+    justify-content: center;
+    padding: var(--sp-1) 0;
+  }
+  .rail-wordmark,
+  .rail-label,
+  .rail-group-label,
+  .rail-user-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .rail-nav {
+    gap: var(--sp-3);
+  }
+  .rail-group + .rail-group {
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--shell-line);
+  }
+  .rail-link {
+    position: relative;
+    justify-content: center;
+    padding: 0;
+  }
+  /* The count becomes a badge on the icon's corner. */
+  .rail-count {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    margin: 0;
+    min-width: 18px;
+    padding: 0 4px;
+    border-radius: var(--r-pill);
+    background: var(--shell-active);
+    color: var(--shell-tx);
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
+  }
+  .rail-count.alert {
+    line-height: 16px;
+  }
+  .rail-rollout {
+    display: none;
+  }
+  .rail-user {
+    justify-content: center;
+    padding: var(--sp-1) 0;
   }
 }
 

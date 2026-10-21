@@ -28,7 +28,7 @@ vi.mock('../../../api/client', async () => {
 const cfg: AutomationConfig = {
   rules: [{ id: 3, type: 'disk', enabled: true, threshold: 85, scope_kind: 'tag', scope_value: 'server', created_at: 0 }],
   schedules: [],
-  patch_window: { enabled: true, weekday: 6, hour: 3, security_only: true, tag: '' },
+  patch_window: { enabled: true, weekday: 6, hour: 3, security_only: true, tag: '', catch_up_days: 3, reboot: false },
   patch_window_last_run: null,
   patch_scan: { enabled: true, hour: 2 },
 };

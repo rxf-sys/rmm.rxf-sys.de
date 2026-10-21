@@ -51,6 +51,7 @@ _CATEGORY_BY_PREFIX: dict[str, str] = {
     "device": "device",
     "devices": "device",
     "mdm": "device",
+    "action": "job",
     "job": "job",
     "patch": "patch",
     "remote": "remote",

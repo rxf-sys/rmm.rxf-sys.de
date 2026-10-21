@@ -131,14 +131,34 @@ describe('OverviewPage', () => {
     expect(within(task).getByRole('link', { name: /Gerät öffnen/ })).toHaveAttribute('href', '/devices/7');
   });
 
-  it('links each Lagebild group to the device list with that filter', () => {
-    renderPage({ devices: [device({ online: false, last_seen_at: 1 })] });
-    expect(screen.getByRole('link', { name: /Offline: 1 Geräte/ })).toHaveAttribute('href', '/devices?filter=offline');
+  it('filters the Lagebild by state', async () => {
+    renderPage({
+      devices: [device({ id: 1, hostname: 'pc-ok' }), device({ id: 2, hostname: 'pc-weg', online: false, last_seen_at: 1 })],
+    });
+    const tiles = screen.getByRole('list', { name: 'Geräte' });
+    const count = () => tiles.querySelectorAll(':scope > li').length;
+    expect(count()).toBe(2);
+    await userEvent.click(screen.getByRole('tab', { name: /Offline/ }));
+    expect(count()).toBe(1);
+    expect(within(tiles).getByRole('link', { name: 'pc-weg' })).toBeInTheDocument();
   });
 
-  it('draws every device as a cell that opens it', () => {
-    renderPage({ devices: [device({ id: 3, hostname: 'küchen-tablet-ü' })] });
-    expect(screen.getByRole('link', { name: 'küchen-tablet-ü, OK' })).toHaveAttribute('href', '/devices/3');
+  it('draws every device as a tile that opens it, with its load and open updates', () => {
+    renderPage({
+      devices: [
+        device({
+          id: 3,
+          hostname: 'küchen-tablet-ü',
+          heartbeat: { cpu_pct: 12, mem_pct: 48, disks: [{ mount: '/', used_pct: 61, total_b: 1 }] },
+        }),
+      ],
+      patchSummary: { '3': { pending: 3, security: 1 } },
+    });
+    const tile = screen.getByRole('link', { name: 'küchen-tablet-ü' }).closest('li')!;
+    expect(screen.getByRole('link', { name: 'küchen-tablet-ü' })).toHaveAttribute('href', '/devices/3');
+    expect(within(tile).getByText('48 %')).toBeInTheDocument();
+    expect(within(tile).getByText('3 Updates · 1 Sicherheit')).toBeInTheDocument();
+    expect(within(tile).getByText('OK')).toBeInTheDocument();
   });
 
   it('counts only unacknowledged alerts as open, like the Alarm-Center', () => {

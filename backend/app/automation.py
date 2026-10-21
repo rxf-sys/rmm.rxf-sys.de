@@ -28,7 +28,7 @@ from typing import Any
 import aiosqlite
 import structlog
 
-from . import devices, jobs, patches, wol
+from . import action_runner, devices, jobs, patches, pending_actions, wol
 from .agents_ws import manager
 from .audit import record as audit_record
 from .config import Settings
@@ -76,6 +76,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "hour": 3,
         "security_only": True,
         "tag": "familie",
+        # Devices offline during the window install when they come back, for
+        # this many days. 0 = skip them until the next window (the old way).
+        "catch_up_days": 3,
+        # Restart after the install if the system says it needs one.
+        "reboot": False,
     },
 }
 
@@ -348,33 +353,46 @@ async def run_patch_window(settings: Settings, now: float | None = None) -> list
                     actor="automation",
                 )
 
+    # Every device in scope gets the install as a queued action: online ones
+    # run it right away, offline ones when they come back within the
+    # catch-up days. With catch-up off, offline devices are skipped as
+    # before — no failed job row per absent laptop every week either way.
+    catch_up_days = int(cfg.get("catch_up_days") or 0)
     created: list[int] = []
     for d in fleet:
         if tag and tag not in (d.get("tags") or []):
             continue
-        # Offline devices are skipped, not queued: a failed job row per absent
-        # laptop every week is noise. They catch the next window (they may be
-        # waking from the magic packet just sent — next tick picks them up).
-        if not manager.is_connected(d["id"]):
+        if d.get("device_class", "agent") != "agent":
             continue
-        if await jobs.active_job_of_kind(d["id"], "patch_install") is not None:
+        online = manager.is_connected(d["id"])
+        if not online and catch_up_days <= 0:
             continue
-        ids = await patches.pending_ids(d["id"], only_security=bool(cfg["security_only"]))
-        if not ids:
+        # Online and nothing known to install: no action row, no audit entry —
+        # the weekly window would otherwise log every current device. Offline
+        # devices are queued anyway; their scan on return decides.
+        if online and not await patches.pending_ids(d["id"], only_security=bool(cfg["security_only"])):
             continue
-        job = await jobs.create_job(
+        action, queued = await pending_actions.create(
             d["id"],
-            kind="patch_install",
-            command=json.dumps(ids),
+            "patch_install",
             created_by="automation",
+            source="patch_window",
+            security_only=bool(cfg["security_only"]),
+            reboot=bool(cfg.get("reboot")),
+            expires_at=int(now) + max(catch_up_days, 0) * 86400 + 2 * 3600,
         )
-        if not await manager.send(d["id"], jobs.dispatch_payload(job)):
-            await jobs.fail_undispatched(job["id"], "Gerät ist nicht verbunden")
-            continue
-        await audit_record(
-            "patch.window_install", device_id=d["id"], count=len(ids), actor="automation"
-        )
-        created.append(job["id"])
+        if queued and not online:
+            await audit_record(
+                "action.queued",
+                actor="automation",
+                device_id=d["id"],
+                action_id=action["id"],
+                kind="patch_install",
+                source="patch_window",
+                catch_up_days=catch_up_days,
+            )
+        if online:
+            created.extend(await action_runner.run_due(d["id"]))
 
     if created:
         log.info("automation.patch_window_fired", jobs=len(created))

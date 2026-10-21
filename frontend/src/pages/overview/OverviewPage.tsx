@@ -13,7 +13,7 @@ import { buildTasks, verdict, type OverviewTask, type TaskTarget } from '../../o
 import { PAGE_PATH, devicePath, type PageId } from '../../routes';
 import type { Account } from '../../types';
 import { EmptyState, ErrorNote, LineChart, PageHeader, Panel, Skeleton, StatusBadge, type StatusKind } from '../../ui';
-import { FleetMap } from './FleetMap';
+import { FleetBoard } from './FleetBoard';
 
 interface Props {
   fleet: Fleet;
@@ -105,7 +105,7 @@ function Stat({
 }
 
 export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
-  const { devices, alerts, patchSummary, loading, loadedAt, loadErrors } = fleet;
+  const { devices, alerts, patchSummary, persons, loading, loadedAt, loadErrors } = fleet;
   // Without the summary every count below would read "nothing open".
   const summaryMissing = loadErrors.patchSummary != null;
   // Die Aufgaben rechnen mit „jetzt" („seit 3 Tagen offline"), also muss die
@@ -232,7 +232,7 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
               ) : undefined
             }
           >
-            <FleetMap devices={devices} />
+            <FleetBoard devices={devices} alerts={alerts} patchSummary={patchSummary} persons={persons} now={now} />
           </Panel>
 
           <section className="panel ov-stats" aria-label="Kennzahlen">

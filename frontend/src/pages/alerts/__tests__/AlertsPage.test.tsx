@@ -192,7 +192,7 @@ describe('AlertsPage', () => {
     automationMock.mockResolvedValue({
       rules: [],
       schedules: [],
-      patch_window: { enabled: false, weekday: 6, hour: 3, security_only: true, tag: '' },
+      patch_window: { enabled: false, weekday: 6, hour: 3, security_only: true, tag: '', catch_up_days: 3, reboot: false },
       patch_window_last_run: null,
       patch_scan: { enabled: true, hour: 2 },
     });
@@ -287,7 +287,7 @@ describe('AlertsPage', () => {
       automationMock.mockResolvedValue({
         rules: [{ id: 1, type: 'offline', enabled: true, threshold: 600, scope_kind: 'all', scope_value: '', created_at: 0 }],
         schedules: [],
-        patch_window: { enabled: false, weekday: 6, hour: 3, security_only: true, tag: '' },
+        patch_window: { enabled: false, weekday: 6, hour: 3, security_only: true, tag: '', catch_up_days: 3, reboot: false },
         patch_window_last_run: null,
         patch_scan: { enabled: true, hour: 2 },
       });

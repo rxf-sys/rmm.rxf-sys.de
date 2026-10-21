@@ -30,6 +30,11 @@ class PatchWindow(BaseModel):
     security_only: bool = True
     # Empty tag = every device. Bounded so a paste accident doesn't land in the DB.
     tag: str = Field(default="familie", max_length=64)
+    # Offline during the window: install on return within this many days
+    # (0 = wait for the next window).
+    catch_up_days: int = Field(default=3, ge=0, le=14)
+    # Restart afterwards if the system requires it.
+    reboot: bool = False
 
 
 class AutomationConfig(BaseModel):

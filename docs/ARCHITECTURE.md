@@ -209,7 +209,15 @@ Agent  ──job_started──▶ Status "running"
   Job ohne Ergebnis (Timeout, Gerät gelöscht), wird ein noch
   zurückgehaltenes Fragment verworfen und nur seine Länge geloggt.
 - Jobs an ein offline stehendes Gerät scheitern sofort, statt in der
-  Warteschlange zu verfallen.
+  Warteschlange zu verfallen. Wer etwas fürs nächste Online-Gehen will,
+  merkt es vor (`pending_actions`): Installation, Skript oder Neustart. Der
+  nächste Heartbeat des Geräts führt es aus (`backend/app/action_runner.py`),
+  ebenso der Eingang eines Update-Scans und das Vormerken für ein schon
+  verbundenes Gerät. Eine Sperre je Gerät verhindert, dass Heartbeat und
+  API-Aufruf dieselbe Vormerkung zweimal senden; ein Fehler dort wird
+  geloggt und trennt den Agent nicht. Das Patch-Fenster legt für offline
+  Geräte im Bereich eine Vormerkung mit `catch_up_days` Frist an — so holen
+  sie das Fenster nach, statt eine Woche zu warten.
 
 ## 6. Update-Signaturkette
 
@@ -253,6 +261,7 @@ Lifespan (`backend/app/main.py:115-126`).
 | `enrollment_tokens` | Einmal-Token: Hash, Ablauf, Verbrauchszeitpunkt | `devices.py:46` |
 | `inventory` | Inventar je Gerät und Art (Hardware/Software/Netz) | `devices.py:55` |
 | `jobs` | Auftrag, Kommando, Status, Exit-Code, gekappter Output | `jobs.py:32` |
+| `pending_actions` | Vorgemerkt fürs nächste Online-Gehen: Art, Optionen (nur Sicherheit, Neustart, Skript), Herkunft, Ablauf, Zustand, zugehöriger Job | `pending_actions.py` |
 | `metrics` | Roh-Heartbeats (Retention 48 h) | `metrics.py:24` |
 | `metrics_hourly` | Stunden-Rollup (Retention 30 Tage) | `metrics.py:33` |
 | `alerts` | Alarme mit `resolved_at`/`acked_at`; Partial-Index auf offene | `alerts.py:33` |
