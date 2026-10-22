@@ -133,7 +133,7 @@
 .fb-sub {
   overflow: hidden;
   color: var(--tx-3);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -204,7 +204,7 @@
   margin: auto 0 0;
   padding: 0;
   list-style: none;
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
 }
 .fb-fact {
   display: inline-flex;
@@ -304,18 +304,31 @@
   font-size: var(--fs-sm);
 }
 
-/* ---- Zu tun + Seite ---- */
+/* ---- Zu tun, Flottenlast, Aktivität ----
+   Left the work and the load beneath it, right the feed over both rows.
+   Without the feed (not an admin) the two share the width side by side. */
 .ov-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  grid-template-areas:
+    'todo act'
+    'load act';
+  grid-template-rows: auto 1fr;
   gap: var(--sp-5);
   align-items: start;
 }
-.ov-side {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-  min-width: 0;
+.ov-grid.solo {
+  grid-template-areas: 'todo load';
+  grid-template-rows: auto;
+}
+.ov-todo {
+  grid-area: todo;
+}
+.ov-load {
+  grid-area: load;
+}
+.ov-act {
+  grid-area: act;
 }
 .ov-tasks {
   margin: 0;
@@ -409,8 +422,11 @@
 }
 
 @media (max-width: 1180px) {
-  .ov-grid {
+  .ov-grid,
+  .ov-grid.solo {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'todo' 'load' 'act';
+    grid-template-rows: auto;
   }
   .ov-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));

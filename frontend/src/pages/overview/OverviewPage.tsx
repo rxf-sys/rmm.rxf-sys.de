@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { ApiError, api } from '../../api/client';
 import { auditCategoryLabel, auditNamesFrom, describeAudit } from '../../auditText';
 import { isAgent } from '../../deviceClass';
-import { niceCeiling } from '../../fleetChart';
+import { percentAxis } from '../../fleetChart';
 import { formatRelative } from '../../format';
 import type { Fleet } from '../../hooks/useFleet';
 import { IconBell, IconChevronRight, IconPlus, IconShield, IconStatusDanger, IconStatusOk } from '../../icons';
@@ -13,6 +13,7 @@ import { buildTasks, verdict, type OverviewTask, type TaskTarget } from '../../o
 import { PAGE_PATH, devicePath, type PageId } from '../../routes';
 import type { Account } from '../../types';
 import { EmptyState, ErrorNote, LineChart, PageHeader, Panel, Skeleton, StatusBadge, type StatusKind } from '../../ui';
+import { dayTick, ticksFor } from '../device/timeAxis';
 import { FleetBoard } from './FleetBoard';
 
 interface Props {
@@ -29,6 +30,8 @@ interface Props {
  *  der Überschrift, damit die Seite nicht auf eine Scroll-Liste hinausläuft. */
 const MAX_TASKS = 6;
 const CHART_HOURS = 24;
+/** The feed has the right column to itself, beside "Zu tun" and the load. */
+const ACTIVITY_ROWS = 10;
 const fmt = new Intl.NumberFormat('de-DE');
 
 function greeting(): string {
@@ -124,7 +127,7 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
   const isAdmin = user.role === 'admin';
   const activity = useQuery({
     queryKey: ['overview', 'activity'],
-    queryFn: ({ signal }) => api.audit({ limit: 6 }, signal).then((r) => r.events),
+    queryFn: ({ signal }) => api.audit({ limit: ACTIVITY_ROWS }, signal).then((r) => r.events),
     enabled: isAdmin,
     refetchInterval: 60_000,
     retry: false,
@@ -177,9 +180,10 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
 
   const samples = metrics.data ?? [];
   const from = now - CHART_HOURS * 3600;
-  const yMax = niceCeiling(Math.max(10, ...samples.map((s) => Math.max(s.cpu_avg, s.mem_avg))));
-  const ticks: number[] = [];
-  for (let t = Math.ceil(from / (6 * 3600)) * 6 * 3600; t <= now; t += 6 * 3600) ticks.push(t);
+  const axis = percentAxis(Math.max(0, ...samples.map((s) => Math.max(s.cpu_avg, s.mem_avg))));
+  // Local hours, like the device history: 00, 06, 12, 18 — not UTC's 02, 08.
+  const ticks = ticksFor(from, now, 6 * 3600);
+  const tickLabel = (ts: number) => (new Date(ts * 1000).getHours() === 0 ? dayTick(ts) : hhmm(ts));
   const mean = samples.length ? samples.reduce((a, s) => a + s.cpu_avg, 0) / samples.length : 0;
   const peak = samples.reduce<(typeof samples)[number] | null>((a, s) => (!a || s.cpu_avg > a.cpu_avg ? s : a), null);
 
@@ -220,21 +224,6 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
         </EmptyState>
       ) : (
         <>
-          <Panel
-            title="Lagebild"
-            meta={`${fmt.format(devices.length)} Geräte`}
-            actions={
-              loadedAt ? (
-                <span className="ov-live">
-                  <span className="ov-live-dot" aria-hidden />
-                  live · Stand {hhmm(loadedAt)}
-                </span>
-              ) : undefined
-            }
-          >
-            <FleetBoard devices={devices} alerts={alerts} patchSummary={patchSummary} persons={persons} now={now} />
-          </Panel>
-
           <section className="panel ov-stats" aria-label="Kennzahlen">
             <Stat
               to={PAGE_PATH.devices}
@@ -274,8 +263,11 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
             />
           </section>
 
-          <div className="ov-grid">
+          {/* "Zu tun" leads (DESIGN.md §1): it and the load sit left, the
+              activity feed right; the Lagebild follows below. */}
+          <div className={activityHidden ? 'ov-grid solo' : 'ov-grid'}>
             <Panel
+              className="ov-todo"
               title="Zu tun"
               meta={tasks.length === 0 ? 'nichts offen' : `${fmt.format(tasks.length)} Punkt${tasks.length === 1 ? '' : 'e'}, wichtigste zuerst`}
               padded={false}
@@ -303,65 +295,80 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
               )}
             </Panel>
 
-            <div className="ov-side">
-              <Panel title="Flottenlast" meta={`Ø über alle meldenden Geräte · ${CHART_HOURS} h`}>
-                {metrics.isPending ? (
-                  <Skeleton h={180} />
-                ) : samples.length < 2 ? (
-                  <p className="ov-chart-empty">
-                    Noch zu wenige Messpunkte — die Kurve entsteht aus den Heartbeats der letzten{' '}
-                    {CHART_HOURS} Stunden.
-                  </p>
+            <Panel className="ov-load" title="Flottenlast" meta={`Ø über alle meldenden Geräte · ${CHART_HOURS} h`}>
+              {metrics.isPending ? (
+                <Skeleton h={180} />
+              ) : samples.length < 2 ? (
+                <p className="ov-chart-empty">
+                  Noch zu wenige Messpunkte — die Kurve entsteht aus den Heartbeats der letzten{' '}
+                  {CHART_HOURS} Stunden.
+                </p>
+              ) : (
+                <LineChart
+                  from={from}
+                  to={now}
+                  yMax={axis.top}
+                  yStep={axis.step}
+                  summary={`Flottenlast über ${CHART_HOURS} Stunden: CPU im Mittel ${Math.round(mean)} Prozent${peak ? `, Spitze ${Math.round(peak.cpu_avg)} Prozent um ${hhmm(peak.ts)}` : ''}.`}
+                  formatTime={(ts) => `${dayTime(ts)} · ${samples.find((s) => s.ts === ts)?.devices ?? 0} Geräte`}
+                  formatTick={tickLabel}
+                  ticks={ticks}
+                  series={[
+                    { key: 'cpu', label: 'CPU', color: 'var(--s1)', points: samples.map((s) => ({ ts: s.ts, v: s.cpu_avg })) },
+                    { key: 'mem', label: 'RAM', color: 'var(--s2)', points: samples.map((s) => ({ ts: s.ts, v: s.mem_avg })) },
+                  ]}
+                />
+              )}
+            </Panel>
+
+            {!activityHidden && (
+              <Panel
+                className="ov-act"
+                title="Letzte Aktivität"
+                padded={false}
+                actions={
+                  <Link to={PAGE_PATH.audit} className="link-btn">
+                    Audit-Log <IconChevronRight size={14} />
+                  </Link>
+                }
+              >
+                {activity.isPending ? (
+                  <div className="ov-pad">
+                    <Skeleton h={120} />
+                  </div>
+                ) : !activity.data || activity.data.length === 0 ? (
+                  <p className="ov-chart-empty ov-pad">Noch keine Ereignisse.</p>
                 ) : (
-                  <LineChart
-                    from={from}
-                    to={now}
-                    yMax={yMax}
-                    summary={`Flottenlast über ${CHART_HOURS} Stunden: CPU im Mittel ${Math.round(mean)} Prozent${peak ? `, Spitze ${Math.round(peak.cpu_avg)} Prozent um ${hhmm(peak.ts)}` : ''}.`}
-                    formatTime={(ts) => `${dayTime(ts)} · ${samples.find((s) => s.ts === ts)?.devices ?? 0} Geräte`}
-                    formatTick={hhmm}
-                    ticks={ticks}
-                    series={[
-                      { key: 'cpu', label: 'CPU Ø', color: 'var(--s1)', points: samples.map((s) => ({ ts: s.ts, v: s.cpu_avg })) },
-                      { key: 'mem', label: 'RAM Ø', color: 'var(--s2)', points: samples.map((s) => ({ ts: s.ts, v: s.mem_avg })) },
-                    ]}
-                  />
+                  <ul className="ov-acts">
+                    {activity.data.map((ev) => (
+                      <li key={ev.id}>
+                        <time dateTime={new Date(ev.ts * 1000).toISOString()} title={formatRelative(ev.ts)}>
+                          {hhmm(ev.ts)}
+                        </time>
+                        <span className="badge">{auditCategoryLabel(ev.category)}</span>
+                        <span className="ov-act-text">{describeAudit(ev, names)}</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </Panel>
-
-              {!activityHidden && (
-                <Panel
-                  title="Letzte Aktivität"
-                  padded={false}
-                  actions={
-                    <Link to={PAGE_PATH.audit} className="link-btn">
-                      Audit-Log <IconChevronRight size={14} />
-                    </Link>
-                  }
-                >
-                  {activity.isPending ? (
-                    <div className="ov-pad">
-                      <Skeleton h={120} />
-                    </div>
-                  ) : !activity.data || activity.data.length === 0 ? (
-                    <p className="ov-chart-empty ov-pad">Noch keine Ereignisse.</p>
-                  ) : (
-                    <ul className="ov-acts">
-                      {activity.data.slice(0, 5).map((ev) => (
-                        <li key={ev.id}>
-                          <time dateTime={new Date(ev.ts * 1000).toISOString()} title={formatRelative(ev.ts)}>
-                            {hhmm(ev.ts)}
-                          </time>
-                          <span className="badge">{auditCategoryLabel(ev.category)}</span>
-                          <span className="ov-act-text">{describeAudit(ev, names)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Panel>
-              )}
-            </div>
+            )}
           </div>
+
+          <Panel
+            title="Lagebild"
+            meta={`${fmt.format(devices.length)} Geräte`}
+            actions={
+              loadedAt ? (
+                <span className="ov-live">
+                  <span className="ov-live-dot" aria-hidden />
+                  live · Stand {hhmm(loadedAt)}
+                </span>
+              ) : undefined
+            }
+          >
+            <FleetBoard devices={devices} alerts={alerts} patchSummary={patchSummary} persons={persons} now={now} />
+          </Panel>
         </>
       )}
     </div>

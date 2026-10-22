@@ -82,6 +82,18 @@ export const MDM_INFO_LABELS: [key: string, label: string][] = [
   ['IsSupervised', 'Betreut (Supervised)'],
 ];
 
+/** DeviceInformation fields the server copies into the device's own
+ *  columns (version, model, serial, IMEI): the overview shows them once,
+ *  under Stammdaten, not a second time among the reported facts — as long
+ *  as the column holds a value. */
+export const MDM_SYNCED_INFO: Record<string, 'os_version' | 'model' | 'serial' | 'imei'> = {
+  OSVersion: 'os_version',
+  ModelName: 'model',
+  ProductName: 'model',
+  SerialNumber: 'serial',
+  IMEI: 'imei',
+};
+
 /** Security facts from DeviceInformation that belong next to SecurityInfo. */
 export const MDM_SECURITY_INFO_LABELS: [key: string, label: string][] = [
   ['IsActivationLockEnabled', 'Aktivierungssperre'],

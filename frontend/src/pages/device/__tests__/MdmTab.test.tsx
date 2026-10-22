@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { deviceMdm, mdmBinding } from '../../../test/mdmFixtures';
 import type { Device, DeviceMdm, MdmConfig } from '../../../types';
-import { MdmData } from '../tabs/MdmData';
+import { MobileOverviewTab } from '../tabs/MobileOverviewTab';
 import { MdmTab } from '../tabs/MdmTab';
 import { useMdmActions } from '../tabs/useMdmActions';
 
@@ -31,6 +31,7 @@ const phone = {
   id: 3,
   hostname: 'iPhone Oma',
   os: 'ios',
+  os_version: '18.6',
   device_class: 'mobile',
   ownership: 'company',
   mdm: {
@@ -62,7 +63,7 @@ const wifi: MdmConfig = {
 const enrolled = deviceMdm({
   binding: mdmBinding({
     access_rights: 8183,
-    info: { DeviceName: 'Omas iPhone', BatteryLevel: 0.5, DeviceCapacity: 128, IsSupervised: false },
+    info: { DeviceName: 'Omas iPhone', OSVersion: '18.6', BatteryLevel: 0.5, DeviceCapacity: 128, IsSupervised: false },
     info_at: 1_790_000_000,
     security: { PasscodePresent: false, HardwareEncryptionCaps: 3 },
     security_at: 1_790_000_000,
@@ -142,19 +143,27 @@ beforeEach(() => {
 });
 
 describe('MDM on the overview', () => {
+  const overview = <MobileOverviewTab device={phone} isOperator onEdit={() => {}} onGoTab={() => {}} />;
+
   it('shows what the phone reports: security, inventory and apps', async () => {
-    wrap(<MdmData device={phone} />);
+    wrap(overview);
     const security = await screen.findByRole('region', { name: 'Sicherheit' });
+    // A failed check is a warning with its icon, not just coloured text.
     expect(within(security).getByText('Gerätecode gesetzt').nextSibling).toHaveTextContent('nein');
+    expect(within(security).getByText('nein').closest('.status')).toHaveClass('warn');
     expect(within(security).getByText('veraltet')).toBeInTheDocument();
-    expect(screen.getByText('Omas iPhone')).toBeInTheDocument();
-    expect(screen.getByText('128 GB')).toBeInTheDocument();
+    // Reported facts join the Stammdaten; what the server copied into the
+    // device's own columns is not listed twice.
+    const facts = screen.getByRole('region', { name: 'Stammdaten' });
+    expect(within(facts).getByText('Omas iPhone')).toBeInTheDocument();
+    expect(within(facts).getByText('128 GB')).toBeInTheDocument();
+    expect(within(facts).queryByText('Systemversion')).not.toBeInTheDocument();
     const apps = screen.getByRole('region', { name: 'Apps' });
     expect(within(apps).getByText('wartet auf Zustimmung')).toBeInTheDocument();
   });
 
   it('filters the app list', async () => {
-    const { user } = wrap(<MdmData device={phone} />);
+    const { user } = wrap(overview);
     const apps = await screen.findByRole('region', { name: 'Apps' });
     await user.type(within(apps).getByRole('searchbox', { name: 'Apps durchsuchen' }), 'sig');
     expect(within(apps).getByText('Signal')).toBeInTheDocument();

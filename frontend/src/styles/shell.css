@@ -120,7 +120,7 @@ html {
   min-width: 20px;
   padding: 0 6px;
   border-radius: var(--r-pill);
-  background: var(--danger);
+  background: var(--danger-solid);
   color: #fff;
   text-align: center;
   line-height: 18px;
@@ -163,6 +163,8 @@ html {
 }
 .rail-rollout .mono {
   color: var(--shell-tx);
+  /* .mono shrinks to 0.94em; inside 11px text that is below 11px. */
+  font-size: 1em;
 }
 .rail-rollout-bar {
   height: 3px;
