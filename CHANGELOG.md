@@ -63,6 +63,16 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   die Tabelle.
 
 ### Geändert
+- **Übersicht neu angeordnet:** „Zu tun“ und die Flottenlast stehen links,
+  die letzte Aktivität (jetzt 10 Einträge) rechts, das Lagebild darunter.
+- **Geräte-Übersicht in Spalten:** Auslastung über die volle Breite mit
+  gleichmäßigen Reihen, darunter Zustand, Stammdaten und Netzwerk (bei
+  Telefonen Apps) als eigenständig wachsende Spalten statt eines Rasters mit
+  Lücken. Die Wertespalten fluchten über alle Karten; die Meldungen eines
+  Telefons stehen bei den Stammdaten, ohne Wiederholungen.
+- **CI:** `npm audit` versucht es bei einem Ausfall der Registry (5xx,
+  Netzwerkfehler) ein zweites Mal und warnt nur, statt das Deployment zu
+  blockieren. Funde bleiben rot.
 - **Geräteseite von Telefonen neu geordnet:** Die Übersicht zeigt, was das
   Gerät meldet (Sicherheit, Inventar, Apps, Profile und Zertifikate), die
   Befehle stehen im Menü der Kopfzeile, der Reiter „MDM“ enthält nur noch
@@ -77,6 +87,14 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   quetschen.
 
 ### Behoben
+- **Flottenlast:** Achse mit runden Werten (0/20/40/60 % statt 13 und 38),
+  Uhrzeiten in Ortszeit statt UTC, Legende mit „zuletzt · Ø · Spitze“
+  statt des letzten Werts als „Ø“, Tooltip verdeckt nicht mehr die
+  Überschrift.
+- **Kontrast und Schriftgrößen:** weiße Zahl auf Rot (Alarmzähler,
+  Löschen-Knopf) im Dunkelmodus mit 4,5:1; Texte in den Lagebild-Kacheln
+  12 px; nicht erfüllte Sicherheitsprüfungen eines Telefons als Warnung mit
+  Symbol statt nur farbig.
 - **Diagramme ragten aus ihrer Box** (Verlauf, Flottenlast) auf breiten
   Bildschirmen: Die Zeichenfläche fiel auf das Seitenverhältnis ihrer
   viewBox zurück und war bei 1920 px 87 px höher als ihr Rahmen.
