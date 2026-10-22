@@ -3,16 +3,11 @@ import { useId, useState, type ReactNode } from 'react';
 import { api, apiErrorMessage } from '../../../api/client';
 import { qk } from '../../../api/queryClient';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
-import { formatAgo, formatDateTime } from '../../../format';
 import { useNow } from '../../../hooks/useNow';
 import { ASSIGNMENT_STATE, CONFIG_KIND_LABEL } from '../../../mdm';
 import type { DeviceMdm, MdmBinding } from '../../../types';
-import { KeyValue, Panel, StatusBadge } from '../../../ui';
+import { Ago, KeyValue, Panel, StatusBadge } from '../../../ui';
 import { notify } from '../../../ui/toast';
-
-function ago(ts: number | null, now: number): ReactNode {
-  return ts ? <span title={formatDateTime(ts)}>{formatAgo(ts, now)}</span> : <span className="muted">nie</span>;
-}
 
 /** Profiles from the template library on this phone: what is there, what is
  *  on its way, and a picker for the rest. */
@@ -163,7 +158,7 @@ export function MdmOsUpdatePanel({ deviceId, mdm, isAdmin }: { deviceId: number;
   if (reported) rows.push(['Gemeldete Version', <span className="num">{String(reported)}</span>]);
   if (state) rows.push(['Update-Stand', UPDATE_STATE[String(state)] ?? String(state)]);
   if (pending) rows.push(['Ansteht', <span className="num">{String(pending)}</span>]);
-  if (current.synced_at) rows.push(['Zuletzt abgeglichen', ago(current.synced_at, now)]);
+  if (current.synced_at) rows.push(['Zuletzt abgeglichen', <Ago ts={current.synced_at} now={now} />]);
 
   return (
     <Panel title="iOS-Update erzwingen" meta="Test">
@@ -237,8 +232,8 @@ function renewalText(b: MdmBinding, now: number): ReactNode {
   const r = b.renewal;
   if (!r.started_at) return null;
   if (r.error) return <span className="dv-mdm-bad">fehlgeschlagen: {r.error}</span>;
-  if (r.done_at && r.done_at >= r.started_at) return <>erneuert {ago(r.done_at, now)}</>;
-  return <>läuft seit {ago(r.started_at, now)}</>;
+  if (r.done_at && r.done_at >= r.started_at) return <>erneuert <Ago ts={r.done_at} now={now} /></>;
+  return <>läuft seit <Ago ts={r.started_at} now={now} /></>;
 }
 
 /** The phone's link to Vulpexa: since when, last contact, certificate. */
@@ -281,9 +276,9 @@ export function MdmIdentityPanel({
     >
       <KeyValue
         rows={[
-          ['Registriert seit', ago(binding.enrolled_at, now)],
-          ['Letzter Kontakt', <>{ago(binding.last_seen_at, now)}{mdm.reachable ? ' · erreichbar' : ''}</>],
-          ...(binding.checked_out_at ? [['Profil entfernt', ago(binding.checked_out_at, now)] as [ReactNode, ReactNode]] : []),
+          ['Registriert seit', <Ago ts={binding.enrolled_at} now={now} />],
+          ['Letzter Kontakt', <><Ago ts={binding.last_seen_at} now={now} />{mdm.reachable ? ' · erreichbar' : ''}</>],
+          ...(binding.checked_out_at ? [['Profil entfernt', <Ago ts={binding.checked_out_at} now={now} />] as [ReactNode, ReactNode]] : []),
           ['Zertifikat gültig bis', binding.identity_expires_at ? new Date(binding.identity_expires_at * 1000).toLocaleDateString('de-DE') : '—'],
           ...(renewal ? [['Erneuerung', renewal] as [ReactNode, ReactNode]] : []),
           ['Entsperr-Token', binding.unlock_token ? 'vorhanden' : 'fehlt'],

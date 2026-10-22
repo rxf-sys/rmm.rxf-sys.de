@@ -1,5 +1,5 @@
 import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
-import { segmentsOf } from '../fleetChart';
+import { gridStep, segmentsOf } from '../fleetChart';
 
 export interface ChartSeries {
   key: string;
@@ -18,7 +18,8 @@ interface Props {
   /** Top of the y axis (the bottom is 0). */
   yMax: number;
   /** Distance between grid lines; `yMax` must be a multiple of it, so that
-   *  every line carries a round value. Defaults to quarters. */
+   *  every line carries a round value. Defaults to the smallest round step
+   *  that divides `yMax` (fleetChart.gridStep). */
   yStep?: number;
   unit?: string;
   height?: number;
@@ -49,7 +50,7 @@ export function LineChart({
   from,
   to,
   yMax,
-  yStep = yMax / 4,
+  yStep = gridStep(yMax),
   unit = '\u00a0%',
   height = 180,
   gapS = 1.5 * 3600,

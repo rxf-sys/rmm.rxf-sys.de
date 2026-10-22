@@ -8,7 +8,7 @@ import { formatAgo, formatDateTime } from '../../../format';
 import type { Alert, MetricSample } from '../../../types';
 import { EmptyState, ErrorNote, LineChart, Panel, Skeleton, StatusBadge, type ChartSeries } from '../../../ui';
 import { IconStatusOk } from '../../../icons';
-import { dayTick, hhmm, ticksFor } from '../timeAxis';
+import { dayTick, hhmm, ticksFor } from '../../../timeAxis';
 
 const RANGES = [
   { id: '6', label: '6 h', hours: 6, tickS: 3600 },

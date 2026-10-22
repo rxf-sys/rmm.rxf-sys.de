@@ -284,8 +284,8 @@
   grid-area: c;
 }
 /* One label column for every card, so the values line up across them. */
-.dv-ov .kv-list {
-  grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+.dv-cols {
+  --kv-label: minmax(0, 11rem);
 }
 @container (min-width: 760px) {
   .dv-cols {
@@ -316,10 +316,10 @@
 }
 @container (max-width: 439px) {
   /* Labels take a share instead of a fixed width, so a value like
-     „unbekannt" keeps room and does not break mid-word. */
-  .dv-ov .kv-list {
-    /* min-content: never narrower than the longest word („Sicherheitsupdates"). */
-    grid-template-columns: minmax(min-content, 2fr) minmax(0, 3fr);
+     „unbekannt" keeps room and does not break mid-word — but never
+     narrower than the longest word („Sicherheitsupdates"). */
+  .dv-cols {
+    --kv-label: minmax(min-content, 40%);
   }
 }
 /* Even rows: two per row, on a wide tab all in rows of three or four

@@ -1235,6 +1235,7 @@ kbd,
 .lc-tip {
   position: absolute;
   top: var(--sp-1);
+  left: var(--x);
   z-index: 2;
   display: flex;
   flex-direction: column;
@@ -1252,9 +1253,6 @@ kbd,
 }
 .lc-tip.flip {
   transform: translateX(calc(-100% - 12px));
-}
-.lc-tip {
-  left: var(--x);
 }
 /* Too narrow to sit beside the crosshair (a phone): centred over the plot,
    so it never runs past the panel. */

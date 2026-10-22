@@ -3,11 +3,11 @@ import type { CSSProperties, ReactNode } from 'react';
 import { api } from '../../../api/client';
 import { qk } from '../../../api/queryClient';
 import { LOAD_THRESHOLDS, loadLevel, type LoadKind } from '../../../deviceStatus';
-import { formatAgo, formatBytes, formatDateTime, formatRate, osLabel } from '../../../format';
+import { formatAgo, formatBytes, formatRate, osLabel } from '../../../format';
 import { IconArrowRight } from '../../../icons';
 import { useNow } from '../../../hooks/useNow';
 import type { DeviceDetail } from '../../../types';
-import { KeyValue, Meter, Panel, StatusBadge } from '../../../ui';
+import { Ago, KeyValue, Meter, Panel, StatusBadge } from '../../../ui';
 import type { TabId } from '../deviceTabs';
 import { isRustdeskId } from '../../../remoteDesk';
 import { readHardware, readSoftware } from '../inventory';
@@ -82,7 +82,7 @@ export function OverviewTab({ detail, isOperator, onGoTab }: { detail: DeviceDet
   const glance: [ReactNode, ReactNode][] = [
     [
       'Erreichbar',
-      d.connected ? 'verbunden' : live ? 'online, Verbindung getrennt' : `offline seit ${formatAgo(d.last_seen_at)}`,
+      d.connected ? 'verbunden' : live ? 'online, Verbindung getrennt' : `offline seit ${formatAgo(d.last_seen_at, now)}`,
     ],
   ];
   if (live && hb.logged_in_user) glance.push(['Angemeldet', hb.logged_in_user]);
@@ -123,7 +123,7 @@ export function OverviewTab({ detail, isOperator, onGoTab }: { detail: DeviceDet
   if (hw.serial) facts.push(['Seriennummer', <span className="num">{hw.serial}</span>]);
   if (hw.cpu_model) facts.push(['Prozessor', hw.cpu_model]);
   if (d.owner_label) facts.push(['Besitzer', d.owner_label]);
-  facts.push(['Aufgenommen', <span title={formatDateTime(d.created_at)}>{formatAgo(d.created_at, now)}</span>]);
+  facts.push(['Aufgenommen', <Ago ts={d.created_at} now={now} />]);
 
   const protection: [string, string | undefined][] = [
     ['Firewall', security.firewall],

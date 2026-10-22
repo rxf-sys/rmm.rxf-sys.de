@@ -163,8 +163,6 @@ html {
 }
 .rail-rollout .mono {
   color: var(--shell-tx);
-  /* .mono shrinks to 0.94em; inside 11px text that is below 11px. */
-  font-size: 1em;
 }
 .rail-rollout-bar {
   height: 3px;
@@ -420,7 +418,9 @@ h3.panel-title {
 
 .kv-list {
   display: grid;
-  grid-template-columns: minmax(96px, max-content) minmax(0, 1fr);
+  /* --kv-label lets a page give every card the same label column, so the
+     values line up across cards (device overview). */
+  grid-template-columns: var(--kv-label, minmax(96px, max-content)) minmax(0, 1fr);
   gap: var(--sp-2) var(--sp-4);
   margin: 0;
 }

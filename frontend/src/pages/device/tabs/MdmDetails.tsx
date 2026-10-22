@@ -2,18 +2,22 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { api } from '../../../api/client';
 import { qk } from '../../../api/queryClient';
-import { formatAgo, formatDateTime } from '../../../format';
-import { MANAGED_APP_STATUS, MDM_COMMAND_LABEL, MDM_COMMAND_STATUS, MDM_PERMISSION } from '../../../mdm';
-import type { DeviceMdm, MdmBinding, MdmPermission } from '../../../types';
-import { Panel, StatusBadge, Switch } from '../../../ui';
+import {
+  IOS_STATUS,
+  MANAGED_APP_STATUS,
+  MDM_COMMAND_LABEL,
+  MDM_COMMAND_STATUS,
+  MDM_PERMISSION,
+  MDM_SECURITY_INFO_LABELS,
+  formatMdmInfo,
+  securityRows,
+} from '../../../mdm';
+import type { Device, DeviceMdm, MdmBinding, MdmPermission } from '../../../types';
+import { Ago, KeyValue, Panel, StatusBadge, Switch } from '../../../ui';
 import { notify } from '../../../ui/toast';
 
 const fmt = new Intl.NumberFormat('de-DE');
 const MB = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 });
-
-function ago(ts: number | null, now: number): ReactNode {
-  return ts ? <span title={formatDateTime(ts)}>{formatAgo(ts, now)}</span> : <span className="muted">nie</span>;
-}
 
 /** Per-phone permissions. Admins switch, everyone else reads. */
 export function MdmPermissions({ deviceId, mdm, isAdmin }: { deviceId: number; mdm: DeviceMdm; isAdmin: boolean }) {
@@ -125,7 +129,7 @@ export function MdmApps({ binding, denied, now }: { binding: MdmBinding; denied:
               ))}
             </ul>
           )}
-          <p className="dv-note">Stand {ago(binding.apps_at, now)}.</p>
+          <p className="dv-note">Stand <Ago ts={binding.apps_at} now={now} />.</p>
         </>
       )}
     </Panel>
@@ -160,7 +164,7 @@ export function MdmProfiles({ binding, now }: { binding: MdmBinding; now: number
               </li>
             ))}
           </ul>
-          <p className="dv-note">Stand {ago(binding.profiles_at ?? binding.certificates_at, now)}.</p>
+          <p className="dv-note">Stand <Ago ts={binding.profiles_at ?? binding.certificates_at} now={now} />.</p>
         </>
       )}
     </Panel>
@@ -180,7 +184,7 @@ export function MdmCommands({ mdm, now }: { mdm: DeviceMdm; now: number }) {
               <span className="dv-mdm-item-name">{MDM_COMMAND_LABEL[c.request_type] ?? c.request_type}</span>
               <span className="muted">
                 {c.created_by === 'automation' ? 'automatisch' : c.created_by === 'system' ? 'nach Registrierung' : c.created_by} ·{' '}
-                {ago(c.created_at, now)}
+                <Ago ts={c.created_at} now={now} />
                 {c.error && <> · {c.error}</>}
               </span>
               <StatusBadge kind={st.kind} label={st.label} size={12} />
@@ -188,6 +192,41 @@ export function MdmCommands({ mdm, now }: { mdm: DeviceMdm; now: number }) {
           );
         })}
       </ul>
+    </Panel>
+  );
+}
+
+/** What the phone says about its protection: passcode, encryption, Find My,
+ *  backup and how current iOS is. A failing check reads as a warning word
+ *  with its icon, not as coloured text. */
+export function MdmSecurityPanel({ device, binding, now }: { device: Device; binding: MdmBinding; now: number }) {
+  const rows: [ReactNode, ReactNode][] = securityRows(binding.security).map((r) => [
+    r.label,
+    r.ok === null ? <span className="muted">{r.text}</span> : <StatusBadge kind={r.ok ? 'ok' : 'warn'} label={r.text} plain />,
+  ]);
+  for (const [key, label] of MDM_SECURITY_INFO_LABELS) {
+    const value = binding.info[key];
+    if (value === undefined) continue;
+    rows.push([label, key === 'LastCloudBackupDate' && typeof value === 'number' ? <Ago ts={value} now={now} /> : formatMdmInfo(key, value)]);
+  }
+  const ios = device.mdm;
+  if (ios?.os_version) {
+    const st = IOS_STATUS[ios.os_status];
+    rows.push([
+      'iOS-Stand',
+      <span className="dv-mdm-ios">
+        <StatusBadge kind={st.kind} label={st.label} plain />
+        {ios.os_latest && ios.os_status !== 'current' && <span className="muted">neueste: {ios.os_latest}</span>}
+      </span>,
+    ]);
+  }
+  return (
+    <Panel title="Sicherheit" meta={rows.length > 0 ? <>Stand <Ago ts={binding.security_at ?? binding.info_at} now={now} /></> : undefined}>
+      {rows.length > 0 ? (
+        <KeyValue rows={rows} />
+      ) : (
+        <p className="dv-note">Der Sicherheitsstatus ist angefragt und kommt beim nächsten Kontakt.</p>
+      )}
     </Panel>
   );
 }

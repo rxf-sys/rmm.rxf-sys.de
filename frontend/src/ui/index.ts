@@ -1,3 +1,4 @@
+export { Ago } from './Ago';
 export { Dot } from './legacy';
 export { EmptyState } from './EmptyState';
 export { ErrorNote } from './ErrorNote';

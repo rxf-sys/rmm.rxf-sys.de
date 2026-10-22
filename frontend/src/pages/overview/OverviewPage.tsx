@@ -11,9 +11,9 @@ import type { Fleet } from '../../hooks/useFleet';
 import { IconBell, IconChevronRight, IconPlus, IconShield, IconStatusDanger, IconStatusOk } from '../../icons';
 import { buildTasks, verdict, type OverviewTask, type TaskTarget } from '../../overviewTasks';
 import { PAGE_PATH, devicePath, type PageId } from '../../routes';
+import { hhmm, hourTick, ticksFor } from '../../timeAxis';
 import type { Account } from '../../types';
 import { EmptyState, ErrorNote, LineChart, PageHeader, Panel, Skeleton, StatusBadge, type StatusKind } from '../../ui';
-import { dayTick, ticksFor } from '../device/timeAxis';
 import { FleetBoard } from './FleetBoard';
 
 interface Props {
@@ -41,7 +41,6 @@ function greeting(): string {
   return 'Guten Abend';
 }
 
-const hhmm = (ts: number) => new Date(ts * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 const dayTime = (ts: number) =>
   new Date(ts * 1000).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -183,7 +182,6 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
   const axis = percentAxis(Math.max(0, ...samples.map((s) => Math.max(s.cpu_avg, s.mem_avg))));
   // Local hours, like the device history: 00, 06, 12, 18 — not UTC's 02, 08.
   const ticks = ticksFor(from, now, 6 * 3600);
-  const tickLabel = (ts: number) => (new Date(ts * 1000).getHours() === 0 ? dayTick(ts) : hhmm(ts));
   const mean = samples.length ? samples.reduce((a, s) => a + s.cpu_avg, 0) / samples.length : 0;
   const peak = samples.reduce<(typeof samples)[number] | null>((a, s) => (!a || s.cpu_avg > a.cpu_avg ? s : a), null);
 
@@ -311,7 +309,7 @@ export function OverviewPage({ fleet, user, onOpenEnroll, canEnroll }: Props) {
                   yStep={axis.step}
                   summary={`Flottenlast über ${CHART_HOURS} Stunden: CPU im Mittel ${Math.round(mean)} Prozent${peak ? `, Spitze ${Math.round(peak.cpu_avg)} Prozent um ${hhmm(peak.ts)}` : ''}.`}
                   formatTime={(ts) => `${dayTime(ts)} · ${samples.find((s) => s.ts === ts)?.devices ?? 0} Geräte`}
-                  formatTick={tickLabel}
+                  formatTick={hourTick}
                   ticks={ticks}
                   series={[
                     { key: 'cpu', label: 'CPU', color: 'var(--s1)', points: samples.map((s) => ({ ts: s.ts, v: s.cpu_avg })) },

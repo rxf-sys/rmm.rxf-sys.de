@@ -3,16 +3,13 @@ import type { ReactNode } from 'react';
 import { api } from '../../../api/client';
 import { qk } from '../../../api/queryClient';
 import { ownershipLabel } from '../../../deviceClass';
-import { formatAgo, formatDateTime, osLabel } from '../../../format';
+import { osLabel } from '../../../format';
 import { useNow } from '../../../hooks/useNow';
 import { MDM_INFO_LABELS, MDM_SYNCED_INFO, formatMdmInfo, isAppleMobile } from '../../../mdm';
 import type { Device } from '../../../types';
-import { ErrorNote, KeyValue, Panel, SkeletonRows, StatusBadge } from '../../../ui';
+import { Ago, ErrorNote, KeyValue, Panel, SkeletonRows, StatusBadge } from '../../../ui';
 import type { TabId } from '../deviceTabs';
-import { MdmSecurityPanel } from './MdmData';
-import { MdmApps, MdmProfiles } from './MdmDetails';
-
-const ago = (ts: number, now?: number) => <span title={formatDateTime(ts)}>{formatAgo(ts, now)}</span>;
+import { MdmApps, MdmProfiles, MdmSecurityPanel } from './MdmDetails';
 
 /**
  * The overview of a phone or tablet.
@@ -56,7 +53,7 @@ export function MobileOverviewTab({
   ];
   if (device.serial) rows.push(['Seriennummer', <span className="num">{device.serial}</span>]);
   if (device.imei) rows.push(['IMEI', <span className="num">{device.imei}</span>]);
-  rows.push(['Angelegt', ago(device.created_at, now)]);
+  rows.push(['Angelegt', <Ago ts={device.created_at} now={now} />]);
   // What the phone reports beyond the columns above, in the same list.
   const reported: [ReactNode, ReactNode][] = binding
     ? MDM_INFO_LABELS.flatMap(([key, label]) => {
@@ -87,13 +84,9 @@ export function MobileOverviewTab({
                 rows={[
                   [
                     'Erreichbar',
-                    device.mdm.reachable ? (
-                      <StatusBadge kind="ok" label="ja" plain />
-                    ) : (
-                      <StatusBadge kind="warn" label="nein" plain />
-                    ),
+                    <StatusBadge kind={device.mdm.reachable ? 'ok' : 'warn'} label={device.mdm.reachable ? 'ja' : 'nein'} plain />,
                   ],
-                  ['Letzter Kontakt', ago(device.mdm.last_seen_at, now)],
+                  ['Letzter Kontakt', <Ago ts={device.mdm.last_seen_at} now={now} />],
                 ]}
               />
               <p className="dv-note">
@@ -104,7 +97,7 @@ export function MobileOverviewTab({
           ) : (
             <Panel title="Pflegestand">
               <KeyValue
-                rows={[['Zuletzt geprüft', device.checked_at ? ago(device.checked_at, now) : <span className="muted">nie</span>]]}
+                rows={[['Zuletzt geprüft', <Ago ts={device.checked_at} now={now} />]]}
               />
               <p className="dv-note">
                 Dieses Gerät wird ohne Agent geführt: keine Auslastung, kein Update-Scan, keine Fernbefehle. Alles hier
@@ -112,13 +105,14 @@ export function MobileOverviewTab({
               </p>
             </Panel>
           )}
-          {managed && mdm.error ? (
-            <ErrorNote error={mdm.error} onRetry={() => void mdm.refetch()} />
-          ) : managed && mdm.isPending ? (
-            <SkeletonRows rows={3} />
-          ) : (
-            binding && <MdmSecurityPanel device={device} binding={binding} now={now} />
-          )}
+          {managed &&
+            (mdm.error ? (
+              <ErrorNote error={mdm.error} onRetry={() => void mdm.refetch()} />
+            ) : mdm.isPending ? (
+              <SkeletonRows rows={3} />
+            ) : (
+              binding && <MdmSecurityPanel device={device} binding={binding} now={now} />
+            ))}
           {device.notes && (
             <Panel title="Notiz">
               <p className="dv-notes">{device.notes}</p>
@@ -129,7 +123,7 @@ export function MobileOverviewTab({
         <div className="dv-col dv-col-b">
           <Panel
             title="Stammdaten"
-            meta={binding?.info_at ? <>gemeldet {ago(binding.info_at, now)}</> : undefined}
+            meta={binding?.info_at ? <>gemeldet <Ago ts={binding.info_at} now={now} /></> : undefined}
             actions={
               isOperator && (
                 <button type="button" className="btn btn-sm" onClick={onEdit}>
@@ -145,9 +139,9 @@ export function MobileOverviewTab({
           </Panel>
         </div>
 
-        {binding && mdm.data && (
+        {binding && (
           <div className="dv-col dv-col-c">
-            <MdmApps binding={binding} denied={mdm.data.denied.includes('apps')} now={now} />
+            <MdmApps binding={binding} denied={mdm.data?.denied.includes('apps') ?? false} now={now} />
             <MdmProfiles binding={binding} now={now} />
           </div>
         )}
