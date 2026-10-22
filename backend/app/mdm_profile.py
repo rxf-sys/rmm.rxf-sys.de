@@ -37,6 +37,7 @@ ACCESS_ERASE = 8
 ACCESS_DEVICE_INFO = 16
 ACCESS_APPS_INSPECT = 256
 ACCESS_SECURITY = 1024
+ACCESS_APP_MANAGE = 4096
 # What profiles from before 2026-10 gave private devices: everything except
 # "Device erase". Phones enrolled with it keep it until enrolled again.
 ACCESS_PRIVATE = ACCESS_ALL & ~ACCESS_ERASE

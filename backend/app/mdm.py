@@ -115,6 +115,9 @@ _DEVICE_COLUMNS = (
     ("certs_json", "TEXT NOT NULL DEFAULT '[]'"),
     ("certs_at", "INTEGER"),
     ("refresh_at", "INTEGER"),
+    ("pinged_at", "INTEGER"),
+    ("managed_apps_json", "TEXT NOT NULL DEFAULT '[]'"),
+    ("managed_apps_at", "INTEGER"),
     ("unlock_token", "BLOB"),
     ("unlock_token_at", "INTEGER"),
     ("identity_issued_at", "INTEGER"),
@@ -435,6 +438,9 @@ def _public_binding(row: aiosqlite.Row) -> dict[str, Any]:
         "certificates": _json(row["certs_json"], []),
         "certificates_at": row["certs_at"],
         "refresh_at": row["refresh_at"],
+        "pinged_at": row["pinged_at"],
+        "managed_apps": _json(row["managed_apps_json"], []),
+        "managed_apps_at": row["managed_apps_at"],
         "unlock_token": row["unlock_token"] is not None,
         "unlock_token_at": row["unlock_token_at"],
         "identity_issued_at": row["identity_issued_at"],
@@ -480,6 +486,18 @@ async def unlock_token(device_id: int) -> bytes | None:
 async def enrollment_ref(enrollment_id: int) -> str | None:
     row = await _enrollment_by("id", enrollment_id)
     return str(row["ref"]) if row else None
+
+
+async def mark_pinged(device_ids: list[int], now: int) -> None:
+    if not device_ids:
+        return
+    marks = ",".join("?" * len(device_ids))
+    async with _connect() as db:
+        await db.execute(
+            f"UPDATE mdm_devices SET pinged_at = ? WHERE device_id IN ({marks})",  # noqa: S608 - placeholders only
+            (now, *device_ids),
+        )
+        await db.commit()
 
 
 async def mark_refresh(device_id: int, now: int) -> None:
@@ -572,7 +590,7 @@ async def prune_commands(older_than_s: int) -> int:
 # ---------------------------------------------------------------------------
 
 #: Capabilities an admin can switch off for one phone.
-PERMISSIONS = ("lock", "erase", "clear_passcode", "apps")
+PERMISSIONS = ("lock", "erase", "clear_passcode", "apps", "profiles", "install_apps", "os_update")
 
 
 async def denied(device_id: int) -> set[str]:
@@ -860,6 +878,7 @@ _RESULT_COLUMNS: dict[str, tuple[Any, str, str]] = {
     "InstalledApplicationList": (mdm_results.installed_apps, "apps_json", "apps_at"),
     "ProfileList": (mdm_results.profiles, "profiles_json", "profiles_at"),
     "CertificateList": (mdm_results.certificates, "certs_json", "certs_at"),
+    "ManagedApplicationList": (mdm_results.managed_apps, "managed_apps_json", "managed_apps_at"),
 }
 
 _STATUS = {
@@ -929,6 +948,8 @@ async def _on_connect(udid: str, raw: dict[str, Any], now: int) -> dict[str, Any
         await _store_json(device_id, column, at_column, value, now)
         if request_type == "CertificateList":
             await _update_identity_expiry(device_id, value)
+    elif request_type == "InstallApplication":
+        result["app"] = mdm_results.install_app_state(raw)
     return result
 
 
@@ -940,6 +961,7 @@ def _guess_type(raw: dict[str, Any]) -> str:
         ("InstalledApplicationList", "InstalledApplicationList"),
         ("ProfileList", "ProfileList"),
         ("CertificateList", "CertificateList"),
+        ("ManagedApplicationList", "ManagedApplicationList"),
     ):
         if key in raw:
             return request_type
@@ -951,7 +973,9 @@ async def _store_json(device_id: int, column: str, at_column: str, value: Any, n
     if len(payload.encode("utf-8")) > MAX_RESULT_BYTES:
         log.warning("mdm.result_too_large", device_id=device_id, column=column)
         return
-    if column not in ("info_json", "security_json", "apps_json", "profiles_json", "certs_json"):
+    if column not in (
+        "info_json", "security_json", "apps_json", "profiles_json", "certs_json", "managed_apps_json"
+    ):
         raise ValueError(column)
     async with _connect() as db:
         await db.execute(

@@ -123,7 +123,7 @@ async def test_inventory_results_land_where_they_belong(
     left = (b["identity_expires_at"] - time.time()) / 86400
     assert expiry_days - 2 < left < expiry_days + 1
     assert all(c["status"] == "acknowledged" for c in state["commands"]
-               if c["request_type"] != "DeviceInformation")
+               if c["request_type"] not in ("DeviceInformation", "ManagedApplicationList"))
 
     # The device list carries the summary the status badge needs.
     d = (await admin_client.get(f"/api/devices/{did}")).json()["device"]

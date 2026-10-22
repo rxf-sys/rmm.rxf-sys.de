@@ -28,7 +28,7 @@ import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
-from .. import device_policy, devices, mdm, mdm_commands, mdm_profile, nanomdm
+from .. import device_policy, devices, mdm, mdm_commands, mdm_configs, mdm_ddm, mdm_profile, nanomdm
 from ..audit import record as audit_record
 from ..auth import device_visible, require_admin, require_operator, verify_session
 from ..config import Settings, get_settings
@@ -77,9 +77,16 @@ def _enroll_url(settings: Settings, raw_token: str) -> str:
 
 #: Request types whose result is worth an audit line. The inventory queries
 #: run daily for every phone; their answers would bury everything else.
-_AUDITED_RESULTS = ("DeviceLock", "EraseDevice", "ClearPasscode", "InstallProfile")
+_AUDITED_RESULTS = (
+    "DeviceLock",
+    "EraseDevice",
+    "ClearPasscode",
+    "InstallProfile",
+    "RemoveProfile",
+    "InstallApplication",
+)
 
-_ACTIONS = ("refresh", "lock", "erase", "clear_passcode", "renew")
+_ACTIONS = ("refresh", "lock", "erase", "clear_passcode", "renew", "profiles", "install_app", "os_update")
 
 
 @router.get("/api/devices/{device_id}/mdm")
@@ -119,6 +126,9 @@ async def get_device_mdm(
         # top; the dashboard hides what the user's role cannot do.
         "actions": {a: mdm_commands.deny_reason(binding, denied, a) for a in _ACTIONS},
         "commands": await mdm.list_commands(device_id),
+        "configs": await mdm_configs.for_device(device_id),
+        "os_update": await mdm_ddm.get(device_id),
+        "reachable": bool(binding and mdm_commands.summary(binding, settings)["reachable"]),
     }
 
 
@@ -512,6 +522,18 @@ async def _on_result(device_id: int, result: dict[str, Any], settings: Settings)
             status=outcome,
             error=result.get("error") or None,
         )
+    if request_type in ("InstallProfile", "RemoveProfile") and not result.get("renewal"):
+        assigned = await mdm_configs.on_result(
+            device_id,
+            str(result.get("command_uuid") or ""),
+            outcome == "acknowledged",
+            result.get("error") or "",
+        )
+        if assigned is not None and outcome == "acknowledged":
+            # The profile list on the device page should show it right away.
+            await _follow_up(settings, device_id, "ProfileList")
+    if request_type == "InstallApplication" and outcome == "acknowledged":
+        await _follow_up(settings, device_id, "ManagedApplicationList")
     if result.get("renewal"):
         ok = outcome == "acknowledged"
         await audit_record(
@@ -528,6 +550,16 @@ async def _on_result(device_id: int, result: dict[str, Any], settings: Settings)
                 await mdm_commands.send(settings, device_id, binding["udid"], "CertificateList", "system")
             except nanomdm.NanoMDMError:
                 log.warning("mdm.certificate_list_failed", device_id=device_id)
+
+
+async def _follow_up(settings: Settings, device_id: int, request_type: str) -> None:
+    binding = await mdm.binding_for_device(device_id)
+    if binding is None:
+        return
+    try:
+        await mdm_commands.send(settings, device_id, binding["udid"], request_type, "system")
+    except nanomdm.NanoMDMError:
+        log.warning("mdm.follow_up_failed", device_id=device_id, request_type=request_type)
 
 
 async def _apply_fields(device_id: int, fields: dict[str, str], settings: Settings) -> None:

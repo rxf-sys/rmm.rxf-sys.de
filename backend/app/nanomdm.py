@@ -1,8 +1,9 @@
 """Minimal client for the NanoMDM management API.
 
-Only what the backend needs: enqueue a raw command plist for one enrollment.
-NanoMDM sends the APNs push itself after enqueueing (unless ``nopush`` is
-set), so there is no separate push call.
+Only what the backend needs: enqueue a raw command plist for one enrollment,
+and push without a command. NanoMDM sends the APNs push itself after
+enqueueing (unless ``nopush`` is set); the bare push is the reachability
+ping — a phone that is on answers it with an Idle check-in.
 
 The API lives at ``nanomdm:9000/v1/*`` on the internal ``rmm`` network,
 protected by Basic Auth (user ``nanomdm``, password ``NANOMDM_API_KEY``).
@@ -79,3 +80,39 @@ async def enqueue(
     if isinstance(entry, dict) and entry.get("command_error"):
         raise NanoMDMError(f"Kommando abgelehnt: {entry['command_error']}")
     return result
+
+
+async def push(
+    settings: Settings,
+    enrollment_ids: list[str],
+    *,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> dict[str, str]:
+    """APNs push to several enrollments at once → id → error ('' = sent).
+
+    Raises ``NanoMDMError`` only when NanoMDM itself is unreachable or
+    refuses; a single unknown enrollment is reported in the result."""
+    if not settings.nanomdm_api_key:
+        raise NanoMDMError("NANOMDM_API_KEY ist nicht gesetzt")
+    if not enrollment_ids:
+        return {}
+    ids = ",".join(quote(e, safe="") for e in enrollment_ids)
+    url = f"{settings.nanomdm_url.rstrip('/')}/v1/push/{ids}"
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT_S, transport=transport) as client:
+            r = await client.get(url, auth=(API_USER, settings.nanomdm_api_key))
+    except httpx.HTTPError as e:
+        raise NanoMDMError(f"NanoMDM nicht erreichbar: {type(e).__name__}") from e
+    if r.status_code >= 300:
+        raise NanoMDMError(f"NanoMDM antwortet mit {r.status_code}")
+    try:
+        result = r.json()
+    except ValueError:
+        result = {}
+    status = result.get("status") if isinstance(result, dict) else None
+    out: dict[str, str] = {}
+    for eid in enrollment_ids:
+        entry = status.get(eid) if isinstance(status, dict) else None
+        error = entry.get("push_error") if isinstance(entry, dict) else None
+        out[eid] = str(error) if error else ""
+    return out

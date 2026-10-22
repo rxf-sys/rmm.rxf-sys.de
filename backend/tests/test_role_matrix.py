@@ -47,6 +47,7 @@ from app import (
     automation,
     credentials,
     devices,
+    mdm_configs,
     metrics,
     pending_actions,
     persons,
@@ -98,6 +99,13 @@ class Endpoint:
 
     def __str__(self) -> str:
         return f"{self.method} {self.path}"
+
+
+_WEBCLIP: dict[str, Any] = {
+    "name": "Dashboard",
+    "kind": "webclip",
+    "settings": {"label": "Vulpexa", "url": "https://rmm.example.org"},
+}
 
 
 def _const(payload: dict[str, Any]) -> Body:
@@ -217,6 +225,14 @@ MATRIX: tuple[Endpoint, ...] = (
     Endpoint("POST", "/api/devices/{device_id}/mdm/clear-passcode", ADMIN, 409),
     Endpoint("POST", "/api/devices/{device_id}/mdm/renew", ADMIN, 409),
     Endpoint("PUT", "/api/devices/{device_id}/mdm/permissions", ADMIN, 409, _const({"denied": []})),
+    Endpoint("POST", "/api/devices/{device_id}/mdm/apps", OPERATOR, 409, _const({"store": "874139669"})),
+    Endpoint("PUT", "/api/devices/{device_id}/mdm/os-update", ADMIN, 409, _const({})),
+    Endpoint("POST", "/api/devices/{device_id}/mdm/configs", ADMIN, 409, _const({"config_id": 1})),
+    Endpoint("DELETE", "/api/devices/{device_id}/mdm/configs/{config_id}", ADMIN, 409),
+    # --- MDM profile templates (admin) ---
+    Endpoint("POST", "/api/mdm/configs", ADMIN, 201, _const(_WEBCLIP)),
+    Endpoint("PUT", "/api/mdm/configs/{config_id}", ADMIN, 200, _const(_WEBCLIP)),
+    Endpoint("DELETE", "/api/mdm/configs/{config_id}", ADMIN, 200),
     # --- Accounts and settings (admin) ---
     Endpoint(
         "POST",
@@ -261,6 +277,7 @@ _EXCLUDED: dict[tuple[str, str], str] = {
     # (test_mdm.py).
     ("POST", "/api/mdm/scep/verify"): "scep verifier, bearer token",
     ("POST", "/api/mdm/webhook"): "NanoMDM webhook, HMAC signature",
+    ("PUT", "/api/mdm/ddm/{endpoint:path}"): "NanoMDM declarative management forward, HMAC signature",
 }
 
 # WebSocket routes and where their authentication is tested. Listed so a new
@@ -303,6 +320,10 @@ async def world(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> dict[st
     target = await accounts.create_user("ziel", "ziel-passwort-1", role="viewer")
     alert_id = await alerts._fire(device_id, "disk", "Platte voll")
     action, _ = await pending_actions.create(device_id, "patch_install", created_by="seed")
+    config = await mdm_configs.create(
+        "Matrix", "webclip", {"label": "L", "url": "https://x.example", "full_screen": False,
+                              "removable": True}, None, "seed"
+    )
     return {
         "person_id": person["id"],
         "device_id": device_id,
@@ -314,6 +335,7 @@ async def world(client: AsyncClient, monkeypatch: pytest.MonkeyPatch) -> dict[st
         "user_id": target["id"],
         "alert_id": alert_id,
         "action_id": action["id"],
+        "config_id": config["id"],
         "totp_secret": pyotp.random_base32(),
         # Replaced by a real prefix of the caller's own spare session.
         "token_prefix": "deadbeef",

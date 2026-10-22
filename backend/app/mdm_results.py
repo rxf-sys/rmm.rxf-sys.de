@@ -129,6 +129,32 @@ def installed_apps(raw: dict[str, Any]) -> list[dict[str, Any]]:
     return apps[:MAX_APPS]
 
 
+def managed_apps(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    """ManagedApplicationList: the apps Vulpexa installed, with their state
+    (Prompting, Installing, Managed, UserRejected, Failed, …)."""
+    items = raw.get("ManagedApplicationList")
+    if not isinstance(items, dict):
+        return []
+    out = []
+    for bundle_id, item in items.items():
+        if not isinstance(item, dict) or not isinstance(bundle_id, str):
+            continue
+        out.append(
+            {
+                "identifier": bundle_id[:200],
+                "status": _text(item.get("Status"), 40),
+                "has_update": item.get("IsValidated") is False,
+            }
+        )
+    out.sort(key=lambda a: str(a["identifier"]))
+    return out[:MAX_APPS]
+
+
+def install_app_state(raw: dict[str, Any]) -> dict[str, str]:
+    """What InstallApplication answered: bundle id and first state."""
+    return {"identifier": _text(raw.get("Identifier"), 200), "state": _text(raw.get("State"), 40)}
+
+
 def profiles(raw: dict[str, Any]) -> list[dict[str, Any]]:
     items = raw.get("ProfileList")
     if not isinstance(items, list):
