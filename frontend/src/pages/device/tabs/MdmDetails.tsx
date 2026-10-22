@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { api } from '../../../api/client';
 import { qk } from '../../../api/queryClient';
 import { formatAgo, formatDateTime } from '../../../format';
-import { MDM_COMMAND_LABEL, MDM_COMMAND_STATUS, MDM_PERMISSION } from '../../../mdm';
+import { MANAGED_APP_STATUS, MDM_COMMAND_LABEL, MDM_COMMAND_STATUS, MDM_PERMISSION } from '../../../mdm';
 import type { DeviceMdm, MdmBinding, MdmPermission } from '../../../types';
 import { Panel, StatusBadge, Switch } from '../../../ui';
 import { notify } from '../../../ui/toast';
@@ -63,12 +63,31 @@ export function MdmPermissions({ deviceId, mdm, isAdmin }: { deviceId: number; m
   );
 }
 
+/** Apps Vulpexa put on the phone, with where they stand. */
+function ManagedApps({ binding }: { binding: MdmBinding }) {
+  if (binding.managed_apps.length === 0) return null;
+  return (
+    <ul className="dv-mdm-list dv-mdm-managed" aria-label="Von Vulpexa installiert">
+      {binding.managed_apps.map((a) => {
+        const st = MANAGED_APP_STATUS[a.status] ?? { label: a.status || 'unbekannt', kind: 'neutral' as const };
+        return (
+          <li key={a.identifier}>
+            <span className="dv-mdm-item-name">{a.identifier}</span>
+            <StatusBadge kind={st.kind} label={st.label} size={12} />
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /** Installed apps, filterable — a phone has a few hundred. */
 export function MdmApps({ binding, denied, now }: { binding: MdmBinding; denied: boolean; now: number }) {
   const [q, setQ] = useState('');
   if (denied) {
     return (
       <Panel title="Apps">
+        <ManagedApps binding={binding} />
         <p className="dv-note">Die App-Liste ist für dieses Gerät abgeschaltet (MDM-Befugnisse).</p>
       </Panel>
     );
@@ -79,6 +98,7 @@ export function MdmApps({ binding, denied, now }: { binding: MdmBinding; denied:
     : binding.apps;
   return (
     <Panel title="Apps" meta={binding.apps.length ? `${fmt.format(binding.apps.length)} installiert` : undefined}>
+      <ManagedApps binding={binding} />
       {binding.apps.length === 0 ? (
         <p className="dv-note">Noch keine App-Liste — sie kommt mit der nächsten Inventar-Abfrage.</p>
       ) : (

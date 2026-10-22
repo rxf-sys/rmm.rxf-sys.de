@@ -71,29 +71,24 @@ export function osShort(os: string): string {
   return OS_SHORT[os] ?? os.slice(0, 3).toUpperCase();
 }
 
-/** Days without an MDM check-in before a managed phone counts as silent —
- *  the server's default for the "mdm_silent" rule (backend/app/automation.py). */
-export const MDM_SILENT_DAYS = 7;
+export type DeviceStatusKind = 'ok' | 'warn' | 'danger' | 'off' | 'noagent';
 
-export type DeviceStatusKind = 'ok' | 'warn' | 'danger' | 'off' | 'mdm' | 'noagent';
-
-/** Where a phone stands: managed (and when it last checked in), profile
- *  removed, silent, or kept by hand. ``now`` in seconds. */
-export function mobileState(d: Device, now: number): 'mdm' | 'removed' | 'silent' | 'manual' {
+/** Where a phone stands: reachable under MDM (checked in within two hours —
+ *  the server pings hourly), managed but out of reach, profile removed, or
+ *  kept by hand. The server decides `reachable`, so every screen agrees. */
+export function mobileState(d: Device): 'reachable' | 'unreachable' | 'removed' | 'manual' {
   const m = d.mdm;
   if (!m) return 'manual';
   if (m.checked_out_at) return 'removed';
-  if (now - m.last_seen_at > MDM_SILENT_DAYS * 86400) return 'silent';
-  return 'mdm';
+  return m.reachable ? 'reachable' : 'unreachable';
 }
 
 /** Status kind for StatusBadge. Phones have no heartbeat; under MDM their
- *  check-ins stand in for it. ``now`` defaults to the call time — callers that
- *  render use their own clock (useNow) so the badge ages with the page. */
-export function deviceStatusKind(d: Device, now: number = Date.now() / 1000): DeviceStatusKind {
+ *  check-ins stand in for it, so a reachable phone is simply OK. */
+export function deviceStatusKind(d: Device): DeviceStatusKind {
   if (d.device_class === 'mobile') {
-    const m = mobileState(d, now);
-    return m === 'mdm' ? 'mdm' : m === 'manual' ? 'noagent' : 'warn';
+    const m = mobileState(d);
+    return m === 'reachable' ? 'ok' : m === 'unreachable' ? 'off' : m === 'removed' ? 'warn' : 'noagent';
   }
   const s = deviceState(d);
   return s === 'off' ? 'off' : s === 'crit' ? 'danger' : s === 'warn' ? 'warn' : 'ok';
@@ -104,18 +99,13 @@ const STATUS_WORD: Record<DeviceStatusKind, string> = {
   warn: 'Warnung',
   danger: 'Kritisch',
   off: 'Offline',
-  mdm: 'MDM',
   noagent: 'Ohne Agent',
 };
 
 /** The word for a device's status, as shown next to its icon. */
-export function deviceStatusLabel(d: Device, now: number = Date.now() / 1000): string {
-  if (d.device_class === 'mobile') {
-    const m = mobileState(d, now);
-    if (m === 'removed') return 'Profil entfernt';
-    if (m === 'silent') return 'MDM stumm';
-  }
-  return STATUS_WORD[deviceStatusKind(d, now)];
+export function deviceStatusLabel(d: Device): string {
+  if (d.device_class === 'mobile' && mobileState(d) === 'removed') return 'Profil entfernt';
+  return STATUS_WORD[deviceStatusKind(d)];
 }
 
 /** Severity of an alert as the device's current state tells it: a disk

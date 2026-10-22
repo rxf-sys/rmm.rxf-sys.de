@@ -6,7 +6,16 @@
  */
 
 import { deviceClass } from './deviceClass';
-import type { Device, DeviceMdm, IosStatus, MdmCommandStatus, MdmEnrollmentState, MdmPermission } from './types';
+import type {
+  Device,
+  DeviceMdm,
+  IosStatus,
+  MdmAssignmentState,
+  MdmCommandStatus,
+  MdmConfigKind,
+  MdmEnrollmentState,
+  MdmPermission,
+} from './types';
 import type { StatusKind } from './ui';
 
 /** AccessRights bit "Device erase" (Apple MDM payload reference). */
@@ -139,7 +148,11 @@ export const MDM_COMMAND_LABEL: Record<string, string> = {
   DeviceLock: 'Sperren',
   EraseDevice: 'Löschen',
   ClearPasscode: 'Code entfernen',
-  InstallProfile: 'Zertifikat erneuern',
+  InstallProfile: 'Profil installieren',
+  RemoveProfile: 'Profil entfernen',
+  InstallApplication: 'App installieren',
+  ManagedApplicationList: 'Verwaltete Apps',
+  DeclarativeManagement: 'Deklarationen abgleichen',
 };
 
 export const MDM_COMMAND_STATUS: Record<MdmCommandStatus, { label: string; kind: StatusKind }> = {
@@ -155,4 +168,38 @@ export const MDM_PERMISSION: Record<MdmPermission, { label: string; text: string
   clear_passcode: { label: 'Code entfernen', text: 'Den Gerätecode löschen, wenn er vergessen wurde.' },
   erase: { label: 'Löschen', text: 'Das Gerät auf Werkseinstellungen zurücksetzen. Alle Daten sind danach weg.' },
   apps: { label: 'App-Liste', text: 'Abfragen, welche Apps installiert sind.' },
+  profiles: { label: 'Profile', text: 'WLAN, Code-Pflicht, Web-Clips und Konten aufs Gerät bringen.' },
+  install_apps: { label: 'Apps installieren', text: 'Apps aus dem App Store anbieten; das Gerät fragt den Nutzer.' },
+  os_update: { label: 'iOS-Update', text: 'Ein iOS-Update bis zu einem Termin erzwingen (Test).' },
+};
+
+/** States of an app Vulpexa installed (ManagedApplicationList). */
+export const MANAGED_APP_STATUS: Record<string, { label: string; kind: StatusKind }> = {
+  Managed: { label: 'installiert', kind: 'ok' },
+  Prompting: { label: 'wartet auf Zustimmung', kind: 'info' },
+  PromptingForLogin: { label: 'wartet auf Apple-ID', kind: 'info' },
+  Installing: { label: 'wird installiert', kind: 'info' },
+  Queued: { label: 'in der Warteschlange', kind: 'info' },
+  NeedsRedemption: { label: 'braucht Einlösung', kind: 'warn' },
+  UserRejected: { label: 'abgelehnt', kind: 'warn' },
+  UserInstalledApp: { label: 'vom Nutzer installiert', kind: 'neutral' },
+  ManagedButUninstalled: { label: 'vom Nutzer gelöscht', kind: 'warn' },
+  Failed: { label: 'fehlgeschlagen', kind: 'danger' },
+};
+
+/** Profile templates: how each kind is named. */
+export const CONFIG_KIND_LABEL: Record<MdmConfigKind, string> = {
+  passcode: 'Code-Pflicht',
+  wifi: 'WLAN',
+  webclip: 'Web-Clip',
+  mail: 'Mail-Konto',
+  caldav: 'Kalender-Konto',
+  carddav: 'Kontakte-Konto',
+};
+
+export const ASSIGNMENT_STATE: Record<MdmAssignmentState, { label: string; kind: StatusKind }> = {
+  installing: { label: 'wird installiert', kind: 'info' },
+  installed: { label: 'installiert', kind: 'ok' },
+  removing: { label: 'wird entfernt', kind: 'info' },
+  error: { label: 'Fehler', kind: 'danger' },
 };

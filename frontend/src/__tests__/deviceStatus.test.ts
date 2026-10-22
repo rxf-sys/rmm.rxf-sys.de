@@ -97,11 +97,11 @@ describe('hasProblem', () => {
 });
 
 describe('phone status', () => {
-  const now = 1_790_000_000;
   const mdm = (over: Partial<NonNullable<Device['mdm']>> = {}): Device['mdm'] => ({
-    enrolled_at: now - 86400,
-    last_seen_at: now - 3600,
+    enrolled_at: 1_790_000_000,
+    last_seen_at: 1_790_000_000,
     checked_out_at: null,
+    reachable: true,
     passcode_present: true,
     identity_expires_at: null,
     os_version: '18.6',
@@ -111,22 +111,20 @@ describe('phone status', () => {
   });
   const phone = (m: Device['mdm']) => device({ device_class: 'mobile', os: 'ios', online: false, mdm: m });
 
-  it('reads a managed phone by its MDM check-ins, not a heartbeat', () => {
-    expect(deviceStatusKind(phone(mdm()), now)).toBe('mdm');
-    expect(deviceStatusLabel(phone(mdm()), now)).toBe('MDM');
+  it('counts a reachable phone under MDM as OK', () => {
+    expect(deviceStatusKind(phone(mdm()))).toBe('ok');
+    expect(deviceStatusLabel(phone(mdm()))).toBe('OK');
   });
 
-  it('warns when the profile is gone or the phone is silent for a week', () => {
-    const removed = phone(mdm({ checked_out_at: now - 60 }));
-    expect(deviceStatusKind(removed, now)).toBe('warn');
-    expect(deviceStatusLabel(removed, now)).toBe('Profil entfernt');
-    const silent = phone(mdm({ last_seen_at: now - 8 * 86400 }));
-    expect(deviceStatusKind(silent, now)).toBe('warn');
-    expect(deviceStatusLabel(silent, now)).toBe('MDM stumm');
+  it('shows an unreachable phone as offline and a removed profile as a warning', () => {
+    expect(deviceStatusKind(phone(mdm({ reachable: false })))).toBe('off');
+    const removed = phone(mdm({ checked_out_at: 1_790_000_100, reachable: false }));
+    expect(deviceStatusKind(removed)).toBe('warn');
+    expect(deviceStatusLabel(removed)).toBe('Profil entfernt');
   });
 
   it('keeps "Ohne Agent" for a phone kept by hand', () => {
-    expect(deviceStatusKind(phone(null), now)).toBe('noagent');
-    expect(deviceStatusLabel(phone(undefined), now)).toBe('Ohne Agent');
+    expect(deviceStatusKind(phone(null))).toBe('noagent');
+    expect(deviceStatusLabel(phone(undefined))).toBe('Ohne Agent');
   });
 });

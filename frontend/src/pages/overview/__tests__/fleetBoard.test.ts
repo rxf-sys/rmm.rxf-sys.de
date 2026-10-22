@@ -90,38 +90,34 @@ describe('fleetBoard', () => {
       {},
       [],
     );
-    expect(countByKind(tiles)).toEqual({ danger: 0, warn: 0, off: 2, ok: 1, mdm: 0, noagent: 0 });
+    expect(countByKind(tiles)).toEqual({ danger: 0, warn: 0, off: 2, ok: 1, noagent: 0 });
     expect(filterTiles(tiles, 'off', null).map((t) => t.device.id)).toEqual([2, 3]);
     expect(filterTiles(tiles, 'off', 4).map((t) => t.device.id)).toEqual([2]);
     expect(filterTiles(tiles, 'alle', 4)).toHaveLength(2);
   });
 
-  it('puts a managed phone after the computers and a hand-kept one last', () => {
-    const now = 1_790_000_000;
-    const managed = device({
-      id: 7,
-      hostname: 'a-iphone',
-      device_class: 'mobile',
-      os: 'ios',
-      online: false,
-      mdm: {
-        enrolled_at: now - 86400,
-        last_seen_at: now - 60,
-        checked_out_at: null,
-        passcode_present: false,
-        identity_expires_at: null,
-        os_version: '18.6',
-        os_status: 'outdated',
-        os_latest: '26.0.1',
-      },
+  it('files a reachable phone under OK, an unreachable one under Offline', () => {
+    const summary = (reachable: boolean) => ({
+      enrolled_at: 1,
+      last_seen_at: 1,
+      checked_out_at: null,
+      reachable,
+      passcode_present: false,
+      identity_expires_at: null,
+      os_version: '18.6',
+      os_status: 'outdated' as const,
+      os_latest: '26.0.1',
     });
+    const phone = (id: number, reachable: boolean) =>
+      device({ id, hostname: `iphone-${id}`, device_class: 'mobile', os: 'ios', online: false, mdm: summary(reachable) });
     const manual = device({ id: 8, hostname: 'b-tablet', device_class: 'mobile', os: 'android', online: false });
-    const tiles = buildTiles([manual, managed, device({ id: 1 })], {}, [], now);
+    const tiles = buildTiles([manual, phone(7, true), phone(6, false)], {}, []);
     expect(tiles.map((t) => [t.device.id, t.kind])).toEqual([
-      [1, 'ok'],
-      [7, 'mdm'],
+      [6, 'off'],
+      [7, 'ok'],
       [8, 'noagent'],
     ]);
+    expect(filterTiles(tiles, 'ok', null).map((t) => t.device.id)).toEqual([7]);
     expect(tiles[1]?.load).toEqual([]);
   });
 });

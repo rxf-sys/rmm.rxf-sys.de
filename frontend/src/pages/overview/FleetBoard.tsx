@@ -70,11 +70,11 @@ function phoneFacts(d: Device, facts: Fact[]) {
     facts.push({ key: 'ios', tone: 'ok', icon: <IconShieldCheck size={13} />, text: 'iOS aktuell' });
 }
 
-function phoneNote(d: Device, tile: Tile): string {
+function phoneNote(d: Device): string {
   if (!d.mdm) return 'Ohne Agent, von Hand gepflegt.';
   if (d.mdm.checked_out_at) return 'Das MDM-Profil wurde vom Gerät entfernt.';
-  if (tile.kind === 'warn') return 'Meldet sich nicht mehr per MDM.';
-  return 'Per MDM verwaltet.';
+  if (!d.mdm.reachable) return 'Per MDM verwaltet, gerade nicht erreichbar.';
+  return 'Per MDM verwaltet, erreichbar.';
 }
 
 function Facts({ tile, now }: { tile: Tile; now: number }) {
@@ -161,10 +161,10 @@ function DeviceTile({ tile, personName, now }: { tile: Tile; personName: string;
       </div>
       {tile.load.length > 0 ? (
         <LoadBars tile={tile} />
+      ) : !isAgent(d) ? (
+        <p className="fb-note">{phoneNote(d)}</p>
       ) : tile.kind === 'off' ? (
         <p className="fb-note">Meldet sich nicht — keine aktuellen Messwerte.</p>
-      ) : !isAgent(d) ? (
-        <p className="fb-note">{phoneNote(d, tile)}</p>
       ) : null}
       <Facts tile={tile} now={now} />
     </li>
@@ -182,7 +182,7 @@ export function FleetBoard({ devices, alerts, patchSummary, persons, now }: Prop
   const [personId, setPersonId] = useState<number | null>(null);
   const [showAll, setShowAll] = useState(false);
 
-  const tiles = useMemo(() => buildTiles(devices, patchSummary, alerts, now), [devices, patchSummary, alerts, now]);
+  const tiles = useMemo(() => buildTiles(devices, patchSummary, alerts), [devices, patchSummary, alerts]);
   const personNames = useMemo(() => new Map(persons.map((p) => [p.id, p.name])), [persons]);
   const counts = useMemo(() => countByKind(filterTiles(tiles, 'alle', personId)), [tiles, personId]);
   const shown = filterTiles(tiles, filter, personId);

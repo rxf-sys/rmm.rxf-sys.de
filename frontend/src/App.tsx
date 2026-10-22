@@ -108,7 +108,7 @@ function bootSummary(devices: Device[]): BootSummary {
   let online = 0;
   for (const d of devices) {
     const k = deviceStatusKind(d);
-    if (k === 'noagent' || k === 'mdm') continue;
+    if (k === 'noagent') continue;
     mix[k] += 1;
     if (d.online) online += 1;
   }
