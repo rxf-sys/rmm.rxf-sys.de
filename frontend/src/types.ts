@@ -84,6 +84,8 @@ export interface MdmSummary {
   enrolled_at: number;
   last_seen_at: number;
   checked_out_at: number | null;
+  /** Checked in within the last two hours (the server pings hourly). */
+  reachable: boolean;
   /** From SecurityInfo; null until the phone answered. */
   passcode_present: boolean | null;
   identity_expires_at: number | null;
@@ -401,6 +403,10 @@ export interface MdmBinding {
   certificates_at: number | null;
   /** When the last inventory round went out. */
   refresh_at: number | null;
+  pinged_at: number | null;
+  /** Apps Vulpexa installed, with their state (Managed, Prompting, …). */
+  managed_apps: { identifier: string; status: string; has_update: boolean }[];
+  managed_apps_at: number | null;
   /** The phone sent an unlock token — needed for "Code entfernen". */
   unlock_token: boolean;
   unlock_token_at: number | null;
@@ -432,8 +438,67 @@ export interface MdmCertificate {
 }
 
 /** Capabilities an admin can switch off per phone. */
-export type MdmPermission = 'lock' | 'erase' | 'clear_passcode' | 'apps';
-export type MdmAction = 'refresh' | 'lock' | 'erase' | 'clear_passcode' | 'renew';
+export type MdmPermission = 'lock' | 'erase' | 'clear_passcode' | 'apps' | 'profiles' | 'install_apps' | 'os_update';
+export type MdmAction =
+  | 'refresh'
+  | 'lock'
+  | 'erase'
+  | 'clear_passcode'
+  | 'renew'
+  | 'profiles'
+  | 'install_app'
+  | 'os_update';
+
+export type MdmConfigKind = 'passcode' | 'wifi' | 'webclip' | 'mail' | 'caldav' | 'carddav';
+
+/** A profile template (backend/app/mdm_configs.py); passwords never leave
+ *  the server, `has_password` says whether one is stored. */
+export interface MdmConfig {
+  id: number;
+  name: string;
+  kind: MdmConfigKind;
+  settings: Record<string, string | number | boolean | null>;
+  has_password: boolean;
+  version: number;
+  created_by: string;
+  created_at: number;
+  updated_at: number;
+  /** Phones it is on (or on its way to). */
+  assigned: number;
+}
+
+export interface MdmConfigRequest {
+  name: string;
+  kind: MdmConfigKind;
+  settings: Record<string, string | number | boolean | null>;
+  /** Omitted/null on update keeps the stored password. */
+  password?: string | null;
+}
+
+export type MdmAssignmentState = 'installing' | 'installed' | 'removing' | 'error';
+
+export interface MdmAssignment {
+  config_id: number;
+  name: string;
+  kind: MdmConfigKind;
+  state: MdmAssignmentState;
+  version: number;
+  current_version: number;
+  error: string;
+  updated_by: string;
+  updated_at: number;
+}
+
+export interface MdmOsUpdate {
+  target_version: string;
+  target_at: string;
+  /** Flattened DDM status items, e.g. "softwareupdate.install-state". */
+  status: Record<string, string | number | boolean>;
+  status_at: number | null;
+  synced_at: number | null;
+  updated_by: string;
+  updated_at: number | null;
+}
 
 export type MdmCommandStatus = 'queued' | 'acknowledged' | 'error' | 'notnow' | 'failed';
 
@@ -462,6 +527,9 @@ export interface DeviceMdm {
   /** Why each command is unavailable; null = available (roles on top). */
   actions: Record<MdmAction, string | null>;
   commands: MdmCommand[];
+  configs: MdmAssignment[];
+  os_update: MdmOsUpdate;
+  reachable: boolean;
 }
 
 export interface MdmLockRequest {

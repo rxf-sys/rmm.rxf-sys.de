@@ -16,6 +16,7 @@ import { EmptyState, ErrorNote, PageHeader, Panel, SkeletonRows, type MenuEntry 
 import { notify } from '../../ui/toast';
 import { CreateAccountDialog, EmailDialog, PasswordDialog, PersonDialog } from './AccountDialogs';
 import { AccountCards, AccountTable } from './AccountRows';
+import { MdmProfilesPanel } from './MdmProfilesPanel';
 import { NtfyPanel } from './NtfyPanel';
 import { SessionsPanel } from './SessionsPanel';
 import { TwoFactorPanel } from './TwoFactorPanel';
@@ -276,7 +277,7 @@ export function AdminPage({ currentUser }: Props) {
       {confirmDialog}
       <PageHeader
         title="Administration"
-        subtitle="Konten und Rollen, deine eigene Anmeldung und wohin Alarme gemeldet werden."
+        subtitle="Konten und Rollen, deine eigene Anmeldung, wohin Alarme gemeldet werden und die Profile für iPhone und iPad."
         actions={
           <button ref={createRef} type="button" className="btn btn-primary" onClick={() => setDialog({ kind: 'create' })}>
             <IconPlus size={14} /> Konto anlegen
@@ -323,6 +324,8 @@ export function AdminPage({ currentUser }: Props) {
         </div>
         <NtfyPanel />
       </div>
+
+      <MdmProfilesPanel />
 
       {dialog?.kind === 'create' && <CreateAccountDialog accounts={accounts} persons={persons} onCreate={create} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'password' && <PasswordDialog account={dialog.account} onSave={setPassword(dialog.account)} onClose={() => setDialog(null)} />}

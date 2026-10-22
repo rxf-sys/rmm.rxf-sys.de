@@ -22,6 +22,7 @@ import { ActivityTab } from './tabs/ActivityTab';
 import { DiagnosticsTab } from './tabs/DiagnosticsTab';
 import { HistoryTab } from './tabs/HistoryTab';
 import { InventoryTab } from './tabs/InventoryTab';
+import { useMdmActions } from './tabs/useMdmActions';
 import { MdmTab } from './tabs/MdmTab';
 import { MobileOverviewTab } from './tabs/MobileOverviewTab';
 import { OverviewTab } from './tabs/OverviewTab';
@@ -64,6 +65,7 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
     refetchInterval: 15_000,
   });
   const refresh = () => void qc.invalidateQueries({ queryKey: qk.device(deviceId) });
+  const mdmActions = useMdmActions(deviceId, q.data?.device, { isAdmin, isOperator });
 
   // A 404 is the server's answer, not a hiccup: the device was deleted or
   // is no longer the viewer's to see. It wins over a cached copy, which a
@@ -205,7 +207,9 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
         onMaintenance={(m) => void maintenance(m)}
         onUpdateAgent={() => void updateAgent()}
         onRemove={() => void remove()}
+        extraMenu={mdmActions.entries}
       />
+      {mdmActions.dialogs}
 
       {d.agent_update_available && isOperator && (
         <div className="dv-banner" role="status">
@@ -241,7 +245,7 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
           (agent ? (
             <OverviewTab detail={detail} isOperator={isOperator} onGoTab={setTab} />
           ) : (
-            <MobileOverviewTab device={d} isOperator={isOperator} onEdit={() => setEditing(true)} />
+            <MobileOverviewTab device={d} isOperator={isOperator} onEdit={() => setEditing(true)} onGoTab={setTab} />
           ))}
         {tab === 'history' && <HistoryTab deviceId={deviceId} />}
         {tab === 'inventory' && <InventoryTab detail={detail} />}
@@ -252,7 +256,7 @@ export function DevicePage({ deviceId, patchCounts, isAdmin, isOperator, favorit
         )}
         {tab === 'diagnostics' && <DiagnosticsTab deviceId={deviceId} connected={d.connected} />}
         {tab === 'passwords' && <PasswordsTab deviceId={deviceId} />}
-        {tab === 'mdm' && <MdmTab device={d} isAdmin={isAdmin} isOperator={isOperator} />}
+        {tab === 'mdm' && <MdmTab device={d} isAdmin={isAdmin} />}
       </div>
 
       {editing && isOperator && (

@@ -243,6 +243,14 @@ describe('describeAudit', () => {
       'mdm.renewal_started',
       'mdm.renewal_done',
       'mdm.renewal_failed',
+      'mdm.config_created',
+      'mdm.config_updated',
+      'mdm.config_deleted',
+      'mdm.profile_install',
+      'mdm.profile_remove',
+      'mdm.app_install',
+      'mdm.os_update_set',
+      'mdm.os_update_cleared',
     ];
     for (const name of events) {
       expect(describeAudit(event({ event: name, device_id: 1 }))).not.toBe(name);

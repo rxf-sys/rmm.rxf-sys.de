@@ -86,7 +86,7 @@ Alle unter `frontend/src/ui/`, exportiert über `ui/index.ts`.
 |---|---|
 | `PageHeader` | Die eine `h1` einer Seite, Zähler, Untertitel, Hauptaktionen |
 | `Panel` | Betitelter Bereich (`h2`), flach mit einer Haarlinie; `padded={false}` für Listen und Tabellen |
-| `StatusBadge` | Zustand als Symbol + Wort; Arten `ok`, `warn`, `danger`, `off`, `mdm` (per MDM verwaltetes Telefon), `noagent` (von Hand gepflegt), `info`, `neutral` — `mdm` und `noagent` teilen das Telefon-Symbol, das Wort unterscheidet sie |
+| `StatusBadge` | Zustand als Symbol + Wort; Arten `ok`, `warn`, `danger`, `off`, `noagent` (von Hand gepflegtes Telefon), `info`, `neutral`. Ein Telefon unter MDM bekommt dieselben Arten wie ein Rechner — erreichbar `ok`, sonst `off` |
 | `KeyValue` | Beschriftung/Wert als Definitionsliste; Beschriftungen nehmen die Breite der längsten |
 | `Meter` | Auslastung mit Schwellenmarken; Farbe erst ab Schwelle |
 | `LineChart` | Zeitreihe: eine y-Achse, Legende mit aktuellem Wert, Fadenkreuz per Maus, Finger und Pfeiltasten (ARIA-Slider) |

@@ -127,7 +127,7 @@ async def test_full_enrollment(admin_client: AsyncClient, mdm_settings: Settings
     # device.
     assert [c["Command"]["RequestType"] for _, c in enqueued] == [
         "DeviceInformation", "SecurityInfo", "ProfileList", "CertificateList",
-        "InstalledApplicationList",
+        "InstalledApplicationList", "ManagedApplicationList",
     ]
     assert {target for target, _ in enqueued} == {UDID}
     command = enqueued[0][1]
@@ -135,7 +135,7 @@ async def test_full_enrollment(admin_client: AsyncClient, mdm_settings: Settings
     # A token refresh later must not enqueue a second round.
     r = await _hook(admin_client, _event("mdm.TokenUpdate", None, {"MessageType": "TokenUpdate"}))
     assert r.json()["action"] == "token_refresh"
-    assert len(enqueued) == 5
+    assert len(enqueued) == 6
 
     answer = {
         "UDID": UDID,

@@ -388,3 +388,42 @@
   height: 16px;
   margin: 0;
 }
+
+/* ---- MDM profile templates ---- */
+.ad-mdm-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ad-mdm-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+.ad-mdm-list li:last-child {
+  border-bottom: 0;
+}
+.ad-mdm-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.ad-mdm-name {
+  font-weight: 600;
+}
+.ad-mdm-actions {
+  display: flex;
+  gap: var(--sp-1);
+}
+.ad-mdm-foot {
+  margin: var(--sp-3) 0 0;
+  color: var(--tx-3);
+  font-size: var(--fs-sm);
+}

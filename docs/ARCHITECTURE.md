@@ -276,7 +276,10 @@ Lifespan (`backend/app/main.py:115-126`).
 | `mdm_enrollments` | MDM-Registrierungslinks: Link- und Challenge-Hash, `ref`, Rechte, Ablauf, Zeitpunkte von Abruf, Zertifikat und Registrierung | `mdm.py` |
 | `mdm_devices` | Gebundene Apple-Geräte: UDID, Rechte im Profil, letzter Kontakt, Abmeldung; die letzten Antworten auf Geräteinformationen, Sicherheitsstatus, App-, Profil- und Zertifikatsliste; Entsperr-Token (mit dem Tresor-Schlüssel verschlüsselt); Ausstellung, Ablauf und Erneuerung der Identität | `mdm.py` |
 | `mdm_commands` | Jeder MDM-Befehl an ein Telefon mit CommandUUID, Anstoß und Ergebnis (`queued`, `acknowledged`, `error`, `notnow`, `failed`); 90 Tage | `mdm.py` |
-| `mdm_policies` | Je Telefon abgeschaltete Befugnisse (`lock`, `erase`, `clear_passcode`, `apps`) | `mdm.py` |
+| `mdm_policies` | Je Telefon abgeschaltete Befugnisse (`lock`, `erase`, `clear_passcode`, `apps`, `profiles`, `install_apps`, `os_update`) | `mdm.py` |
+| `mdm_configs` | Profil-Vorlagen (WLAN, Code-Pflicht, Web-Clip, Mail-, Kalender-, Kontakte-Konto): Einstellungen, Passwort verschlüsselt mit dem Tresor-Schlüssel, Version | `mdm_configs.py` |
+| `mdm_device_configs` | Welche Vorlage auf welchem Telefon ist: `installing`, `installed`, `removing`, `error`, installierte Version | `mdm_configs.py` |
+| `mdm_os_updates` | Erzwungenes iOS-Update je Telefon (Version, Frist in Ortszeit) und der zuletzt gemeldete Update-Stand (DDM) | `mdm_ddm.py` |
 | `schema_meta` | Schema-Version der Datei (nur informativ) | `db.py` |
 
 **Verbindungen**: Alle Module öffnen die Datenbank über

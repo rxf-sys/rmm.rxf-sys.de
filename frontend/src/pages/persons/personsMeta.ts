@@ -146,7 +146,7 @@ export function personVerdict(devices: Device[], openAlerts: number): Verdict {
   if (openAlerts > 0) return { kind: 'warn', label: plural(openAlerts, 'offener Alarm', 'offene Alarme') };
   if (count('warn') > 0) return { kind: 'warn', label: `${devs(count('warn'))} mit Warnung` };
   if (count('off') > 0) return { kind: 'off', label: `${devs(count('off'))} offline` };
-  if (count('noagent') + count('mdm') === devices.length) return { kind: 'neutral', label: 'Nur Geräte ohne Agent' };
+  if (count('noagent') === devices.length) return { kind: 'neutral', label: 'Nur Geräte ohne Agent' };
   return { kind: 'ok', label: 'Alles in Ordnung' };
 }
 

@@ -156,16 +156,23 @@ test('updates queued for an offline device wait for it and show up on the patche
   await expect(page.getByRole('list', { name: 'Vorgemerkte Aktionen' }).getByText('Zurückgezogen')).toBeVisible();
 });
 
-test('a managed iPad shows MDM status, its security state and the iOS card', async ({ page }, info) => {
+test('a reachable iPad under MDM is OK, reports on its overview and is set up in its MDM tab', async ({ page }, info) => {
   test.skip(info.project.name === 'phone', 'same data on every size');
   await signIn(page);
-  await page.goto('/devices/12?tab=mdm');
+  await page.goto('/devices/12');
   await expect(page.getByRole('region', { name: 'Sicherheit' }).getByText('Gerätecode gesetzt')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Apps' }).getByText('Kochbuch')).toBeVisible();
+  // Commands sit in the header menu.
+  await page.getByRole('button', { name: 'Weitere Aktionen' }).click();
+  await expect(page.getByRole('menuitem', { name: /Sperren/ })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.goto('/devices/12?tab=mdm');
   await expect(page.getByRole('switch', { name: 'Löschen erlauben' })).toBeChecked();
+  await expect(page.getByRole('region', { name: 'Profile' })).toBeVisible();
 
   await page.goto('/devices');
-  await expect(page.getByRole('row', { name: /iPad Küche/ }).getByText('MDM', { exact: true })).toBeVisible();
+  await expect(page.getByRole('row', { name: /iPad Küche/ }).getByText('OK', { exact: true })).toBeVisible();
 
   await page.goto('/patches');
   await expect(page.getByText('iPhone und iPad')).toBeVisible();

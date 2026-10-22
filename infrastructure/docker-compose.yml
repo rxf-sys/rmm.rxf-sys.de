@@ -138,6 +138,12 @@ services:
       # NanoMDM only logs that — devices are not affected.
       NANOMDM_WEBHOOK_URL: "http://backend:8080/api/mdm/webhook"
       NANOMDM_WEBHOOK_HMAC_KEY: ${MDM_WEBHOOK_SECRET:-}
+      # Declarative Device Management (the enforced iOS update): NanoMDM
+      # forwards a phone's DDM check-ins to the backend, signed with the same
+      # key as the webhook. The trailing slash matters: NanoMDM appends the
+      # endpoint ("tokens", "status", …) as a relative path.
+      NANOMDM_DM: "http://backend:8080/api/mdm/ddm/"
+      NANOMDM_DM_SEND_HMAC_KEY: ${MDM_WEBHOOK_SECRET:-}
     ports:
       # Nur Loopback im LXC, nicht ins LAN: das Einspielen des
       # Push-Zertifikats läuft über /v1/pushcert, und das geht über die

@@ -27,6 +27,9 @@
 	handle /api/mdm/scep/* {
 		respond 404
 	}
+	handle /api/mdm/ddm/* {
+		respond 404
+	}
 
 	# --- MDM (iOS), siehe docs/MDM-SETUP.md ---------------------------------
 	# Die Verwaltungs-API von NanoMDM zuerst zumachen: /v1/* verschickt Pushes

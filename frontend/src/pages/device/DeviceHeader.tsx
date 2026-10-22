@@ -32,6 +32,8 @@ interface Props {
   onMaintenance: (minutes: number) => void;
   onUpdateAgent: () => void;
   onRemove: () => void;
+  /** Commands that are not the agent's (MDM for phones), shown first. */
+  extraMenu?: MenuEntry[];
 }
 
 const until = (ts: number) => new Date(ts * 1000).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
@@ -47,11 +49,12 @@ export function DeviceHeader(p: Props) {
   const agent = isAgent(d);
   const now = useNow();
   const inMaintenance = d.maintenance_until !== null && d.maintenance_until > now;
-  const seen = agent ? d.last_seen_at : d.checked_at;
+  const seen = agent ? d.last_seen_at : (d.mdm?.last_seen_at ?? d.checked_at);
 
   const menu: MenuEntry[] = [
     { label: p.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten', icon: <IconBookmark size={14} />, onSelect: p.onToggleFavorite },
   ];
+  if (p.extraMenu?.length) menu.push(...p.extraMenu);
   if (p.isOperator) {
     if (agent) {
       menu.push(
@@ -94,7 +97,15 @@ export function DeviceHeader(p: Props) {
           {!agent && ownershipLabel(d) && <span>{ownershipLabel(d)}</span>}
           {d.owner_label && <span>{d.owner_label}</span>}
           <span title={seen ? formatDateTime(seen) : undefined}>
-            {agent ? (d.online ? `gemeldet ${formatAgo(seen)}` : `zuletzt gesehen ${formatAgo(seen)}`) : seen ? `geprüft ${formatAgo(seen)}` : 'nie geprüft'}
+            {agent
+              ? d.online
+                ? `gemeldet ${formatAgo(seen)}`
+                : `zuletzt gesehen ${formatAgo(seen)}`
+              : d.mdm
+                ? `MDM-Kontakt ${formatAgo(seen)}`
+                : seen
+                  ? `geprüft ${formatAgo(seen)}`
+                  : 'nie geprüft'}
           </span>
           {d.tags.map((t) => (
             <span key={t} className="chip">

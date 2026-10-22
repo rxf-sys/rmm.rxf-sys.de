@@ -36,6 +36,10 @@ _ACTIONS: dict[str, tuple[int, str | None, str]] = {
     "erase": (mdm_profile.ACCESS_ERASE, "erase", "Löschen"),
     "clear_passcode": (mdm_profile.ACCESS_LOCK, "clear_passcode", "Code entfernen"),
     "renew": (mdm_profile.ACCESS_PROFILE_INSTALL, None, "Zertifikat erneuern"),
+    "profiles": (mdm_profile.ACCESS_PROFILE_INSTALL, "profiles", "Profile verteilen"),
+    "install_app": (mdm_profile.ACCESS_APP_MANAGE, "install_apps", "App installieren"),
+    # Declarative Device Management needs no AccessRights bit.
+    "os_update": (0, "os_update", "iOS-Update erzwingen"),
 }
 
 #: Queries of one inventory round, with the right each needs. The app list
@@ -46,6 +50,7 @@ REFRESH_QUERIES: tuple[tuple[str, int], ...] = (
     ("ProfileList", mdm_profile.ACCESS_PROFILE_INSPECT),
     ("CertificateList", mdm_profile.ACCESS_PROFILE_INSPECT),
     ("InstalledApplicationList", mdm_profile.ACCESS_APPS_INSPECT),
+    ("ManagedApplicationList", mdm_profile.ACCESS_APP_MANAGE),
 )
 
 # A phone that is off keeps its queue in NanoMDM. While the last round is
@@ -55,6 +60,12 @@ REFRESH_PENDING_S = 7 * 86400
 RENEW_RETRY_S = 3 * 86400
 # How long the command history is kept.
 COMMAND_RETENTION_S = 90 * 86400
+# Reachability: a bare push every hour to every phone that has not checked in
+# within the last PING_SKIP_S anyway. A phone that is on answers within
+# seconds; one that answered within REACHABLE_S counts as online.
+PING_INTERVAL_S = 3600
+PING_SKIP_S = 45 * 60
+REACHABLE_S = 2 * 3600
 
 
 def deny_reason(binding: Mapping[str, Any] | None, denied: set[str], action: str) -> str | None:
@@ -65,7 +76,7 @@ def deny_reason(binding: Mapping[str, Any] | None, denied: set[str], action: str
         return f"{label}: Das Gerät ist nicht per MDM registriert."
     if binding.get("checked_out_at"):
         return f"{label}: Das MDM-Profil wurde vom Gerät entfernt."
-    if not int(binding.get("access_rights") or 0) & bit:
+    if bit and not int(binding.get("access_rights") or 0) & bit:
         return f"{label}: Das Profil auf dem Gerät erlaubt das nicht — dafür das Gerät neu registrieren."
     if permission is not None and permission in denied:
         return f"{label} ist für dieses Gerät abgeschaltet (MDM-Befugnisse)."
@@ -200,13 +211,42 @@ def _renewal_due(binding: Mapping[str, Any], settings: Settings, now: int) -> bo
     return now - int(started) > RENEW_RETRY_S
 
 
+async def ping_due(settings: Settings, bindings: Mapping[int, Mapping[str, Any]], now: int) -> list[int]:
+    """Push the phones whose last ping is an hour old and that have not been
+    in touch lately anyway → the device ids pushed. Not audited: it sends
+    nothing to the phone but "please check in"."""
+    due = [
+        (device_id, str(b["udid"]))
+        for device_id, b in bindings.items()
+        if not b["checked_out_at"]
+        and now - int(b["last_seen_at"]) >= PING_SKIP_S
+        and (b.get("pinged_at") is None or now - int(b["pinged_at"]) >= PING_INTERVAL_S)
+    ]
+    if not due:
+        return []
+    try:
+        result = await nanomdm.push(settings, [udid for _, udid in due])
+    except nanomdm.NanoMDMError as e:
+        log.warning("mdm.ping_failed", error=str(e))
+        return []
+    failed = {udid for udid, err in result.items() if err}
+    if failed:
+        log.info("mdm.ping_partial", failed=len(failed))
+    pushed = [d for d, udid in due if udid not in failed]
+    await mdm.mark_pinged([d for d, _ in due], now)
+    return pushed
+
+
 async def run_due(settings: Settings) -> None:
-    """One background tick: inventory rounds that are due, and renewals of
-    identities that expire soon. Needs MDM to be configured."""
+    """One background tick: reachability pings, inventory rounds that are
+    due, and renewals of identities that expire soon. Needs MDM to be
+    configured."""
     if mdm.missing_settings(settings):
         return
     now = int(time.time())
-    for device_id, binding in (await mdm.bindings()).items():
+    bindings = await mdm.bindings()
+    await ping_due(settings, bindings, now)
+    for device_id, binding in bindings.items():
         if binding["checked_out_at"]:
             continue
         try:
@@ -231,8 +271,9 @@ async def housekeeping() -> None:
         log.info("mdm.commands_pruned", count=removed)
 
 
-def summary(binding: Mapping[str, Any], settings: Settings) -> dict[str, Any]:
+def summary(binding: Mapping[str, Any], settings: Settings, now: float | None = None) -> dict[str, Any]:
     """What the device list, the overview and the alert rules need of a phone."""
+    t = time.time() if now is None else now
     info = binding.get("info") or {}
     security = binding.get("security") or {}
     passcode = security.get("PasscodePresent")
@@ -241,6 +282,8 @@ def summary(binding: Mapping[str, Any], settings: Settings) -> dict[str, Any]:
         "enrolled_at": binding["enrolled_at"],
         "last_seen_at": binding["last_seen_at"],
         "checked_out_at": binding["checked_out_at"],
+        # Checked in recently — the hourly ping makes this "is it on".
+        "reachable": not binding["checked_out_at"] and t - int(binding["last_seen_at"]) < REACHABLE_S,
         "passcode_present": passcode if isinstance(passcode, bool) else None,
         "identity_expires_at": identity_expires_at(binding, settings),
         "os_version": info.get("OSVersion"),

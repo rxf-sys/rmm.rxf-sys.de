@@ -186,6 +186,22 @@
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+.dv-mdm-assign {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+.dv-mdm-assign .input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.dv-mdm-managed {
+  margin-bottom: var(--sp-3);
+}
+.dv-mdm-osupdate {
+  margin-top: var(--sp-3);
+}
 .dv-mdm-perms {
   list-style: none;
   margin: 0;

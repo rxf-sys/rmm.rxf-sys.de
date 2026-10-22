@@ -22,6 +22,8 @@ from . import (
     jobs,
     mdm,
     mdm_commands,
+    mdm_configs,
+    mdm_ddm,
     metrics,
     notify,
     patches,
@@ -45,6 +47,7 @@ from .routers import health as health_router
 from .routers import inventory as inventory_router
 from .routers import jobs as jobs_router
 from .routers import mdm as mdm_router
+from .routers import mdm_config as mdm_config_router
 from .routers import patches as patches_router
 from .routers import persons as persons_router
 from .routers import remote as remote_router
@@ -140,6 +143,8 @@ async def lifespan(app: FastAPI):
     await credentials.ensure_schema(_settings)
     # After devices: both MDM tables reference devices(id).
     await mdm.ensure_schema(_settings)
+    await mdm_configs.ensure_schema(_settings)
+    await mdm_ddm.ensure_schema(_settings)
     # After devices and jobs: references devices(id), joins jobs.
     await pending_actions.ensure_schema(_settings)
     # Agent release manifest (signed self-update). Best-effort — a missing
@@ -214,4 +219,5 @@ app.include_router(inventory_router.router)
 app.include_router(fleet_router.router)
 app.include_router(remote_router.router)
 app.include_router(mdm_router.router)
+app.include_router(mdm_config_router.router)
 app.include_router(actions_router.router)

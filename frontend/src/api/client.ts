@@ -11,7 +11,11 @@ import type {
   Device,
   DeviceDetail,
   DeviceMdm,
+  MdmConfig,
+  MdmConfigKind,
+  MdmConfigRequest,
   MdmEraseRequest,
+  MdmOsUpdate,
   MdmLockRequest,
   MdmPermission,
   PendingAction,
@@ -390,6 +394,20 @@ export const api = {
   mdmClearPasscode: (deviceId: number) =>
     post<{ command_uuid: string }>(`/api/devices/${deviceId}/mdm/clear-passcode`, {}),
   mdmRenew: (deviceId: number) => post<{ command_uuid: string }>(`/api/devices/${deviceId}/mdm/renew`, {}),
+  mdmInstallApp: (deviceId: number, store: string) =>
+    post<{ command_uuid: string; store_id: number }>(`/api/devices/${deviceId}/mdm/apps`, { store }),
+  mdmOsUpdate: (deviceId: number, version: string, targetAt: string) =>
+    send<{ os_update: MdmOsUpdate }>('PUT', `/api/devices/${deviceId}/mdm/os-update`, { version, target_at: targetAt }),
+  mdmAssignConfig: (deviceId: number, configId: number) =>
+    post<{ command_uuid: string }>(`/api/devices/${deviceId}/mdm/configs`, { config_id: configId }),
+  mdmRemoveConfig: (deviceId: number, configId: number) =>
+    del<{ command_uuid: string }>(`/api/devices/${deviceId}/mdm/configs/${configId}`),
+  mdmConfigs: (signal?: AbortSignal) =>
+    get<{ configs: MdmConfig[]; kinds: Record<MdmConfigKind, string> }>('/api/mdm/configs', signal),
+  createMdmConfig: (body: MdmConfigRequest) => post<{ config: MdmConfig }>('/api/mdm/configs', body),
+  updateMdmConfig: (id: number, body: MdmConfigRequest) =>
+    send<{ config: MdmConfig; devices_updated: number }>('PUT', `/api/mdm/configs/${id}`, body),
+  deleteMdmConfig: (id: number) => del<{ ok: boolean }>(`/api/mdm/configs/${id}`),
   mdmPermissions: (deviceId: number, denied: MdmPermission[]) =>
     send<{ denied: MdmPermission[] }>('PUT', `/api/devices/${deviceId}/mdm/permissions`, { denied }),
 

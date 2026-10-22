@@ -38,7 +38,9 @@ const MDM_REQUEST: Record<string, string> = {
   DeviceLock: 'Sperren',
   EraseDevice: 'Löschen',
   ClearPasscode: 'Code entfernen',
-  InstallProfile: 'Zertifikatserneuerung',
+  InstallProfile: 'Profil-Installation',
+  RemoveProfile: 'Profil-Entfernung',
+  InstallApplication: 'App-Installation',
   DeviceInformation: 'Inventar-Abfrage',
   SecurityInfo: 'Sicherheitsabfrage',
   ProfileList: 'Profil-Abfrage',
@@ -50,6 +52,9 @@ const MDM_PERMISSION_WORD: Record<string, string> = {
   erase: 'Löschen',
   clear_passcode: 'Code entfernen',
   apps: 'App-Liste',
+  profiles: 'Profile',
+  install_apps: 'Apps installieren',
+  os_update: 'iOS-Update',
 };
 
 /** Human summary of an audit row from its event type + detail blob.
@@ -188,6 +193,22 @@ export function describeAudit(e: AuditEvent, names: AuditNames = {}): string {
         ? `MDM-Befugnisse von ${device()} geändert — aus: ${off.map((x) => MDM_PERMISSION_WORD[x] ?? x).join(', ')}`
         : `MDM-Befugnisse von ${device()} geändert — alles erlaubt`;
     }
+    case 'mdm.config_created':
+      return `MDM-Profil „${str(d.name) ?? ''}“ angelegt`;
+    case 'mdm.config_updated':
+      return `MDM-Profil „${str(d.name) ?? ''}“ geändert${num(d.devices) ? ` — an ${num(d.devices)} Geräte verteilt` : ''}`;
+    case 'mdm.config_deleted':
+      return `MDM-Profil „${str(d.name) ?? ''}“ gelöscht`;
+    case 'mdm.profile_install':
+      return `MDM-Profil „${str(d.name) ?? ''}“ an ${device()} geschickt`;
+    case 'mdm.profile_remove':
+      return `MDM-Profil „${str(d.name) ?? ''}“ von ${device()} entfernt`;
+    case 'mdm.app_install':
+      return `App ${num(d.store_id) ?? ''} auf ${device()} angeboten`;
+    case 'mdm.os_update_set':
+      return `iOS ${str(d.version) ?? ''} auf ${device()} bis ${(str(d.target_at) ?? '').replace('T', ' ').slice(0, 16)} vorgegeben`;
+    case 'mdm.os_update_cleared':
+      return `iOS-Update-Vorgabe für ${device()} aufgehoben`;
     case 'mdm.renewal_started':
       return `MDM-Zertifikat von ${device()} wird erneuert`;
     case 'mdm.renewal_done':

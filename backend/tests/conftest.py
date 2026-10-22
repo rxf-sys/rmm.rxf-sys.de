@@ -19,6 +19,8 @@ from app import (
     job_secrets,
     jobs,
     mdm,
+    mdm_configs,
+    mdm_ddm,
     metrics,
     patches,
     pending_actions,
@@ -103,6 +105,8 @@ async def client(settings: Settings):
     await persons.ensure_schema(settings)
     await credentials.ensure_schema(settings)
     await mdm.ensure_schema(settings)
+    await mdm_configs.ensure_schema(settings)
+    await mdm_ddm.ensure_schema(settings)
     await pending_actions.ensure_schema(settings)
     await audit.clear()
     jobs.hub.reset_for_tests()

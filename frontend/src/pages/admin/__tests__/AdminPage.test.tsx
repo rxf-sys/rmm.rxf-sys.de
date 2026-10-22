@@ -43,6 +43,8 @@ vi.mock('../../../api/client', async () => {
       ntfyConfig: () => m.ntfyConfig(),
       updateNtfy: (body: unknown) => m.updateNtfy(body),
       testNtfy: () => m.testNtfy(),
+      // The MDM profile library panel; its own tests cover it.
+      mdmConfigs: () => Promise.resolve({ configs: [], kinds: {} }),
     },
   };
 });

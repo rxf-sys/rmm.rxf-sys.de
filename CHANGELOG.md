@@ -8,6 +8,19 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Hinzugefügt
+- **MDM-Profile:** Vorlagen für WLAN, Code-Pflicht, Web-Clip und Mail-,
+  Kalender-, Kontakte-Konto unter Administration; je Gerät im Reiter „MDM“
+  installieren und entfernen, Stand je Gerät (wird installiert, installiert,
+  Fehler). Passwörter verschlüsselt; eine geänderte Vorlage geht sofort an
+  alle Geräte. Neue Tabellen `mdm_configs`, `mdm_device_configs`.
+- **App installieren** per App-Store-Link aus dem Gerätemenü; verwaltete
+  Apps mit ihrem Stand in der App-Liste.
+- **iOS-Update erzwingen (Test)** mit Zielversion und Frist über Declarative
+  Device Management; NanoMDM leitet an `/api/mdm/ddm/` weiter
+  (`NANOMDM_DM`). Neue Tabelle `mdm_os_updates`.
+- **Erreichbarkeits-Ping:** stündlicher Push an jedes Telefon; wer sich in
+  den letzten 2 Stunden gemeldet hat, steht auf „OK“ und erscheint im
+  Lagebild unter „OK“.
 - **MDM: Befehle, Sicherheitslage und Apps.** Im Reiter „MDM“: Inventar
   aktualisieren und Sperren (mit Nachricht und Rückrufnummer), Code entfernen
   und Löschen (Admins; Löschen nur mit eingetipptem Gerätenamen). Panels für
@@ -50,6 +63,11 @@ die Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
   die Tabelle.
 
 ### Geändert
+- **Geräteseite von Telefonen neu geordnet:** Die Übersicht zeigt, was das
+  Gerät meldet (Sicherheit, Inventar, Apps, Profile und Zertifikate), die
+  Befehle stehen im Menü der Kopfzeile, der Reiter „MDM“ enthält nur noch
+  Einstellungen. Der eigene Status „MDM“ entfällt: erreichbar heißt „OK“,
+  nicht erreichbar „Offline“.
 - **Jedes neue MDM-Profil trägt alle Rechte**, auch auf Privatgeräten — was
   davon genutzt werden darf, regeln die MDM-Befugnisse. Ältere Privat-Profile
   ohne Löschrecht zeigt der Reiter „MDM“ an; nachrüsten geht nur über eine
