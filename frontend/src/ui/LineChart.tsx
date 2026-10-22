@@ -1,5 +1,5 @@
-import { useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
-import { segmentsOf } from '../fleetChart';
+import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
+import { gridStep, segmentsOf } from '../fleetChart';
 
 export interface ChartSeries {
   key: string;
@@ -17,6 +17,10 @@ interface Props {
   to: number;
   /** Top of the y axis (the bottom is 0). */
   yMax: number;
+  /** Distance between grid lines; `yMax` must be a multiple of it, so that
+   *  every line carries a round value. Defaults to the smallest round step
+   *  that divides `yMax` (fleetChart.gridStep). */
+  yStep?: number;
   unit?: string;
   height?: number;
   /** Gaps longer than this are not bridged — no invented measurements. */
@@ -46,7 +50,8 @@ export function LineChart({
   from,
   to,
   yMax,
-  unit = ' %',
+  yStep = gridStep(yMax),
+  unit = '\u00a0%',
   height = 180,
   gapS = 1.5 * 3600,
   summary,
@@ -59,8 +64,8 @@ export function LineChart({
   const [hoverTs, setHoverTs] = useState<number | null>(null);
   const span = Math.max(1, to - from);
   const x = (ts: number) => ((ts - from) / span) * VB_W;
-  const y = (v: number) => height - (Math.min(Math.max(v, 0), yMax) / yMax) * height;
-  const grid = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(yMax * f));
+  const y = (v: number) => height - (Math.min(Math.max(v, 0), yMax) / (yMax || 1)) * height;
+  const grid = yMax > 0 && yStep > 0 ? Array.from({ length: Math.floor(yMax / yStep) + 1 }, (_, i) => i * yStep) : [0];
 
   // All timestamps that exist in any series, for snapping the crosshair.
   const stamps = useMemo(
@@ -98,16 +103,36 @@ export function LineChart({
     }
   };
 
-  const last = (s: ChartSeries) => s.points[s.points.length - 1]?.v;
+  const fmtV = (v: number) => `${Math.round(v)}${unit}`;
+  // The legend reads the whole window, not only its last sample: "Ø" next to
+  // the latest value would claim an average that it is not. Once per data
+  // change — the crosshair re-renders on every pointer move.
+  const stats = useMemo(
+    () =>
+      series.map((s) => {
+        if (!s.points.length) return null;
+        let sum = 0;
+        let peak = -Infinity;
+        for (const p of s.points) {
+          sum += p.v;
+          peak = Math.max(peak, p.v);
+        }
+        return { last: s.points[s.points.length - 1]!.v, mean: sum / s.points.length, peak };
+      }),
+    [series],
+  );
   function valueText(ts: number | null): string {
     if (ts === null) return 'keine Daten';
     const parts = series.map((s) => {
       const v = valueAt(s, ts);
-      return `${s.label} ${v === undefined ? 'keine Daten' : `${Math.round(v)}${unit}`}`;
+      return `${s.label} ${v === undefined ? 'keine Daten' : fmtV(v)}`;
     });
     return `${formatTime(ts)}: ${parts.join(', ')}`;
   }
   const hoverLeft = hoverTs === null ? 0 : (x(hoverTs) / VB_W) * 100;
+  // The tip sits inside the plot beside the crosshair, on the side with more
+  // room — above the plot it covered the panel's title.
+  const tipFlip = hoverLeft > 50;
 
   return (
     <div className="lc">
@@ -116,7 +141,7 @@ export function LineChart({
           {grid.map((g) => (
             <span key={g} style={{ top: y(g) }}>
               {g}
-              {unit.trim()}
+              {unit}
             </span>
           ))}
         </div>
@@ -180,9 +205,9 @@ export function LineChart({
           {hoverTs !== null && (
             <div
               id={tipId}
-              className="lc-tip"
+              className={tipFlip ? 'lc-tip flip' : 'lc-tip'}
               aria-hidden
-              style={{ left: `clamp(70px, ${hoverLeft}%, calc(100% - 70px))` }}
+              style={{ '--x': `${hoverLeft}%` } as CSSProperties}
             >
               <span className="lc-tip-when">{formatTime(hoverTs)}</span>
               {series.map((s) => {
@@ -191,7 +216,7 @@ export function LineChart({
                   <span key={s.key} className="lc-tip-row">
                     <i className={s.dashed ? 'lc-swatch dashed' : 'lc-swatch'} style={{ borderColor: s.color }} />
                     {s.label}
-                    <b>{v === undefined ? '—' : `${Math.round(v)}${unit}`}</b>
+                    <b>{v === undefined ? '—' : fmtV(v)}</b>
                   </span>
                 );
               })}
@@ -207,13 +232,23 @@ export function LineChart({
         ))}
       </div>
       <ul className="lc-legend">
-        {series.map((s) => {
-          const v = last(s);
+        {series.map((s, i) => {
+          const st = stats[i];
           return (
             <li key={s.key}>
               <i className={s.dashed ? 'lc-swatch dashed' : 'lc-swatch'} style={{ borderColor: s.color }} aria-hidden />
               {s.label}
-              <b>{v === undefined ? '—' : `${Math.round(v)}${unit}`}</b>
+              {st ? (
+                <>
+                  <span className="lc-legend-k">zuletzt</span>
+                  <b>{fmtV(st.last)}</b>
+                  <span className="lc-legend-k">
+                    · Ø {fmtV(st.mean)} · Spitze {fmtV(st.peak)}
+                  </span>
+                </>
+              ) : (
+                <b>—</b>
+              )}
             </li>
           );
         })}

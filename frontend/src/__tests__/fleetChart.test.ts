@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { niceCeiling, segmentsOf } from '../fleetChart';
+import { percentAxis, segmentsOf } from '../fleetChart';
 import type { FleetSample } from '../types';
 
 const sample = (ts: number, cpu = 5): FleetSample => ({
@@ -13,22 +13,34 @@ const sample = (ts: number, cpu = 5): FleetSample => ({
 
 const HOUR = 3600;
 
-describe('niceCeiling', () => {
+describe('percentAxis', () => {
+  const lines = ({ top, step }: { top: number; step: number }) =>
+    Array.from({ length: top / step + 1 }, (_, i) => i * step);
+
   it('keeps a quiet fleet readable instead of flat on the floor', () => {
-    // Genau der Fall aus dem Screenshot: 5 bis 11 % auf einer 0–100-Skala
-    // ist eine Linie am unteren Rand.
-    expect(niceCeiling(11)).toBe(25);
-    expect(niceCeiling(4)).toBe(10);
+    // 5 bis 11 % auf einer 0–100-Skala ist eine Linie am unteren Rand.
+    expect(percentAxis(11)).toEqual({ top: 15, step: 5 });
+    expect(percentAxis(4)).toEqual({ top: 10, step: 2 });
   });
 
-  it('never cuts the peak off', () => {
+  it('labels every grid line with a round value', () => {
+    // Viertel von 50 ergaben 13 und 38 — genau das stand im Screenshot.
+    expect(lines(percentAxis(45))).toEqual([0, 10, 20, 30, 40, 50]);
+    for (let max = 0; max <= 100; max += 0.7) {
+      const axis = percentAxis(max);
+      expect(Number.isInteger(axis.top / axis.step)).toBe(true);
+      expect(axis.top / axis.step).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it('leaves room above the peak and never cuts it off', () => {
     for (const max of [0, 9.9, 10, 24, 25, 26, 50, 51, 99.9, 100]) {
-      expect(niceCeiling(max)).toBeGreaterThanOrEqual(max);
+      expect(percentAxis(max).top).toBeGreaterThanOrEqual(Math.min(100, max * 1.1));
     }
   });
 
   it('stops at 100', () => {
-    expect(niceCeiling(100)).toBe(100);
+    expect(percentAxis(100)).toEqual({ top: 100, step: 25 });
   });
 });
 

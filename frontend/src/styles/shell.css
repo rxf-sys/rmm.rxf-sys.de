@@ -120,7 +120,7 @@ html {
   min-width: 20px;
   padding: 0 6px;
   border-radius: var(--r-pill);
-  background: var(--danger);
+  background: var(--danger-solid);
   color: #fff;
   text-align: center;
   line-height: 18px;
@@ -418,7 +418,9 @@ h3.panel-title {
 
 .kv-list {
   display: grid;
-  grid-template-columns: minmax(96px, max-content) minmax(0, 1fr);
+  /* --kv-label lets a page give every card the same label column, so the
+     values line up across cards (device overview). */
+  grid-template-columns: var(--kv-label, minmax(96px, max-content)) minmax(0, 1fr);
   gap: var(--sp-2) var(--sp-4);
   margin: 0;
 }

@@ -192,7 +192,22 @@ jobs:
           npm ci --no-audit --no-fund
           # Build-chain advisories are real but not shipped to a browser;
           # fail on high and above, report the rest.
-          npm audit --audit-level=high
+          #
+          # A registry outage is not a finding and used to block the deploy
+          # ("npm warn audit 503 Service Unavailable"): on a 5xx or a network
+          # error retry once, and if the registry still does not answer, say
+          # so as a warning. Anything else — findings, a 4xx — stays red.
+          for attempt in 1 2; do
+            rc=0
+            npm audit --audit-level=high > audit.log 2>&1 || rc=$?
+            cat audit.log
+            [ "$rc" -eq 0 ] && exit 0
+            if ! grep -qE 'npm warn audit 5[0-9]{2} |ETIMEDOUT|ECONNRESET|EAI_AGAIN' audit.log; then
+              exit "$rc"
+            fi
+            [ "$attempt" -eq 1 ] && sleep 60
+          done
+          echo "::warning title=npm audit::Registry did not answer after a retry; the audit did not run."
 
       - if: matrix.tool == 'govulncheck'
         uses: actions/setup-go@v7

@@ -122,7 +122,10 @@
   --danger: #d92d20;
   --danger-tx: #b42318;
   --danger-soft: #fde8e6;
-  --danger-hover: #b42318;
+  /* Filled red behind white text (count badges, the destructive confirm):
+     4.5:1 at least, which --danger in dark mode is not. */
+  --danger-solid: #d92d20;
+  --danger-solid-hover: #b42318;
   --off: #8b8e98;
   --off-tx: #676a73;
   --off-soft: #efede9;
@@ -197,7 +200,7 @@
     --danger: #e5484d;
     --danger-tx: #f47a6e;
     --danger-soft: #33191a;
-    --danger-hover: #f0646a;
+    --danger-solid: #d13438;
     --off: #6f7386;
     --off-tx: #9195a6;
     --off-soft: #22243a;
@@ -246,7 +249,7 @@
   --danger: #e5484d;
   --danger-tx: #f47a6e;
   --danger-soft: #33191a;
-  --danger-hover: #f0646a;
+  --danger-solid: #d13438;
   --off: #6f7386;
   --off-tx: #9195a6;
   --off-soft: #22243a;

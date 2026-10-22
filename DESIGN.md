@@ -87,7 +87,8 @@ Alle unter `frontend/src/ui/`, exportiert über `ui/index.ts`.
 | `PageHeader` | Die eine `h1` einer Seite, Zähler, Untertitel, Hauptaktionen |
 | `Panel` | Betitelter Bereich (`h2`), flach mit einer Haarlinie; `padded={false}` für Listen und Tabellen |
 | `StatusBadge` | Zustand als Symbol + Wort; Arten `ok`, `warn`, `danger`, `off`, `noagent` (von Hand gepflegtes Telefon), `info`, `neutral`. Ein Telefon unter MDM bekommt dieselben Arten wie ein Rechner — erreichbar `ok`, sonst `off` |
-| `KeyValue` | Beschriftung/Wert als Definitionsliste; Beschriftungen nehmen die Breite der längsten |
+| `KeyValue` | Beschriftung/Wert als Definitionsliste; Beschriftungen nehmen die Breite der längsten — außer eine Seite setzt `--kv-label`, damit die Werte über mehrere Karten fluchten (Geräte-Übersicht) |
+| `Ago` | Zeitpunkt relativ („vor 3 h“), exakt im Tooltip, „nie“ ohne Wert; `now` aus `useNow()` |
 | `Meter` | Auslastung mit Schwellenmarken; Farbe erst ab Schwelle |
 | `LineChart` | Zeitreihe: eine y-Achse, Legende mit aktuellem Wert, Fadenkreuz per Maus, Finger und Pfeiltasten (ARIA-Slider) |
 | `Menu` | Überlauf-Aktionen nach dem WAI-ARIA-Menümuster |

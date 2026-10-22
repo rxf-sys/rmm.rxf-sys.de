@@ -102,9 +102,6 @@
   gap: var(--sp-4);
   align-items: start;
 }
-.dv-load {
-  grid-column: span 2;
-}
 .dv-stack {
   display: flex;
   flex-direction: column;
@@ -120,9 +117,8 @@
   padding: 0 var(--sp-4) var(--sp-4);
 }
 .dv-note {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  /* Block, not flex: as flex items the text runs around a link or a time
+     each got a gap ("Stand  vor 1 h  ."). */
   margin: var(--sp-3) 0 0;
   color: var(--tx-3);
   font-size: var(--fs-sm);
@@ -130,6 +126,10 @@
 }
 .dv-note:first-child {
   margin-top: 0;
+}
+.dv-note > svg {
+  margin-right: 6px;
+  vertical-align: -2px;
 }
 .dv-mdm-status {
   display: flex;
@@ -250,11 +250,94 @@
   font-weight: 600;
 }
 
-/* ---- Overview ---- */
+/* ---- Overview ----
+   The load across the width, then three stacks: a (state), b (facts),
+   c (network, or apps on a phone). Each stack grows on its own; on a medium
+   width c tucks under the shorter of the two. Measured against the tab's
+   own width, not the window's — the sidebar takes its share. */
+.dv-ov {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.dv-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'a' 'b' 'c';
+  gap: var(--sp-4);
+  align-items: start;
+}
+.dv-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.dv-col-a {
+  grid-area: a;
+}
+.dv-col-b {
+  grid-area: b;
+}
+.dv-col-c {
+  grid-area: c;
+}
+/* One label column for every card, so the values line up across them. */
+.dv-cols {
+  --kv-label: minmax(0, 11rem);
+}
+@container (min-width: 760px) {
+  .dv-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'a b'
+      'a c';
+    grid-template-rows: auto 1fr;
+  }
+  /* A phone's facts are the long list; apps go under the state. */
+  .dv-cols.tall-b {
+    grid-template-areas:
+      'a b'
+      'c b';
+  }
+}
+@container (min-width: 1280px) {
+  .dv-cols,
+  .dv-cols.tall-b {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-areas: 'a b c';
+    grid-template-rows: auto;
+  }
+  .dv-cols.no-c {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas: 'a b';
+  }
+}
+@container (max-width: 439px) {
+  /* Labels take a share instead of a fixed width, so a value like
+     „unbekannt" keeps room and does not break mid-word — but never
+     narrower than the longest word („Sicherheitsupdates"). */
+  .dv-cols {
+    --kv-label: minmax(min-content, 40%);
+  }
+}
+/* Even rows: two per row, on a wide tab all in rows of three or four
+   (--meters, set from the count) — never three and a lone fourth. */
 .dv-meters {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-4) var(--sp-6);
+}
+@container (min-width: 760px) {
+  .dv-meters {
+    grid-template-columns: repeat(var(--meters, 4), minmax(0, 1fr));
+  }
+}
+@container (max-width: 439px) {
+  .dv-meters {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .dv-nics {
   display: flex;
@@ -598,9 +681,6 @@
   display: inline-flex;
 }
 @media (max-width: 1100px) {
-  .dv-load {
-    grid-column: auto;
-  }
   .dv-inv,
   .dv-remote {
     grid-template-columns: minmax(0, 1fr);

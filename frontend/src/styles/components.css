@@ -91,14 +91,14 @@
 }
 /* The confirm button of a destructive dialog: the only filled red control. */
 .btn-danger-solid {
-  background: var(--danger);
-  border-color: var(--danger);
+  background: var(--danger-solid);
+  border-color: var(--danger-solid);
   color: #fff;
 }
 @media (hover: hover) and (pointer: fine) {
   .btn-danger-solid:hover:not(:disabled) {
-    background: var(--danger-hover);
-    border-color: var(--danger-hover);
+    background: var(--danger-solid-hover);
+    border-color: var(--danger-solid-hover);
   }
 }
 
@@ -167,7 +167,7 @@
   height: 18px;
   padding: 0 5px;
   border-radius: var(--r-pill);
-  background: var(--danger);
+  background: var(--danger-solid);
   color: #fff;
   font: 700 11px / 18px var(--font);
   text-align: center;
@@ -1175,7 +1175,9 @@ kbd,
 .lc-frame {
   position: relative;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr);
+  /* The top label is centred on its line and would poke above the frame. */
+  margin-top: var(--sp-2);
 }
 .lc-y {
   position: relative;
@@ -1192,6 +1194,7 @@ kbd,
 .lc-plot {
   position: relative;
   min-width: 0;
+  container-type: inline-size;
   border-radius: var(--r-xs);
   touch-action: pan-y;
   cursor: crosshair;
@@ -1231,7 +1234,8 @@ kbd,
 }
 .lc-tip {
   position: absolute;
-  top: 0;
+  top: var(--sp-1);
+  left: var(--x);
   z-index: 2;
   display: flex;
   flex-direction: column;
@@ -1243,9 +1247,21 @@ kbd,
   background: var(--surface);
   box-shadow: var(--shadow-md);
   font-size: var(--fs-sm);
-  transform: translate(-50%, calc(-100% - 8px));
+  transform: translateX(12px);
   pointer-events: none;
   white-space: nowrap;
+}
+.lc-tip.flip {
+  transform: translateX(calc(-100% - 12px));
+}
+/* Too narrow to sit beside the crosshair (a phone): centred over the plot,
+   so it never runs past the panel. */
+@container (max-width: 479px) {
+  .lc-tip,
+  .lc-tip.flip {
+    left: 50%;
+    transform: translateX(-50%);
+  }
 }
 .lc-tip-when {
   color: var(--tx-3);
@@ -1266,7 +1282,7 @@ kbd,
 .lc-x {
   position: relative;
   height: 16px;
-  margin-left: 40px;
+  margin-left: 44px;
 }
 .lc-x span {
   position: absolute;
@@ -1294,11 +1310,16 @@ kbd,
 }
 .lc-legend li {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-1) var(--sp-2);
 }
 .lc-legend b {
   color: var(--tx);
+  font-variant-numeric: tabular-nums;
+}
+.lc-legend-k {
+  color: var(--tx-3);
   font-variant-numeric: tabular-nums;
 }
 .lc-swatch {

@@ -1,4 +1,5 @@
-/** Time labels and axis ticks for the device charts. */
+/** Time labels and axis ticks for the time-series charts (fleet load on
+ *  the overview, a device's history). */
 
 const pad = (n: number) => String(n).padStart(2, '0');
 export const hhmm = (ts: number) => {
@@ -10,6 +11,9 @@ export const dayTick = (ts: number) => {
   const t = new Date(ts * 1000);
   return `${WEEKDAY[t.getDay()]} ${pad(t.getDate())}.${pad(t.getMonth() + 1)}.`;
 };
+
+/** An hour tick that names the day at midnight: "18:00", "Do 22.10.". */
+export const hourTick = (ts: number) => (new Date(ts * 1000).getHours() === 0 ? dayTick(ts) : hhmm(ts));
 
 /** Ticks on round local hours, or on local midnight for a week. Walking the
  *  calendar instead of adding seconds keeps them right across DST. */
