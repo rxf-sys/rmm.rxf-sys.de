@@ -450,10 +450,30 @@ zurückdrehen. Seit Oktober 2026 trägt jedes neue Profil alle Rechte;
 Geräte, die vorher als privat registriert wurden, haben kein Löschrecht im
 Profil — das geht nur mit einer neuen Registrierung.
 
+**Profile, Apps, iOS-Update.** Unter Administration → „MDM-Profile“ liegen
+Vorlagen für WLAN, Code-Pflicht, Web-Clips und Mail-, Kalender- oder
+Kontakte-Konten; zugewiesen werden sie im Reiter „MDM“ eines Geräts, eine
+geänderte Vorlage geht sofort an alle Geräte, die sie haben. Apps lassen
+sich aus dem Gerätemenü per App-Store-Link anbieten — das Telefon fragt den
+Nutzer. „iOS-Update erzwingen“ nutzt Declarative Device Management: NanoMDM
+leitet die Anfragen der Telefone an `/api/mdm/ddm/` weiter
+(`NANOMDM_DM` im Compose-File, signiert mit `MDM_WEBHOOK_SECRET`). Ab iOS 17;
+ob es ohne Betreuung greift, zeigt der gemeldete Update-Stand.
+
+**Erreichbarkeit.** Das Backend schickt jedem Telefon stündlich einen Push
+ohne Befehl; ein eingeschaltetes Telefon meldet sich darauf binnen Sekunden.
+Wer sich in den letzten 2 Stunden gemeldet hat, steht im Dashboard auf „OK“,
+sonst auf „Offline“.
+
+**Nach dem Update auf diese Version, einmalig im LXC:**
+`docker compose --profile mdm up -d nanomdm` — damit `NANOMDM_DM` gilt.
+
 **Was ohne Betreuung (Supervision) nicht geht.** Per Profil registrierte
 Geräte sind nicht betreut. Verloren-Modus mit Ortung, Neustart aus der
 Ferne, erzwungene iOS-Updates und stille App-Installationen verlangt Apple
 nur von betreuten Geräten (Apple Business Manager oder Apple Configurator).
+Fernsteuerung des Bildschirms gibt es auf iOS gar nicht — auch nicht mit
+RustDesk; TeamViewer QuickSupport kann den Bildschirm nur zeigen.
 
 **Nach dem Update auf diese Version, einmalig im LXC:**
 `docker compose --profile mdm up -d --build scep` — damit `SCEP_CERT_RENEW=0`

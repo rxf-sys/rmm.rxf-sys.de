@@ -2,7 +2,7 @@
 
 Stand: 21.10.2026. Die Tabellen unten sind aus der laufenden Anwendung
 erzeugt (`app.routes` inkl. der tatsächlich registrierten Dependencies), nicht
-von Hand gepflegt. Sie umfassen **83 HTTP-Endpunkte und 3 WebSockets**.
+von Hand gepflegt. Sie umfassen **93 HTTP-Endpunkte und 3 WebSockets**.
 
 Die maschinenlesbare Fassung mit allen Request-/Response-Schemata liefert
 FastAPI selbst:
@@ -98,8 +98,10 @@ MDM-Befugnissen des Geräts (siehe unten).
 
 Geräte der Klasse `mobile` tragen in Liste und Detail zusätzlich `mdm`:
 `null` ohne MDM-Registrierung, sonst `{enrolled_at, last_seen_at,
-checked_out_at, passcode_present, identity_expires_at, os_version,
-os_status, os_latest}`. `os_status` vergleicht die iOS-Version mit Apples
+checked_out_at, reachable, passcode_present, identity_expires_at,
+os_version, os_status, os_latest}`. `reachable`: Kontakt in den letzten
+2 Stunden — der Server pingt jedes Telefon stündlich per Push; ein
+erreichbares Telefon zählt im Dashboard als „OK“. `os_status` vergleicht die iOS-Version mit Apples
 Katalog: `current`, `major_behind` (neueste der eigenen Hauptversion),
 `outdated`, `unknown`.
 
@@ -117,7 +119,16 @@ Einrichtung: [`MDM-SETUP.md`](MDM-SETUP.md).
 | POST | `/api/devices/{device_id}/mdm/erase` | Admin | `EraseDevice`; Body `{confirm, preserve_data_plan, disallow_proximity_setup}`, `confirm` muss genau der Gerätename sein (sonst 422). Audit `mdm.device_erase` |
 | POST | `/api/devices/{device_id}/mdm/clear-passcode` | Admin | `ClearPasscode` mit dem gespeicherten Entsperr-Token. Audit `mdm.passcode_cleared` |
 | POST | `/api/devices/{device_id}/mdm/renew` | Admin | Identitätszertifikat jetzt erneuern (sonst automatisch, siehe unten). Audit `mdm.renewal_started` |
-| PUT | `/api/devices/{device_id}/mdm/permissions` | Admin | Body `{denied: [...]}` aus `lock`, `erase`, `clear_passcode`, `apps`. Leere Liste = alles erlaubt. Abgeschaltete App-Liste wird gelöscht. Audit `mdm.permissions_updated` |
+| PUT | `/api/devices/{device_id}/mdm/permissions` | Admin | Body `{denied: [...]}` aus `lock`, `erase`, `clear_passcode`, `apps`, `profiles`, `install_apps`, `os_update`. Leere Liste = alles erlaubt. Abgeschaltete App-Liste wird gelöscht. Audit `mdm.permissions_updated` |
+| POST | `/api/devices/{device_id}/mdm/apps` | Operator | `InstallApplication`; Body `{store}`: App-Store-Link oder die Nummer dahinter. Das Gerät fragt den Nutzer. 422 ohne erkennbare ID. Audit `mdm.app_install` |
+| POST | `/api/devices/{device_id}/mdm/configs` | Admin | Profil aus der Vorlagen-Bibliothek installieren (`InstallProfile`); Body `{config_id}`. Audit `mdm.profile_install` |
+| DELETE | `/api/devices/{device_id}/mdm/configs/{config_id}` | Admin | Profil vom Gerät entfernen (`RemoveProfile`). Audit `mdm.profile_remove` |
+| PUT | `/api/devices/{device_id}/mdm/os-update` | Admin | iOS-Update erzwingen (Declarative Device Management, Test): Body `{version, target_at}` mit `target_at` als Ortszeit ohne Zone (`2026-11-01T18:00`); leere `version` hebt die Vorgabe auf. Schickt `DeclarativeManagement`. Audit `mdm.os_update_set` / `mdm.os_update_cleared` |
+| GET | `/api/mdm/configs` | Operator | Vorlagen-Bibliothek: `configs` (ohne Passwörter, `has_password` ja/nein, `assigned` = Anzahl Geräte) und `kinds` |
+| POST | `/api/mdm/configs` | Admin | Vorlage anlegen: `{name, kind, settings, password}` mit `kind` aus `passcode`, `wifi`, `webclip`, `mail`, `caldav`, `carddav`. Passwort Pflicht für WLAN (außer offen) und Konten; verschlüsselt gespeichert. Audit `mdm.config_created` |
+| PUT | `/api/mdm/configs/{config_id}` | Admin | Vorlage ändern (Art fest). `password: null` behält das gespeicherte. Neue Version geht sofort an alle Geräte mit dem Profil. Audit `mdm.config_updated` |
+| DELETE | `/api/mdm/configs/{config_id}` | Admin | Vorlage löschen — 409, solange sie noch auf Geräten ist. Audit `mdm.config_deleted` |
+| GET, PUT | `/api/mdm/ddm/{endpoint}` | HMAC `X-Hmac-Signature` | Nur für NanoMDM (`NANOMDM_DM`), von außen 404 (Caddy). `X-Enrollment-ID` ist die UDID. GET `tokens`, `declaration-items`, `declaration/<typ>/<id>`; PUT `status` (Statusbericht des Geräts) |
 | POST | `/api/devices/{device_id}/mdm/enrollment` | Admin | Neuer Einmal-Link `https://…/api/mdm/enroll/mde_…`. Der Klartext steht **nur** in dieser Antwort; ein offener älterer Link desselben Geräts wird widerrufen. 409 für alles außer iPhone/iPad ohne Agent, 503 solange MDM nicht eingerichtet ist. Audit `mdm.enrollment_created` |
 | DELETE | `/api/devices/{device_id}/mdm/enrollment` | Admin | Offenen Link widerrufen. Audit `mdm.enrollment_revoked` |
 | GET | `/api/mdm/enroll/{token}` | Link | Das Enrollment-Profil (`application/x-apple-aspen-config`) für das Telefon — ohne Login, der Link ist das Credential. Jeder Abruf erzeugt eine neue Einmal-Challenge und macht die vorige ungültig; höchstens 5 Abrufe, danach, nach Ablauf, Widerruf oder ausgestelltem Zertifikat 404. 429 nach 20 Fehlversuchen pro IP in 300 s. Audit `mdm.profile_downloaded` |
@@ -139,7 +150,9 @@ Profil-Update nicht nachrüsten, deshalb `needs_reenroll`. Prüfreihenfolge
 für jeden Befehl (`app/mdm_commands.py`): registriert und Profil vorhanden,
 Bit im Profil, nicht abgeschaltet, für „Code entfernen“ ein Entsperr-Token.
 
-**Hintergrund.** Alle `MDM_REFRESH_HOURS` (Standard 24) eine Inventar-Runde
+**Hintergrund.** Stündlich ein Push ohne Befehl an jedes Telefon, das sich
+seit 45 Minuten nicht gemeldet hat; ein eingeschaltetes antwortet mit einem
+Idle-Check-in. Alle `MDM_REFRESH_HOURS` (Standard 24) eine Inventar-Runde
 je Telefon, außer die vorige wartet noch auf das Gerät. `MDM_RENEW_BEFORE_DAYS`
 (Standard 30) vor Ablauf des Identitätszertifikats bekommt das Telefon per
 `InstallProfile` ein neues Profil mit eigener Einmal-Challenge, gleicher

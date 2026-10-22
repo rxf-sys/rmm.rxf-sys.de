@@ -51,11 +51,14 @@ Löschen und Code entfernen aus dem Dashboard, tägliche Inventar-Runden
 iOS-Abgleich mit Apples Versionsliste, drei Alarmregeln für Telefone und die
 automatische Erneuerung der Geräte-Identitäten vor ihrem Ablauf.
 
-Offen für iOS: Konfigurationsprofile verteilen (WLAN, VPN, Mail,
-Code-Richtlinie — alles ohne Betreuung möglich) und erzwungene iOS-Updates
-über Declarative Device Management. Apples Schema erlaubt
-`softwareupdate.enforcement.specific` ab iOS 17 auch für nicht betreute
-Geräte; das gehört zuerst an einem echten Gerät ausprobiert.
+Ebenfalls umgesetzt: Profil-Vorlagen (WLAN, Code-Pflicht, Web-Clip, Mail-,
+Kalender-, Kontakte-Konto) je Gerät installieren und entfernen, Apps per
+App-Store-Link anbieten, ein stündlicher Erreichbarkeits-Ping und das
+erzwungene iOS-Update über Declarative Device Management — Letzteres als
+Test markiert, bis ein echtes Gerät zeigt, dass es ohne Betreuung greift.
+
+Offen für iOS: VPN-Profile, Zertifikate (eigene CA) verteilen, Profile für
+mehrere Geräte auf einmal (Tag oder Person).
 
 **Betreuung (Supervision).** Per Profil registrierte Geräte sind nicht
 betreut. Verloren-Modus (`EnableLostMode`) und erzwungene Updates
