@@ -28,7 +28,7 @@ dev = [
     # Property tests (tests/*: max_examples is set in conftest.py). Exact pin:
     # new releases change how examples are generated, and with them which
     # inputs a CI run happens to try.
-    "hypothesis==6.170.1",
+    "hypothesis==6.170.8",
 ]
 
 [build-system]
